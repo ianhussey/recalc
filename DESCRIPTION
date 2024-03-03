@@ -1,0 +1,26 @@
+Package: recalc
+Title: Recalculate statistical results from reported summary and test statistics
+Version: 0.0.1
+Authors@R: 
+    person("Ian", "Hussey", , "Ian.hussey@unibe.ch", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0001-8906-7559"))
+Description: Recalculate statistical results from reported summary and test statistics.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Imports:
+    stats,
+    dplyr,
+    tidyverse,
+    janitor,
+    scrutiny,
+    rsprite2,
+    statcheck
+Suggests:
+    knitr,
+    kableExtra,
+    devtools,
+    roxygen2
+VignetteBuilder: knitr
+BuildVignettes: true
