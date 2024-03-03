@@ -1,3 +1,5 @@
+# calculate a one-way repeated-measures anova from m, sd, n and corr
+
 dep.oneway.second <- function(m, sd, n, corr, unbiased=TRUE, contr=NULL, sig.level=.05, digits=3){
 
 ##if orthogonal

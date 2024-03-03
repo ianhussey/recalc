@@ -1,3 +1,5 @@
+# calculate a dependent t test from m, sd, n, corr
+
 dep.t.test.second <- function(m, sd, n, corr, unbiased=TRUE, sig.level=.05, digits=3){
   m1 <- as.numeric(m[1]); m2 <- as.numeric(m[2])
   sd1 <- as.numeric(sd[1]); sd2 <- as.numeric(sd[2])

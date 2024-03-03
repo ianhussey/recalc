@@ -1,3 +1,5 @@
+# from r and n, calculate r's CIs and power
+
 zero.r.test.second <- function(r, n, sig.level=.05, digits=3){
     r.sem <- (1-r^2)/n
     r.lower <- tanh(atanh(r) +  qnorm(sig.level/2, lower.tail=TRUE)/sqrt(n-3))

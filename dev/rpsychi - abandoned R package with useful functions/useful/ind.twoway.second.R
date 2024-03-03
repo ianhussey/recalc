@@ -1,3 +1,5 @@
+# calculate a two-way between groups anova from m, sd, and n 
+
 ind.twoway.second <-
 function(m, sd, n, unbiased=TRUE, sig.level=.05, digits=3){
 

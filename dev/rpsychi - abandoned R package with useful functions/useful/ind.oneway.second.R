@@ -1,3 +1,5 @@
+# calculate a one-way between groups ANOVA from m, sd, and n
+
 ind.oneway.second <- function(m, sd, n, unbiased=TRUE, contr=NULL, sig.level=.05, digits=3){
 
 ##if orthogonal

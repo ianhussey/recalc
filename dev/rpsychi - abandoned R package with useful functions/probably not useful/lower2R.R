@@ -1,3 +1,5 @@
+# lower triangle of a correlation matrix to a full matrix
+
 lower2R <-
 function(x, varname=NULL){
   temp <- function(y){

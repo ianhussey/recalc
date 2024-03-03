@@ -1,3 +1,5 @@
+# calculate an independent t test from m, sd, and n
+
 ind.t.test.second <-
 function(m, sd, n, unbiased=TRUE, correct=TRUE, sig.level=.05, digits=3){
 
