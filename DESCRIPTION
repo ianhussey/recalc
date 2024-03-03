@@ -1,9 +1,12 @@
 Package: recalc
 Title: Recalculate statistical results from reported summary and test statistics
 Version: 0.0.1
-Authors@R: 
+Authors@R: c(
     person("Ian", "Hussey", , "Ian.hussey@unibe.ch", role = c("aut", "cre"),
-           comment = c(ORCID = "0000-0001-8906-7559"))
+           comment = c(ORCID = "0000-0001-8906-7559")),
+    person("Wallrich", "Lukas", , "lukas.wallrich@gmail.com", role = "aut",
+           comment = c(ORCID = "0000-0003-2121-5177"))
+  )
 Description: Recalculate statistical results from reported summary and test statistics.
 License: MIT + file LICENSE
 Encoding: UTF-8
@@ -21,6 +24,8 @@ Suggests:
     knitr,
     kableExtra,
     devtools,
-    roxygen2
+    roxygen2,
+    testthat (>= 3.0.0)
 VignetteBuilder: knitr
 BuildVignettes: true
+Config/testthat/edition: 3

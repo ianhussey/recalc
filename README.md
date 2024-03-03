@@ -1,6 +1,11 @@
 # recalc
 
+<!-- badges: start -->
+[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+[![R-CMD-check](https://github.com/ianhussey/recalc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ianhussey/recalc/actions/workflows/R-CMD-check.yaml)
+<!-- badges: end -->
 
+# INTERNAL NOTES
 
 ## Ideas for scope
 
@@ -33,3 +38,20 @@ Some of the more inferential tests about the flagging (possible) errors.
 - Extracting pre-post correlations from summary stats: https://matthewbjane.quarto.pub/pre-post-correlations/
 - Lisa Debruine's {faux} package has some error detection functions https://github.com/debruine/faux
 - Lisa Debruine's {within} repo assesses the plausibility of a within subject t-test by showing the range of possible between timepoint correlations given the reported results https://github.com/debruine/within
+
+# README DRAFT
+
+The goal of *recalc* is to facilitate error checking in research articles. To this end, it offers functions that recalculate statistical tests from reported summary statistics. In addition, it offers functions that can help to assess the plausibility of effect sizes, and significance starts (e.g., in correlation tables).
+
+## Installation
+
+Currently, recalc is only available on GitHub. To install it, run the following code in your R Console:
+
+``` r
+if (!require(remotes)) install.packages("remotes")
+remotes::install_github("ianhussey/recalc")
+```
+
+
+
+
