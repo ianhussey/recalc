@@ -18,7 +18,7 @@
 #' @export
 #'
 #' @examples
-#' recalc_t_test(5, 2, 30, 5.5, 2.5, 30, FALSE)
+#' recalc_t_test(mean1 = 5, sd1 = 2, n1 = 30, mean2 = 5.5, sd2 = 2.5, n2 = 30, paired = FALSE)
 
 recalc_t_test <- function(mean1, sd1, n1, mean2, sd2 = NULL, n2, welch = FALSE, paired = FALSE, round = "not implemented", alternative = "not implemented") {
 
@@ -57,7 +57,7 @@ recalc_t_test <- function(mean1, sd1, n1, mean2, sd2 = NULL, n2, welch = FALSE, 
 #' @export
 #'
 #' @examples
-#' check_t_test(5, 2, 30, 5.5, 2.5, 30, 2, 58, 0.05)
+#' check_t_test(mean1 = 5, sd1 = 2, n1 = 30, mean2 = 5.5, sd2 = 2.5, n2 = 30, t = 2, df = 58, p = 0.05)
 check_t_test <- function(mean1, sd1, n1, mean2, sd2 = NULL, n2, t, df, p, welch = FALSE, round = "not implemented", alternative = "not implemented", paired = FALSE) {
   res <- recalc_t_test(mean1, sd1, n1, mean2, sd2, n2, welch = welch)
   res$t_consistent <- with(res, t_statistic < t & t_statistic > t)
@@ -67,7 +67,7 @@ check_t_test <- function(mean1, sd1, n1, mean2, sd2 = NULL, n2, t, df, p, welch 
 }
 
 # Independent t test from summary stats (M, SD, N)
-# TODO: like anova_from_summary_stats, this function should accomodate the potential rounding of the reported summary stats
+# TODO: like anova_from_summary_stats, this function should accommodate the potential rounding of the reported summary stats
 # and return reported, min and max values for t, p, cohen's d, and its CIs.
 # TODO: integrate effect_sizes_from_summary_statistics and this function, ie one function that produces t test output (df, p values)
 # and also multiple effect sizes (d, g), and also min max values due to rounding
