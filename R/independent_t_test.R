@@ -10,8 +10,6 @@
 #' \itemize{
 #'   \item **Input Rounding:** Adjusting reported statistics by +/- half of the
 #'         last decimal place (ULP - Unit in the Last Place).
-#'   \item **Direction:** Considering both (M1 - M2) and (M2 - M1) for summary
-#'         statistics, and positive/negative *t* for the *t*/df approach.
 #'   \item **Effect Size Type:** Using both **Cohen's *d*** and **Hedges' *g***.
 #'   \item **CI Methods:** Employing Wald-type CIs (using *z* or *t* distribution
 #'         with pooled/Welch variance) and the Noncentral *t* (NCT) distribution.
@@ -20,6 +18,8 @@
 #'   \item **Output Rounding:** Applying different rounding methods ("half\_up",
 #'         "half\_down", "bankers") to the final *d*/CI/p-value to check for matches
 #'         with reported values.
+#' \item **Direction:** The calculation uses the direction implied by the order of
+#'    the supplied means ($M_1 - M_2$) or the sign of the supplied *t* statistic.
 #' }
 #'
 #' @param m1 Numeric. Mean of Group 1.
