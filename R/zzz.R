@@ -6,5 +6,5 @@
 #' Package is in early stage development.
 #'
 #' @docType package
-#' @name ERROR
+#' @name recalc
 NULL

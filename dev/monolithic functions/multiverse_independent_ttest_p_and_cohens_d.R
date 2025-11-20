@@ -7,6 +7,8 @@
 
 # maybe t/df and M/SD approaches should be separated into different functions. potential lack of agreement between them is hidden here. 
 
+# not covered here: assumption that SDs are sample not population SD.
+
 multiverse_independent_t_d <- function(
     m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL, n1 = NULL, n2 = NULL,
     t = NULL, df = NULL,
@@ -604,62 +606,62 @@ multiverse_independent_t_d <- function(
   )
 }
 
-# example
-res <- multiverse_independent_t_d(
-  n1 = 50, 
-  n2 = 48,
-  m1 = 10.3,
-  m2 = 8.7,
-  sd1 = 3.1,
-  sd2 = 2.8,
-  t = 1.34,
-  df = 97,
-  d_est = 0.55,
-  d_ci_lower = 0.20,
-  d_ci_upper = 0.90,
-  d_digits = 2
-)
-
-res_d <- res$d_results |>
-  as_tibble() |>
-  mutate(original = source=="reported") |>
-  arrange(est_rounded, original) |>
-  rownames_to_column(var = "rowname") |>
-  mutate(rowname = as.numeric(as.character(rowname)))
-  
-res_d |>
-  filter(source != "reported" & direction %in% c("m1_minus_m2", "t_sign")) |>
-  ggplot(aes(y = rowname, 
-             x = est_rounded, xmin = ci_lower_rounded, xmax = ci_upper_rounded,
-             color = original)) +
-  ggstance::geom_linerangeh() +
-  geom_point() +
-  facet_wrap(~ source)
-
-res_d |>
-  filter(source != "reported" & direction %in% c("m1_minus_m2", "t_sign")) |>
-  summarize(min_est_rounded = min(est_rounded),
-            max_est_rounded = max(est_rounded))
-
-
-res_p <- res$p_results |>
-  as_tibble() |>
-  mutate(original = source=="reported") |>
-  arrange(p_unrounded, original) |>
-  rownames_to_column(var = "rowname") |>
-  mutate(rowname = as.numeric(as.character(rowname)))
-
-res_p |>
-  filter(source != "reported" & direction %in% c("m1_minus_m2", "t_sign")) |>
-  ggplot(aes(y = rowname, 
-             x = p_unrounded,
-             color = original)) +
-  geom_point()
-
-res_p |>
-  filter(source != "reported" & direction %in% c("m1_minus_m2", "t_sign")) |>
-  summarize(min_p_unrounded = min(p_unrounded),
-            max_p_unrounded = max(p_unrounded))
+# # example
+# res <- multiverse_independent_t_d(
+#   n1 = 50, 
+#   n2 = 48,
+#   m1 = 10.3,
+#   m2 = 8.7,
+#   sd1 = 3.1,
+#   sd2 = 2.8,
+#   t = 1.34,
+#   df = 97,
+#   d_est = 0.55,
+#   d_ci_lower = 0.20,
+#   d_ci_upper = 0.90,
+#   d_digits = 2
+# )
+#
+# res_d <- res$d_results |>
+#   as_tibble() |>
+#   mutate(original = source=="reported") |>
+#   arrange(est_rounded, original) |>
+#   rownames_to_column(var = "rowname") |>
+#   mutate(rowname = as.numeric(as.character(rowname)))
+#   
+# res_d |>
+#   filter(source != "reported" & direction %in% c("m1_minus_m2", "t_sign")) |>
+#   ggplot(aes(y = rowname, 
+#              x = est_rounded, xmin = ci_lower_rounded, xmax = ci_upper_rounded,
+#              color = original)) +
+#   ggstance::geom_linerangeh() +
+#   geom_point() +
+#   facet_wrap(~ source)
+# 
+# res_d |>
+#   filter(source != "reported" & direction %in% c("m1_minus_m2", "t_sign")) |>
+#   summarize(min_est_rounded = min(est_rounded),
+#             max_est_rounded = max(est_rounded))
+# 
+# 
+# res_p <- res$p_results |>
+#   as_tibble() |>
+#   mutate(original = source=="reported") |>
+#   arrange(p_unrounded, original) |>
+#   rownames_to_column(var = "rowname") |>
+#   mutate(rowname = as.numeric(as.character(rowname)))
+# 
+# res_p |>
+#   filter(source != "reported" & direction %in% c("m1_minus_m2", "t_sign")) |>
+#   ggplot(aes(y = rowname, 
+#              x = p_unrounded,
+#              color = original)) +
+#   geom_point()
+# 
+# res_p |>
+#   filter(source != "reported" & direction %in% c("m1_minus_m2", "t_sign")) |>
+#   summarize(min_p_unrounded = min(p_unrounded),
+#             max_p_unrounded = max(p_unrounded))
 
 
 

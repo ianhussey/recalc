@@ -8,9 +8,9 @@ fisher_test_from_counts <- function(a, b, c, d, alternative = "two.sided") {
   res <- fisher.test(tab, alternative = alternative)
   return(res)
 }
-Example:
-  r
-Copy code
+#Example:
+#  r
+# Copy code
 # Suppose:
 # Group1: 10 yes, 5 no
 # Group2: 3 yes, 12 no
