@@ -223,6 +223,8 @@ independent_t_test <- function(
     allowed
   }
   
+  ci_methods  <- check_methods(ci_methods, allowed_ci_methods, "ci_methods")
+  p_methods   <- check_methods(p_methods, allowed_p_methods, "p_methods")
   d_rounding_set <- check_methods(d_rounding_set, allowed_d_rounding, "d_rounding_set")
   
   # --- Determine available information ---
