@@ -1,0 +1,164 @@
+---
+title: "Verification of critique of Hariharan et al (2006) Knowledge, attitudes and practice of healthcare ethics and law among doctors and nurses in Barbados'"
+author: "Ian Hussey"
+output:
+  html_document:
+    code_folding: hide
+    highlight: haddock
+    theme: flatly
+    toc: yes
+    toc_float: yes
+---
+
+```{r include=FALSE}
+
+# formatting options
+# set default chunk options
+knitr::opts_chunk$set(message = FALSE, 
+                      warning = FALSE)
+
+# disable scientific notation
+options(scipen = 999) 
+
+```
+
+https://bmcmedethics.biomedcentral.com/articles/10.1186/1472-6939-7-7
+
+https://pubpeer.com/publications/DDCD6F9A978177B7D2C170CEA17670#1
+
+# Verify since claim from pubpeer post
+
+pubpeer post:
+
+"
+The reported Chi square value is 4.0. This is incorrect, it should be 0.70.
+
+The reported Cramer’s V value is 0.15. This is incorrect, it should be 0.07. Thus, the effect size is negligible (V< 0.10) i.e. no meaningful difference in opinions between physicians and nurses.
+
+The reported P value is 0.03. This is incorrect, it should be 0.40. Thus, P > 0.05 i.e. no statistically significant difference in opinions between physicians and nurses.
+
+These results therefore contradict the assertion by the authors that: “There was a statistically significant difference between the opinions of physicians and nurses with respect to adherence to X2tients’ wishes…”
+"
+
+verification:
+
+```{r}
+
+# dependencies
+library(effectsize)
+
+# data
+tbl <- matrix(c(43, 23, 
+                65, 26),
+              nrow = 2, byrow = TRUE)
+
+# tbl <- matrix(c(71, 7, 
+#                 67, 20),
+#               nrow = 2, byrow = TRUE)
+
+# chi square test without Yates correction
+chisq.test(tbl, correct = FALSE)
+
+# cramer's V
+cramers_v(tbl, adjust = FALSE) 
+
+```
+
+The pubpeer comment's numbers can be reproduced from the counts in the screenshot of table 4, the table's  statistical results are inconsistent with the counts they report.
+
+# Verify all of table 4
+
+```{r}
+
+library(readxl)
+library(janitor)
+library(purrr)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+
+dat <- read_excel("data.xlsx") |>
+  clean_names()
+  
+# Helper for one row -----------------------------------------------------------
+chisq_row <- function(a, b, c, d, chi_sq_reported, p_reported, cramers_v_reported, correct = FALSE, include_fisher = FALSE) {
+  counts <- c(a, b, c, d)
+
+  # basic validation
+  if (any(!is.finite(counts)) || any(counts < 0)) {
+    return(tibble(
+      chi_sq = NA_real_, df = NA_real_, p = NA_real_,
+      n_total = NA_real_, cramers_v = NA_real_,
+      exp_min = NA_real_, exp_ok = NA
+    ))
+  }
+
+  tab <- matrix(counts, nrow = 2, byrow = TRUE)
+
+  # χ² test
+  chi <- suppressWarnings(chisq.test(tab, correct = correct))
+
+  out <- tibble(
+    chi_sq_recalc    = unname(chi$statistic),
+    df_recalc        = unname(chi$parameter),
+    p_recalc         = chi$p.value,
+    n_total          = sum(tab),
+    cramers_v_recalc = sqrt(unname(chi$statistic) / sum(tab))  # for 2x2: V = φ
+    #exp_min   = min(chi$expected),
+    #exp_ok    = all(chi$expected >= 5)
+  ) |>
+    mutate(decision_change = (p_reported < .05) != (p_recalc < .05)) |>
+    mutate(chi_sq_recalc = round_half_up(chi_sq_recalc, 2),
+           p_recalc = round_half_up(p_recalc, 4),
+           cramers_v_recalc = round_half_up(cramers_v_recalc, 2)) |>
+    mutate(chi_sq_match = near(chi_sq_reported, chi_sq_recalc, tol = 1e-3),
+           p_match = near(p_reported, p_recalc, tol = 1e-3),
+           cramers_v_match = near(cramers_v_reported, cramers_v_recalc, tol = 1e-3))
+
+  if (include_fisher) {
+    out$fisher_p <- fisher.test(tab)$p.value
+  }
+
+  out
+}
+
+res <- dat %>%
+  mutate(stats = pmap(
+    .l = list(
+      a = physicians_disagree,
+      b = physicians_agree,
+      c = nurses_disagree,
+      d = nurses_agree,
+      chi_sq_reported = chi_sq,
+      p_reported = p,
+      cramers_v_reported = cramers_v
+    ),
+    .f = ~ chisq_row(..1, ..2, ..3, ..4, ..5, ..6, ..7, correct = FALSE, include_fisher = FALSE)
+  )) %>%
+  unnest_wider(stats) |>
+  select(question, physicians_disagree, physicians_agree, nurses_disagree, nurses_agree,
+         chi_sq,
+         chi_sq_recalc,
+         chi_sq_match,
+         cramers_v,
+         cramers_v_recalc,
+         cramers_v_match,
+         p,
+         p_recalc,
+         p_match,
+         decision_change,
+         n_total)
+
+res |>
+  kable(align = "r") |>
+  kable_classic(full_width = FALSE)
+
+```
+
+Results reproduce the claim in the pubpeer comment that that the conclusions of the row with p=.03 can't be reproduced from the counts, and highlight one other row with a conclusion-changing reproduced result.
+
+
+pubpeer claim: "The total number of respondents is never equal to 159." 
+
+- this can be reproduced from the counts. N is higher than stated in all but one case.
