@@ -161,9 +161,22 @@ independent_t_test <- function(
 
 #' @keywords internal
 .nct_ci <- function(t_obs, df, alpha = 0.05, max_ncp = 1000) {
-  # Uses pt and uniroot
-  fL <- function(delta) pt(t_obs, df = df, ncp = delta) - alpha / 2
-  fU <- function(delta) pt(t_obs, df = df, ncp = delta) - (1 - alpha / 2)
+  # Uses pt and uniroot.
+  # Utility function to suppress the specific 'pnt{final}' warning during pt calls.
+  suppress_nct_warning <- function(expr) {
+    withCallingHandlers(expr, 
+                              warning = function(w) {
+                                # Check if the warning message contains the low-precision text
+                                if (grepl("full precision may not have been achieved in 'pnt\\{final\\}'", conditionMessage(w))) {
+                                  invokeRestart("muffleWarning")
+                                }
+                              }
+    )
+  }
+  
+  # Define the root functions, wrapping the core calculation in the suppressor
+  fL <- function(delta) suppress_nct_warning(pt(t_obs, df = df, ncp = delta) - alpha / 2)
+  fU <- function(delta) suppress_nct_warning(pt(t_obs, df = df, ncp = delta, lower.tail = FALSE) - alpha / 2)
   
   lower <- -max_ncp
   upper <- max_ncp
@@ -177,7 +190,7 @@ independent_t_test <- function(
     delta_L <- tryCatch(uniroot(fL, lower = lower, upper = upper)$root, error = function(e) NA_real_)
   }
   
-  # Try to find upper bound (fU is decreasing, so we check fU(upper) vs fU(lower))
+  # Try to find upper bound (fU is decreasing, so check fU(upper) vs fU(lower))
   fU_low_check <- fU(upper)
   fU_high_check <- fU(lower)
   if (is.na(fU_low_check) || is.na(fU_high_check) || fU_low_check * fU_high_check > 0) {
@@ -187,6 +200,7 @@ independent_t_test <- function(
     if (is.na(fU_low_rev) || is.na(fU_high_rev) || fU_low_rev * fU_high_rev > 0) {
       delta_U <- NA_real_
     } else {
+      # Use uniroot with standard brackets here
       delta_U <- tryCatch(uniroot(fU, lower = lower, upper = upper)$root, error = function(e) NA_real_)
     }
   } else {
