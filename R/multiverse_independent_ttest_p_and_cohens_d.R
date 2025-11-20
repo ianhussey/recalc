@@ -2,31 +2,37 @@
 # choices for p values and Cohen's d are independent, given people can't be assumed to be consistent
 # add summary df with min/max for cohens d and its CIs and p values. how to handle cis with d ties? eg widest or narrowest?
 
-# when only t/df are provided but not m/sd/n, it currently throws an error where it shouldn't
-# ensure you can not supply d and/or cis and it still runs
+# requires you to specify Ns and M+SD and/or t/df. Could write it to calculate d+p assuming even split, but this is more a meta-analysis method of making a reasonable estimation of effect size with available information rather than recalculate p/d.
+# a seperate function could ask the question what allocation ratio allows you to recalculate p/d given rounding etc. to assess whether that allocation ratio is plausible. 
 
-identify_d_method <- function(m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL, n1 = NULL, n2 = NULL,
+# maybe t/df and M/SD approaches should be separated into different functions. potential lack of agreement between them is hidden here. 
+
+identify_d_method <- function(n1 = NULL, n2 = NULL,
+                              m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL, 
                               t = NULL, df = NULL,
-                              d_est, d_ci_lower, d_ci_upper,
+                              d_est = NULL, d_ci_lower = NULL, d_ci_upper = NULL,
                               d_digits = 2,
                               p_est = NULL, p_digits = 3,
                               alpha = 0.05) {
   require(roundwork)
   
-  # Coerce reported values to numeric if they came in as characters
-  d_est      <- as.numeric(d_est)
-  d_ci_lower <- as.numeric(d_ci_lower)
-  d_ci_upper <- as.numeric(d_ci_upper)
-  p_est_num  <- if (!is.null(p_est)) as.numeric(p_est) else NA_real_
+  ## ------------------------------------------------------------------
+  ## 0) Coerce reported values and set up helpers
+  ## ------------------------------------------------------------------
+  d_est_num      <- if (!is.null(d_est))      as.numeric(d_est)      else NA_real_
+  d_ci_lower_num <- if (!is.null(d_ci_lower)) as.numeric(d_ci_lower) else NA_real_
+  d_ci_upper_num <- if (!is.null(d_ci_upper)) as.numeric(d_ci_upper) else NA_real_
+  p_est_num      <- if (!is.null(p_est))      as.numeric(p_est)      else NA_real_
   
   # Helper: infer how many decimal places the user supplied
   get_digits <- function(x) {
-    sx <- sub("^-", "", as.character(x))
+    if (is.null(x) || length(x) == 0 || is.na(x)) return(0L)
+    sx <- sub("^-", "", as.character(x[1L]))
     if (!grepl("\\.", sx)) return(0L)
     nchar(sub("^[^.]*\\.", "", sx))
   }
   
-  # Helper: apply a +/- half-ulp adjustment to a value
+  # Helper: apply a +/- half-up adjustment to a value
   adjust_value <- function(x, step, code) {
     if (step == 0) return(x)
     if (code == "minus") return(x - step)
@@ -65,67 +71,74 @@ identify_d_method <- function(m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL, n1 =
   }
   
   # What information do we have?
-  have_summary <- all(!is.null(c(m1, m2, sd1, sd2, n1, n2))) &&
-    all(!is.na   (c(m1, m2, sd1, sd2, n1, n2)))
+  vals_summary <- list(m1, m2, sd1, sd2, n1, n2)
+  have_summary <- all(vapply(
+    vals_summary,
+    function(z) !is.null(z) && length(z) > 0 && !is.na(z[1L]),
+    logical(1)
+  ))
   
+  # Now: treat t/df as usable even without n1/n2 (for p), but they are
+  # needed for converting t to d.
   have_t <- !is.null(t) && !is.null(df) &&
-    !is.na(t)   && !is.na(df)   &&
-    all(!is.null(c(n1, n2))) &&
-    all(!is.na   (c(n1, n2)))
+    !is.na(t)   && !is.na(df)
   
   if (!have_summary && !have_t) {
     stop("Provide either M/SD/N (m1, m2, sd1, sd2, n1, n2) and/or t and df.")
   }
+  
+  have_n_for_t <- !is.null(n1) && !is.null(n2) &&
+    !is.na(n1)   && !is.na(n2)
   
   d_results <- list()
   p_results <- list()
   idx_d <- 1
   idx_p <- 1
   
-  ## 0) Reported values rows ----
-  d_results[[idx_d]] <- data.frame(
-    source              = "reported",
-    direction           = NA_character_,
-    es_type             = NA_character_,
-    ci_method           = NA_character_,
-    d_rounding          = NA_character_,
-    input_adj_stats     = NA_character_,
-    input_adj_tdf       = NA_character_,
-    m1_used             = NA_real_,
-    m2_used             = NA_real_,
-    sd1_used            = NA_real_,
-    sd2_used            = NA_real_,
-    t_used              = NA_real_,
-    df_used             = NA_real_,
-    es_unrounded        = NA_real_,
-    ci_lower_unrounded  = NA_real_,
-    ci_upper_unrounded  = NA_real_,
-    est_rounded         = d_est,
-    ci_lower_rounded    = d_ci_lower,
-    ci_upper_rounded    = d_ci_upper,
-    match_est           = NA,
-    match_ci_lower      = NA,
-    match_ci_upper      = NA,
-    match_all           = NA,
-    stringsAsFactors    = FALSE
-  )
-  idx_d <- idx_d + 1
+  # ## 0) Append reported values rows ----
+  # d_results[[idx_d]] <- data.frame(
+  #   source              = "reported",
+  #   direction           = NA_character_,
+  #   es_type             = NA_character_,
+  #   ci_method           = NA_character_,
+  #   d_rounding          = NA_character_,
+  #   input_adj_stats     = NA_character_,
+  #   input_adj_tdf       = NA_character_,
+  #   m1_used             = NA_real_,
+  #   m2_used             = NA_real_,
+  #   sd1_used            = NA_real_,
+  #   sd2_used            = NA_real_,
+  #   t_used              = NA_real_,
+  #   df_used             = NA_real_,
+  #   es_unrounded        = NA_real_,
+  #   ci_lower_unrounded  = NA_real_,
+  #   ci_upper_unrounded  = NA_real_,
+  #   est_rounded         = d_est_num,
+  #   ci_lower_rounded    = d_ci_lower_num,
+  #   ci_upper_rounded    = d_ci_upper_num,
+  #   match_est           = NA,
+  #   match_ci_lower      = NA,
+  #   match_ci_upper      = NA,
+  #   match_all           = NA,
+  #   stringsAsFactors    = FALSE
+  # )
+  # idx_d <- idx_d + 1
   
-  p_results[[idx_p]] <- data.frame(
-    source              = "reported",
-    direction           = NA_character_,
-    p_method            = NA_character_,
-    p_rounding          = NA_character_,
-    input_adj_stats     = NA_character_,
-    input_adj_tdf       = NA_character_,
-    t_used              = NA_real_,
-    df_used             = NA_real_,
-    p_unrounded         = NA_real_,
-    p_rounded           = p_est_num,
-    match_p             = NA,
-    stringsAsFactors    = FALSE
-  )
-  idx_p <- idx_p + 1
+  # p_results[[idx_p]] <- data.frame(
+  #   source              = "reported",
+  #   direction           = NA_character_,
+  #   p_method            = NA_character_,
+  #   p_rounding          = NA_character_,
+  #   input_adj_stats     = NA_character_,
+  #   input_adj_tdf       = NA_character_,
+  #   t_used              = NA_real_,
+  #   df_used             = NA_real_,
+  #   p_unrounded         = NA_real_,
+  #   p_rounded           = p_est_num,
+  #   match_p             = NA,
+  #   stringsAsFactors    = FALSE
+  # )
+  # idx_p <- idx_p + 1
   
   ci_methods <- c("wald_z", "wald_t", "welch_t", "welch_z", "nct")
   p_methods  <- c("student_t", "welch_t", "student_z", "welch_z")
@@ -276,12 +289,14 @@ identify_d_method <- function(m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL, n1 =
                 est_rounded         = est_r,
                 ci_lower_rounded    = lower_r,
                 ci_upper_rounded    = upper_r,
-                match_est           = isTRUE(all.equal(est_r, d_est)),
-                match_ci_lower      = isTRUE(all.equal(lower_r, d_ci_lower)),
-                match_ci_upper      = isTRUE(all.equal(upper_r, d_ci_upper)),
-                match_all           = (est_r == d_est &&
-                                         lower_r == d_ci_lower &&
-                                         upper_r == d_ci_upper),
+                match_est           = if (!is.na(d_est_num)) isTRUE(all.equal(est_r,   d_est_num))      else NA,
+                match_ci_lower      = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_r, d_ci_lower_num)) else NA,
+                match_ci_upper      = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_r, d_ci_upper_num)) else NA,
+                match_all           = if (!any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))) {
+                  (est_r == d_est_num &&
+                     lower_r == d_ci_lower_num &&
+                     upper_r == d_ci_upper_num)
+                } else NA,
                 stringsAsFactors    = FALSE
               )
               
@@ -348,8 +363,6 @@ identify_d_method <- function(m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL, n1 =
   if (have_t) {
     t_val <- as.numeric(t)
     df_t  <- as.numeric(df)
-    N     <- n1 + n2
-    df_s  <- n1 + n2 - 2  # pooled df
     
     # Step sizes for t and df (half-ulp of reported precision)
     dig_t  <- get_digits(t_val)
@@ -366,155 +379,158 @@ identify_d_method <- function(m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL, n1 =
       df_star <- adjust_value(df_t,  step_df, adj_tdf)
       if (!is.finite(df_star) || df_star <= 0) next
       
-      fac_d    <- sqrt(1 / n1 + 1 / n2)
-      d_from_t <- t_star * fac_d
-      
-      # Allow possible sign flip (authors may have reversed group labels)
-      for (sign_flip in c(1, -1)) {
+      ## 2a) Effect sizes from t: only if n1 and n2 available
+      if (have_n_for_t) {
+        N     <- n1 + n2
+        df_s  <- n1 + n2 - 2
+        fac_d <- sqrt(1 / n1 + 1 / n2)
+        d_from_t <- t_star * fac_d
         
-        es_base  <- d_from_t * sign_flip
-        direction <- if (sign_flip == 1) "t_sign" else "neg_t_sign"
-        
-        # Hedges' J for this df
-        J_t   <- 1 - 3 / (4 * df_star - 1)
-        g_base <- J_t * es_base
-        
-        ## 2a) Effect sizes and CIs -> d_results ----
-        for (es_type in c("d", "g")) {
+        # Allow possible sign flip (authors may have reversed group labels)
+        for (sign_flip in c(1, -1)) {
           
-          es <- if (es_type == "d") es_base else g_base
+          es_base  <- d_from_t * sign_flip
+          direction <- if (sign_flip == 1) "t_sign" else "neg_t_sign"
           
-          # SE under pooled df_s and df_star
-          se_pooled <- sqrt(N / (n1 * n2) + es^2 / (2 * df_s))
-          se_welch  <- sqrt(N / (n1 * n2) + es^2 / (2 * df_star))
+          # Hedges' J for this df_star
+          J_t   <- 1 - 3 / (4 * df_star - 1)
+          g_base <- J_t * es_base
           
-          for (ci_method in ci_methods) {
+          for (es_type in c("d", "g")) {
             
-            if (ci_method == "nct") {
-              # Noncentral t CI based on t_star and df_star
-              delta_ci <- nct_ci(t_star, df_star, alpha = alpha)
-              if (any(is.na(delta_ci))) next
-              
-              dL_raw <- delta_ci[1] * fac_d
-              dU_raw <- delta_ci[2] * fac_d
-              
-              if (es_type == "d") {
-                ci_lower <- dL_raw
-                ci_upper <- dU_raw
-              } else {
-                ci_lower <- J_t * dL_raw
-                ci_upper <- J_t * dU_raw
-              }
-              
-            } else {
-              if (ci_method %in% c("wald_z", "wald_t")) {
-                se_use   <- se_pooled
-                df_for_t <- df_s
-              } else { # welch_t, welch_z
-                se_use   <- se_welch
-                df_for_t <- df_star
-              }
-              
-              if (ci_method %in% c("wald_z", "welch_z")) {
-                crit <- stats::qnorm(1 - alpha / 2)
-              } else {
-                crit <- stats::qt(1 - alpha / 2, df = df_for_t)
-              }
-              
-              ci_lower <- es - crit * se_use
-              ci_upper <- es + crit * se_use
-            }
+            es <- if (es_type == "d") es_base else g_base
             
-            for (d_rounding in c("half_up", "half_down")) {
+            # SE under pooled df_s and df_star
+            se_pooled <- sqrt(N / (n1 * n2) + es^2 / (2 * df_s))
+            se_welch  <- sqrt(N / (n1 * n2) + es^2 / (2 * df_star))
+            
+            for (ci_method in ci_methods) {
               
-              d_round_fun <- if (d_rounding == "half_up") {
-                function(x) round_up(x, d_digits)
+              if (ci_method == "nct") {
+                # Noncentral t CI based on t_star and df_star
+                delta_ci <- nct_ci(t_star, df_star, alpha = alpha)
+                if (any(is.na(delta_ci))) next
+                
+                dL_raw <- delta_ci[1] * fac_d
+                dU_raw <- delta_ci[2] * fac_d
+                
+                if (es_type == "d") {
+                  ci_lower <- dL_raw
+                  ci_upper <- dU_raw
+                } else {
+                  ci_lower <- J_t * dL_raw
+                  ci_upper <- J_t * dU_raw
+                }
+                
               } else {
-                function(x) round_down(x, d_digits)
+                if (ci_method %in% c("wald_z", "wald_t")) {
+                  se_use   <- se_pooled
+                  df_for_t <- df_s
+                } else { # welch_t, welch_z
+                  se_use   <- se_welch
+                  df_for_t <- df_star
+                }
+                
+                if (ci_method %in% c("wald_z", "welch_z")) {
+                  crit <- stats::qnorm(1 - alpha / 2)
+                } else {
+                  crit <- stats::qt(1 - alpha / 2, df = df_for_t)
+                }
+                
+                ci_lower <- es - crit * se_use
+                ci_upper <- es + crit * se_use
               }
               
-              est_r   <- d_round_fun(es)
-              lower_r <- d_round_fun(ci_lower)
-              upper_r <- d_round_fun(ci_upper)
-              
-              d_results[[idx_d]] <- data.frame(
-                source              = "t_df",
-                direction           = direction,
-                es_type             = es_type,
-                ci_method           = ci_method,
-                d_rounding          = d_rounding,
-                input_adj_stats     = NA_character_,
-                input_adj_tdf       = adj_tdf,
-                m1_used             = NA_real_,
-                m2_used             = NA_real_,
-                sd1_used            = NA_real_,
-                sd2_used            = NA_real_,
-                t_used              = t_star,
-                df_used             = df_star,
-                es_unrounded        = es,
-                ci_lower_unrounded  = ci_lower,
-                ci_upper_unrounded  = ci_upper,
-                est_rounded         = est_r,
-                ci_lower_rounded    = lower_r,
-                ci_upper_rounded    = upper_r,
-                match_est           = isTRUE(all.equal(est_r, d_est)),
-                match_ci_lower      = isTRUE(all.equal(lower_r, d_ci_lower)),
-                match_ci_upper      = isTRUE(all.equal(upper_r, d_ci_upper)),
-                match_all           = (est_r == d_est &&
-                                         lower_r == d_ci_lower &&
-                                         upper_r == d_ci_upper),
-                stringsAsFactors    = FALSE
-              )
-              
-              idx_d <- idx_d + 1
+              for (d_rounding in c("half_up", "half_down")) {
+                
+                d_round_fun <- if (d_rounding == "half_up") {
+                  function(x) round_up(x, d_digits)
+                } else {
+                  function(x) round_down(x, d_digits)
+                }
+                
+                est_r   <- d_round_fun(es)
+                lower_r <- d_round_fun(ci_lower)
+                upper_r <- d_round_fun(ci_upper)
+                
+                d_results[[idx_d]] <- data.frame(
+                  source              = "t_df",
+                  direction           = direction,
+                  es_type             = es_type,
+                  ci_method           = ci_method,
+                  d_rounding          = d_rounding,
+                  input_adj_stats     = NA_character_,
+                  input_adj_tdf       = adj_tdf,
+                  m1_used             = NA_real_,
+                  m2_used             = NA_real_,
+                  sd1_used            = NA_real_,
+                  sd2_used            = NA_real_,
+                  t_used              = t_star,
+                  df_used             = df_star,
+                  es_unrounded        = es,
+                  ci_lower_unrounded  = ci_lower,
+                  ci_upper_unrounded  = ci_upper,
+                  est_rounded         = est_r,
+                  ci_lower_rounded    = lower_r,
+                  ci_upper_rounded    = upper_r,
+                  match_est           = if (!is.na(d_est_num)) isTRUE(all.equal(est_r,   d_est_num))      else NA,
+                  match_ci_lower      = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_r, d_ci_lower_num)) else NA,
+                  match_ci_upper      = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_r, d_ci_upper_num)) else NA,
+                  match_all           = if (!any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))) {
+                    (est_r == d_est_num &&
+                       lower_r == d_ci_lower_num &&
+                       upper_r == d_ci_upper_num)
+                  } else NA,
+                  stringsAsFactors    = FALSE
+                )
+                
+                idx_d <- idx_d + 1
+              }
             }
           }
         }
+      } # end have_n_for_t
+      
+      ## 2b) p-values -> p_results (works even without n1/n2) ----
+      for (p_method in p_methods) {
         
-        ## 2b) p-values -> p_results ----
-        for (p_method in p_methods) {
+        if (p_method %in% c("student_t", "welch_t")) {
+          # Without n1/n2 we cannot distinguish, use df_star in both cases.
+          t_use <- t_star
+          df_use <- df_star
+          p_unr <- 2 * (1 - stats::pt(abs(t_use), df = df_use))
+        } else { # student_z, welch_z: treat t_star as z
+          t_use <- t_star
+          df_use <- Inf
+          p_unr <- 2 * (1 - stats::pnorm(abs(t_use)))
+        }
+        
+        for (p_rounding in c("half_up", "half_down")) {
           
-          if (p_method == "student_t") {
-            t_use <- t_star
-            df_use <- df_s
-            p_unr <- 2 * (1 - stats::pt(abs(t_use), df = df_use))
-          } else if (p_method == "welch_t") {
-            t_use <- t_star
-            df_use <- df_star
-            p_unr <- 2 * (1 - stats::pt(abs(t_use), df = df_use))
-          } else { # student_z / welch_z: treat t_star as z
-            t_use <- t_star
-            df_use <- Inf
-            p_unr <- 2 * (1 - stats::pnorm(abs(t_use)))
+          p_round_fun <- if (p_rounding == "half_up") {
+            function(x) round_up(x, p_digits)
+          } else {
+            function(x) round_down(x, p_digits)
           }
           
-          for (p_rounding in c("half_up", "half_down")) {
-            
-            p_round_fun <- if (p_rounding == "half_up") {
-              function(x) round_up(x, p_digits)
-            } else {
-              function(x) round_down(x, p_digits)
-            }
-            
-            p_rounded <- p_round_fun(p_unr)
-            
-            p_results[[idx_p]] <- data.frame(
-              source              = "t_df",
-              direction           = direction,
-              p_method            = p_method,
-              p_rounding          = p_rounding,
-              input_adj_stats     = NA_character_,
-              input_adj_tdf       = adj_tdf,
-              t_used              = t_use,
-              df_used             = df_use,
-              p_unrounded         = p_unr,
-              p_rounded           = p_rounded,
-              match_p             = if (!is.na(p_est_num)) isTRUE(all.equal(p_rounded, p_est_num)) else NA,
-              stringsAsFactors    = FALSE
-            )
-            
-            idx_p <- idx_p + 1
-          }
+          p_rounded <- p_round_fun(p_unr)
+          
+          p_results[[idx_p]] <- data.frame(
+            source              = "t_df",
+            direction           = if (have_n_for_t) "t_sign" else NA_character_,
+            p_method            = p_method,
+            p_rounding          = p_rounding,
+            input_adj_stats     = NA_character_,
+            input_adj_tdf       = adj_tdf,
+            t_used              = t_use,
+            df_used             = df_use,
+            p_unrounded         = p_unr,
+            p_rounded           = p_rounded,
+            match_p             = if (!is.na(p_est_num)) isTRUE(all.equal(p_rounded, p_est_num)) else NA,
+            stringsAsFactors    = FALSE
+          )
+          
+          idx_p <- idx_p + 1
         }
       }
     }
@@ -538,14 +554,14 @@ identify_d_method <- function(m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL, n1 =
 
 # example
 res <- identify_d_method(
-  m1 = 10.3, 
-  m2 = 8.7,
-  sd1 = 3.1, 
-  sd2 = 2.8,
   n1 = 50, 
   n2 = 48,
-  #t = 1.34, 
-  #df = 97,
+  m1 = 10.3,
+  m2 = 8.7,
+  sd1 = 3.1,
+  sd2 = 2.8,
+  t = 1.34,
+  df = 97,
   d_est = 0.55,
   d_ci_lower = 0.20,
   d_ci_upper = 0.90,
@@ -565,7 +581,8 @@ res_d |>
              x = est_rounded, xmin = ci_lower_rounded, xmax = ci_upper_rounded,
              color = original)) +
   ggstance::geom_linerangeh() +
-  geom_point()
+  geom_point() +
+  facet_wrap(~ source)
 
 res_d |>
   filter(source != "reported" & direction %in% c("m1_minus_m2", "t_sign")) |>
