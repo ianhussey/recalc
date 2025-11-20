@@ -302,125 +302,128 @@ independent_t_test <- function(
     
     if (sd1_star <= 0 || sd2_star <= 0) next
     
-    for (direction in c("m1_minus_m2", "m2_minus_m1")) {
+    direction <- "m1_minus_m2" 
+    diff_mean <- m1_star - m2_star
+
+    df_s <- n1 + n2 - 2
+    N  <- n1 + n2
+    
+    # Pooled SD calculation
+    sp  <- sqrt(((n1 - 1) * sd1_star^2 + (n2 - 1) * sd2_star^2) / df_s)
+    if (!is.finite(sp) || sp <= 0) next
+    
+    # Pooled t (Student)
+    t_pooled <- diff_mean / (sp * sqrt(1 / n1 + 1 / n2))
+    
+    # Welch variance, t, and df
+    var1 <- sd1_star^2; var2 <- sd2_star^2
+    se_welch <- sqrt(var1 / n1 + var2 / n2)
+    t_welch <- diff_mean / se_welch
+    
+    num_w <- (var1 / n1 + var2 / n2)^2
+    den_w <- (var1^2 / (n1^2 * (n1 - 1))) + (var2^2 / (n2^2 * (n2 - 1)))
+    df_w <- num_w / den_w
+    if (!is.finite(df_w) || df_w <= 0) df_w <- NA_real_
+    
+    # Cohen's d and Hedges' g
+    d_raw <- diff_mean / sp
+    J_s <- 1 - 3 / (4 * df_s - 1)
+    g_raw <- J_s * d_raw
+    
+    # --- 1a) Effect sizes and CIs ---
+    for (es_type in c("d", "g")) {
       
-      diff_mean <- if (direction == "m1_minus_m2") m1_star - m2_star else m2_star - m1_star
-      df_s <- n1 + n2 - 2
-      N  <- n1 + n2
+      es <- if (es_type == "d") d_raw else g_raw
       
-      # Pooled SD calculation
-      sp  <- sqrt(((n1 - 1) * sd1_star^2 + (n2 - 1) * sd2_star^2) / df_s)
-      if (!is.finite(sp) || sp <= 0) next
+      # SE for Wald CIs (pooled/Welch)
+      se_pooled <- sqrt(N / (n1 * n2) + es^2 / (2 * df_s))
+      se_welch <- if (!is.na(df_w)) sqrt(N / (n1 * n2) + es^2 / (2 * df_w)) else NA_real_
       
-      # Pooled t (Student)
-      t_pooled <- diff_mean / (sp * sqrt(1 / n1 + 1 / n2))
-      
-      # Welch variance, t, and df
-      var1 <- sd1_star^2; var2 <- sd2_star^2
-      se_welch <- sqrt(var1 / n1 + var2 / n2)
-      t_welch <- diff_mean / se_welch
-      
-      num_w <- (var1 / n1 + var2 / n2)^2
-      den_w <- (var1^2 / (n1^2 * (n1 - 1))) + (var2^2 / (n2^2 * (n2 - 1)))
-      df_w <- num_w / den_w
-      if (!is.finite(df_w) || df_w <= 0) df_w <- NA_real_
-      
-      # Cohen's d and Hedges' g
-      d_raw <- diff_mean / sp
-      J_s <- 1 - 3 / (4 * df_s - 1)
-      g_raw <- J_s * d_raw
-      
-      # --- 1a) Effect sizes and CIs ---
-      for (es_type in c("d", "g")) {
+      for (ci_method in ci_methods) {
         
-        es <- if (es_type == "d") d_raw else g_raw
         
-        # SE for Wald CIs (pooled/Welch)
-        se_pooled <- sqrt(N / (n1 * n2) + es^2 / (2 * df_s))
-        se_welch <- if (!is.na(df_w)) sqrt(N / (n1 * n2) + es^2 / (2 * df_w)) else NA_real_
-        
-        for (ci_method in ci_methods) {
-          
-          if (ci_method == "nct") {
-            delta_ci <- .nct_ci(t_pooled, df_s, alpha = alpha)
-            if (any(is.na(delta_ci))) next
-            fac_d <- sqrt(1 / n1 + 1 / n2)
-            dL_raw <- delta_ci[1] * fac_d; dU_raw <- delta_ci[2] * fac_d
-            ci_lower <- if (es_type == "d") dL_raw else J_s * dL_raw
-            ci_upper <- if (es_type == "d") dU_raw else J_s * dU_raw
-          } else { # Wald-type CIs
-            if (ci_method %in% c("wald_z", "wald_t")) {
-              se_use <- se_pooled; df_for_t <- df_s
-            } else { # welch_t, welch_z
-              se_use <- if (!is.na(se_welch)) se_welch else se_pooled
-              df_for_t <- if (!is.na(df_w)) df_w else df_s
-            }
-            
-            crit <- if (ci_method %in% c("wald_z", "welch_z")) qnorm(1 - alpha / 2) else qt(1 - alpha / 2, df = df_for_t)
-            
-            ci_lower <- es - crit * se_use
-            ci_upper <- es + crit * se_use
+        if (ci_method == "nct") {
+          delta_ci <- .nct_ci(t_pooled, df_s, alpha = alpha)
+          if (any(is.na(delta_ci))) next
+          fac_d <- sqrt(1 / n1 + 1 / n2)
+          dL_raw <- delta_ci[1] * fac_d; dU_raw <- delta_ci[2] * fac_d
+          ci_lower <- if (es_type == "d") dL_raw else J_s * dL_raw
+          ci_upper <- if (es_type == "d") dU_raw else J_s * dU_raw
+        } else { # Wald-type CIs
+          if (ci_method %in% c("wald_z", "wald_t")) {
+            se_use <- se_pooled; df_for_t <- df_s
+          } else { # welch_t, welch_z
+            se_use <- if (!is.na(se_welch)) se_welch else se_pooled
+            df_for_t <- if (!is.na(df_w)) df_w else df_s
           }
           
-          for (d_rounding in d_rounding_set) {
-            d_round_fun <- switch(d_rounding,
-                                  "half_up" = function(x) roundwork::round_up(x, d_digits),
-                                  "half_down" = function(x) roundwork::round_down(x, d_digits),
-                                  "bankers" = function(x) round(x, d_digits),
-                                  stop("Unknown d_rounding option"))
-            
-            est_r <- d_round_fun(es)
-            lower_r <- d_round_fun(ci_lower)
-            upper_r <- d_round_fun(ci_upper)
-            
-            d_results[[idx_d]] <- data.frame(
-              source       = "summary", direction = direction, es_type = es_type, ci_method = ci_method,
-              d_rounding     = d_rounding, input_adj_stats = adj_stats, input_adj_tdf = NA_character_,
-              m1_used      = m1_star, m2_used = m2_star, sd1_used = sd1_star, sd2_used = sd2_star,
-              t_used       = t_pooled, df_used = df_s, es_unrounded = es,
-              ci_lower_unrounded = ci_lower, ci_upper_unrounded = ci_upper,
-              est_rounded    = est_r, ci_lower_rounded = lower_r, ci_upper_rounded = upper_r,
-              match_est     = if (!is.na(d_est_num)) isTRUE(all.equal(est_r, d_est_num)) else NA,
-              match_ci_lower   = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_r, d_ci_lower_num)) else NA,
-              match_ci_upper   = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_r, d_ci_upper_num)) else NA,
-              match_all     = if (!any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))) (est_r == d_est_num && lower_r == d_ci_lower_num && upper_r == d_ci_upper_num) else NA,
-              stringsAsFactors  = FALSE
-            )
-            idx_d <- idx_d + 1
-          }
+          crit <- if (ci_method %in% c("wald_z", "welch_z")) qnorm(1 - alpha / 2) else qt(1 - alpha / 2, df = df_for_t)
+          
+          ci_lower <- es - crit * se_use
+          ci_upper <- es + crit * se_use
+        }
+        
+        
+        for (d_rounding in d_rounding_set) {
+          d_round_fun <- switch(d_rounding,
+                                "half_up" = function(x) roundwork::round_up(x, d_digits),
+                                "half_down" = function(x) roundwork::round_down(x, d_digits),
+                                "bankers" = function(x) round(x, d_digits),
+                                stop("Unknown d_rounding option"))
+          
+          est_r <- d_round_fun(es)
+          lower_r <- d_round_fun(ci_lower)
+          upper_r <- d_round_fun(ci_upper)
+          
+          d_results[[idx_d]] <- data.frame(
+            source       = "summary", direction = direction, es_type = es_type, ci_method = ci_method,
+            d_rounding     = d_rounding, input_adj_stats = adj_stats, input_adj_tdf = NA_character_,
+            m1_used      = m1_star, m2_used = m2_star, sd1_used = sd1_star, sd2_used = sd2_star,
+            t_used       = t_pooled, df_used = df_s, es_unrounded = es,
+            ci_lower_unrounded = ci_lower, ci_upper_unrounded = ci_upper,
+            est_rounded    = est_r, ci_lower_rounded = lower_r, ci_upper_rounded = upper_r,
+            match_est     = if (!is.na(d_est_num)) isTRUE(all.equal(est_r, d_est_num)) else NA,
+            match_ci_lower   = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_r, d_ci_lower_num)) else NA,
+            match_ci_upper   = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_r, d_ci_upper_num)) else NA,
+            match_all     = if (!any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))) (est_r == d_est_num && lower_r == d_ci_lower_num && upper_r == d_ci_upper_num) else NA,
+            stringsAsFactors  = FALSE
+          )
+          idx_d <- idx_d + 1
         }
       }
+    }
+    
+    # --- 1b) p-values ---
+    for (p_method in p_methods) {
       
-      # --- 1b) p-values ---
-      for (p_method in p_methods) {
+      t_use <- switch(p_method,
+                      "student_t" = t_pooled,
+                      "welch_t" = t_welch,
+                      "student_z" = t_pooled,
+                      "welch_z" = t_welch, NA_real_)
+      
+      df_use <- switch(p_method,
+                       "student_t" = df_s,
+                       "welch_t" = df_w,
+                       "student_z" = Inf,
+                       "welch_z" = Inf, NA_real_)
+      
+      if (is.na(t_use) || is.na(df_use) || (p_method == "welch_t" && is.na(df_w))) next
+      
+      p_unr <- if (is.infinite(df_use)) 2 * (1 - pnorm(abs(t_use))) else 2 * (1 - pt(abs(t_use), df = df_use))
+      
+      for (p_rounding in c("half_up", "half_down")) {
+        p_round_fun <- if (p_rounding == "half_up") function(x) roundwork::round_up(x, p_digits) else function(x) roundwork::round_down(x, p_digits)
+        p_rounded <- p_round_fun(p_unr)
         
-        t_use <- switch(p_method,
-                        "student_t" = t_pooled,
-                        "welch_t" = t_welch,
-                        "student_z" = t_pooled,
-                        "welch_z" = t_welch, NA_real_)
-        
-        df_use <- switch(p_method,
-                         "student_t" = df_s,
-                         "welch_t" = df_w,
-                         "student_z" = Inf,
-                         "welch_z" = Inf, NA_real_)
-        
-        if (is.na(t_use) || is.na(df_use) || (p_method == "welch_t" && is.na(df_w))) next
-        
-        p_unr <- if (is.infinite(df_use)) 2 * (1 - pnorm(abs(t_use))) else 2 * (1 - pt(abs(t_use), df = df_use))
-        
-        for (p_rounding in c("half_up", "half_down")) {
-          p_round_fun <- if (p_rounding == "half_up") function(x) roundwork::round_up(x, p_digits) else function(x) roundwork::round_down(x, p_digits)
-          p_rounded <- p_round_fun(p_unr)
-          
-          p_results[[idx_p]] <- data.frame(
-            t_used              = t_use, df_used = df_use, p_unrounded = p_unr, p_rounded = p_rounded,
-            match_p             = if (!is.na(p_est_num)) isTRUE(all.equal(p_rounded, p_est_num)) else NA,
-            stringsAsFactors    = FALSE
-          )
-          idx_p <- idx_p + 1
-        }
+        p_results[[idx_p]] <- data.frame(
+          source       = "summary", direction = direction, p_method = p_method, p_rounding = p_rounding,
+          input_adj_stats  = adj_stats, input_adj_tdf = NA_character_,
+          t_used       = t_use, df_used = df_use, p_unrounded = p_unr, p_rounded = p_rounded,
+          match_p      = if (!is.na(p_est_num)) isTRUE(all.equal(p_rounded, p_est_num)) else NA,
+          stringsAsFactors  = FALSE
+        )
+        idx_p <- idx_p + 1
       }
     }
   }
@@ -456,75 +459,58 @@ independent_t_test <- function(
     
     # --- 2a) Effect sizes from t (needs n1/n2) ---
     if (have_n_for_t) {
+      sign_flip <- 1
+      direction <- "t_sign" # Use the sign of t_star as the direction
+      
       N  <- n1 + n2
       df_s <- n1 + n2 - 2
       fac_d <- sqrt(1 / n1 + 1 / n2)
-      d_from_t <- t_star * fac_d
+      es_base <- t_star * fac_d * sign_flip # sign_flip is 1, so es_base = t_star * fac_d
       
-      for (sign_flip in c(1, -1)) {
+      J_t <- 1 - 3 / (4 * df_star - 1)
+      g_base <- J_t * es_base
+      
+      for (es_type in c("d", "g")) {
         
-        es_base <- d_from_t * sign_flip
-        direction <- if (sign_flip == 1) "t_sign" else "neg_t_sign"
+        es <- if (es_type == "d") es_base else g_base
         
-        J_t <- 1 - 3 / (4 * df_star - 1)
-        g_base <- J_t * es_base
+        # SE under pooled df_s and df_star
+        se_pooled <- sqrt(N / (n1 * n2) + es^2 / (2 * df_s))
+        se_welch <- sqrt(N / (n1 * n2) + es^2 / (2 * df_star))
         
-        for (es_type in c("d", "g")) {
+        for (ci_method in ci_methods) {
           
-          es <- if (es_type == "d") es_base else g_base
-          
-          # SE under pooled df_s and df_star
-          se_pooled <- sqrt(N / (n1 * n2) + es^2 / (2 * df_s))
-          se_welch <- sqrt(N / (n1 * n2) + es^2 / (2 * df_star))
-          
-          for (ci_method in ci_methods) {
+          if (ci_method == "nct") {
+            delta_ci <- .nct_ci(t_star, df_star, alpha = alpha)
+            if (any(is.na(delta_ci))) next
             
-            if (ci_method == "nct") {
-              delta_ci <- .nct_ci(t_star, df_star, alpha = alpha)
-              if (any(is.na(delta_ci))) next
-              
-              dL_raw <- delta_ci[1] * fac_d; dU_raw <- delta_ci[2] * fac_d
-              ci_lower <- if (es_type == "d") dL_raw else J_t * dL_raw
-              ci_upper <- if (es_type == "d") dU_raw else J_t * dU_raw
-            } else {
-              if (ci_method %in% c("wald_z", "wald_t")) {
-                se_use <- se_pooled; df_for_t <- df_s
-              } else { # welch_t, welch_z
-                se_use <- se_welch; df_for_t <- df_star
-              }
-              
-              crit <- if (ci_method %in% c("wald_z", "welch_z")) qnorm(1 - alpha / 2) else qt(1 - alpha / 2, df = df_for_t)
-              
-              ci_lower <- es - crit * se_use
-              ci_upper <- es + crit * se_use
+            dL_raw <- delta_ci[1] * fac_d; dU_raw <- delta_ci[2] * fac_d
+            ci_lower <- if (es_type == "d") dL_raw else J_t * dL_raw
+            ci_upper <- if (es_type == "d") dU_raw else J_t * dU_raw
+          } else {
+            if (ci_method %in% c("wald_z", "wald_t")) {
+              se_use <- se_pooled; df_for_t <- df_s
+            } else { # welch_t, welch_z
+              se_use <- se_welch; df_for_t <- df_star
             }
             
-            for (d_rounding in d_rounding_set) {
-              d_round_fun <- switch(d_rounding,
-                                    "half_up" = function(x) roundwork::round_up(x, d_digits),
-                                    "half_down" = function(x) roundwork::round_down(x, d_digits),
-                                    "bankers" = function(x) round(x, d_digits),
-                                    stop("Unknown d_rounding option"))
-              
-              est_r <- d_round_fun(es)
-              lower_r <- d_round_fun(ci_lower)
-              upper_r <- d_round_fun(ci_upper)
-              
-              d_results[[idx_d]] <- data.frame(
-                source       = "t_df", direction = direction, es_type = es_type, ci_method = ci_method,
-                d_rounding     = d_rounding, input_adj_stats = NA_character_, input_adj_tdf = adj_tdf,
-                m1_used      = NA_real_, m2_used = NA_real_, sd1_used = NA_real_, sd2_used = NA_real_,
-                t_used       = t_star, df_used = df_star, es_unrounded = es,
-                ci_lower_unrounded = ci_lower, ci_upper_unrounded = ci_upper,
-                est_rounded    = est_r, ci_lower_rounded = lower_r, ci_upper_rounded = upper_r,
-                match_est     = if (!is.na(d_est_num)) isTRUE(all.equal(est_r, d_est_num)) else NA,
-                match_ci_lower   = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_r, d_ci_lower_num)) else NA,
-                match_ci_upper   = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_r, d_ci_upper_num)) else NA,
-                match_all     = if (!any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))) (est_r == d_est_num && lower_r == d_ci_lower_num && upper_r == d_ci_upper_num) else NA,
-                stringsAsFactors  = FALSE
-              )
-              idx_d <- idx_d + 1
-            }
+            crit <- if (ci_method %in% c("wald_z", "welch_z")) qnorm(1 - alpha / 2) else qt(1 - alpha / 2, df = df_for_t)
+            
+            ci_lower <- es - crit * se_use
+            ci_upper <- es + crit * se_use
+          }
+          
+          for (d_rounding in d_rounding_set) {
+            d_round_fun <- switch(d_rounding,
+                                  "half_up" = function(x) roundwork::round_up(x, d_digits),
+                                  "half_down" = function(x) roundwork::round_down(x, d_digits),
+                                  "bankers" = function(x) round(x, d_digits),
+                                  stop("Unknown d_rounding option"))
+            
+            est_r <- d_round_fun(es)
+            lower_r <- d_round_fun(ci_lower)
+            upper_r <- d_round_fun(ci_upper)
+            
           }
         }
       }
@@ -542,15 +528,6 @@ independent_t_test <- function(
         p_round_fun <- if (p_rounding == "half_up") function(x) roundwork::round_up(x, p_digits) else function(x) roundwork::round_down(x, p_digits)
         p_rounded <- p_round_fun(p_unr)
         
-        p_results[[idx_p]] <- data.frame(
-          source       = "t_df", direction = if (have_n_for_t) "t_sign" else NA_character_,
-          p_method      = p_method, p_rounding = p_rounding,
-          input_adj_stats  = NA_character_, input_adj_tdf = adj_tdf,
-          t_used       = t_use, df_used = df_use, p_unrounded = p_unr, p_rounded = p_rounded,
-          match_p      = if (!is.na(p_est_num)) isTRUE(all.equal(p_rounded, p_est_num)) else NA,
-          stringsAsFactors  = FALSE
-        )
-        idx_p <- idx_p + 1
       }
     }
   }
