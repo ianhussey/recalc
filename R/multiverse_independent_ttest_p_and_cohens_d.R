@@ -7,14 +7,67 @@
 
 # maybe t/df and M/SD approaches should be separated into different functions. potential lack of agreement between them is hidden here. 
 
-identify_d_method <- function(n1 = NULL, n2 = NULL,
-                              m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL, 
-                              t = NULL, df = NULL,
-                              d_est = NULL, d_ci_lower = NULL, d_ci_upper = NULL,
-                              d_digits = 2,
-                              p_est = NULL, p_digits = 3,
-                              alpha = 0.05) {
+multiverse_independent_t_d <- function(
+    m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL, n1 = NULL, n2 = NULL,
+    t = NULL, df = NULL,
+    d_est = NULL, d_ci_lower = NULL, d_ci_upper = NULL,
+    d_digits = 2, # in output
+    p_est = NULL, p_digits = 3,
+    alpha = 0.05,
+    ci_methods     = NULL,
+    p_methods      = NULL,
+    d_rounding_set = NULL
+) {
   require(roundwork)
+  
+  allowed_ci_methods <- c("wald_z", "wald_t", "welch_t", "welch_z", "nct")
+  allowed_p_methods  <- c("student_t", "welch_t", "student_z", "welch_z")
+  allowed_d_rounding <- c("half_up", "half_down", "bankers")
+  
+  if (!is.null(ci_methods)) {
+    bad <- setdiff(ci_methods, allowed_ci_methods)
+    if (length(bad) > 0L) {
+      stop(
+        "ci_methods contains invalid values: ",
+        paste0(bad, collapse = ", "),
+        "\nAllowed: ", paste0(allowed_ci_methods, collapse = ", ")
+      )
+    }
+  }
+  
+  if (!is.null(p_methods)) {
+    bad <- setdiff(p_methods, allowed_p_methods)
+    if (length(bad) > 0L) {
+      stop(
+        "p_methods contains invalid values: ",
+        paste0(bad, collapse = ", "),
+        "\nAllowed: ", paste0(allowed_p_methods, collapse = ", ")
+      )
+    }
+  }
+  
+  if (!is.null(d_rounding_set)) {
+    bad <- setdiff(d_rounding_set, allowed_d_rounding)
+    if (length(bad) > 0L) {
+      stop(
+        "d_rounding_set contains invalid values: ",
+        paste0(bad, collapse = ", "),
+        "\nAllowed: ", paste0(allowed_d_rounding, collapse = ", ")
+      )
+    }
+  }
+  
+  if (is.null(ci_methods)) {
+    ci_methods <- allowed_ci_methods
+  }
+  
+  if (is.null(p_methods)) {
+    p_methods <- allowed_p_methods
+  }
+  
+  if (is.null(d_rounding_set)) {
+    d_rounding_set <- allowed_d_rounding
+  }
   
   ## ------------------------------------------------------------------
   ## 0) Coerce reported values and set up helpers
@@ -140,9 +193,6 @@ identify_d_method <- function(n1 = NULL, n2 = NULL,
   # )
   # idx_p <- idx_p + 1
   
-  ci_methods <- c("wald_z", "wald_t", "welch_t", "welch_z", "nct")
-  p_methods  <- c("student_t", "welch_t", "student_z", "welch_z")
-  
   #### 1) From summary statistics (means, SDs, Ns) ####
   if (have_summary) {
     
@@ -257,7 +307,7 @@ identify_d_method <- function(n1 = NULL, n2 = NULL,
               ci_upper <- es + crit * se_use
             }
             
-            for (d_rounding in c("half_up", "half_down")) {
+            for (d_rounding in d_rounding_set) {
               
               d_round_fun <- if (d_rounding == "half_up") {
                 function(x) round_up(x, d_digits)
@@ -441,13 +491,15 @@ identify_d_method <- function(n1 = NULL, n2 = NULL,
                 ci_upper <- es + crit * se_use
               }
               
-              for (d_rounding in c("half_up", "half_down")) {
+              for (d_rounding in d_rounding_set) {
                 
-                d_round_fun <- if (d_rounding == "half_up") {
-                  function(x) round_up(x, d_digits)
-                } else {
-                  function(x) round_down(x, d_digits)
-                }
+                d_round_fun <- switch(
+                  d_rounding,
+                  "half_up"   = function(x) round_up(x,   d_digits),
+                  "half_down" = function(x) round_down(x, d_digits),
+                  "bankers"   = function(x) round(x, d_digits),   
+                  stop("Unknown d_rounding option")
+                )
                 
                 est_r   <- d_round_fun(es)
                 lower_r <- d_round_fun(ci_lower)
@@ -553,7 +605,7 @@ identify_d_method <- function(n1 = NULL, n2 = NULL,
 }
 
 # example
-res <- identify_d_method(
+res <- multiverse_independent_t_d(
   n1 = 50, 
   n2 = 48,
   m1 = 10.3,
