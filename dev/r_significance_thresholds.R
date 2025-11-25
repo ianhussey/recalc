@@ -10,11 +10,11 @@
 #' @return A tibble with two columns: `p_values`, which indicates the significance levels,
 #' and `r_values`, which are the corresponding correlation coefficients.
 #' @examples
-#' get_correlation_thresholds(30)
-#' get_correlation_thresholds(100, alpha_levels = c(0.05, 0.01))
+#' r_significance_thresholds(30)
+#' r_significance_thresholds(100, alpha_levels = c(0.05, 0.01))
 #' @export
 
-get_correlation_thresholds <- function(n, alpha_levels = c(0.05, 0.01, 0.001)) {
+r_significance_thresholds <- function(n, alpha_levels = c(0.05, 0.01, 0.001)) {
   # Calculate z scores for the given alpha levels (two-tailed)
   z_scores <- stats::qnorm(1 - alpha_levels / 2)
 
