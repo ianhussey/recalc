@@ -5,6 +5,14 @@
 [![R-CMD-check](https://github.com/ianhussey/recalc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ianhussey/recalc/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
+
+
+# Built upon / inspired by
+
+rpsychi R package (v0.8, no longer on CRAN due to lack of maintenance)
+
+Nick Brown's f_range() function (https://steamtraen.blogspot.com/2018/01/)
+
 # INTERNAL NOTES
 
 ## Ideas for scope
@@ -51,7 +59,6 @@ Currently, recalc is only available on GitHub. To install it, run the following 
 if (!require(remotes)) install.packages("remotes")
 remotes::install_github("ianhussey/recalc")
 ```
-
 
 
 
