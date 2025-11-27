@@ -1,10 +1,5 @@
 # recalc
 
-<!-- badges: start -->
-[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
-[![R-CMD-check](https://github.com/ianhussey/recalc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ianhussey/recalc/actions/workflows/R-CMD-check.yaml)
-<!-- badges: end -->
-
 
 
 # Built upon / inspired by
@@ -12,6 +7,13 @@
 rpsychi R package (v0.8, no longer on CRAN due to lack of maintenance)
 
 Nick Brown's f_range() function (https://steamtraen.blogspot.com/2018/01/)
+
+
+
+# TODO
+
+- Add option to t-test function to check if the result recalcultes if we assume the SD is actually an SE.
+- Add way to directly compare multple among t/df/p, cohens d, M/SD/N?  
 
 # INTERNAL NOTES
 
