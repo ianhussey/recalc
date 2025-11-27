@@ -12,7 +12,6 @@ Nick Brown's f_range() function (https://steamtraen.blogspot.com/2018/01/)
 
 # TODO
 
-- Add option to t-test function to check if the result recalcultes if we assume the SD is actually an SE.
 - Add way to directly compare multple among t/df/p, cohens d, M/SD/N?  
 
 # INTERNAL NOTES
