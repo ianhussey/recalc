@@ -234,7 +234,6 @@ independent_t_test_summary <- function(
 }
 
 #' @keywords internal
-#' @keywords internal
 .multiverse_from_summary_stats <- function(
     m1, m2, sd1, sd2, n1, n2,
     ci_methods, p_methods, d_rounding_set,
@@ -244,14 +243,13 @@ independent_t_test_summary <- function(
     direction = c("m1_minus_m2", "m2_minus_m1", "both"),
     include_se_sd_confusion = FALSE
 ) {
-  
   d_results <- list()
   p_results <- list()
   
   direction <- match.arg(direction)
   dir_modes <- if (direction == "both") c("m1_minus_m2", "m2_minus_m1") else direction
   
-  # Step sizes
+  # Step sizes (based on reported values)
   dig_m1  <- .get_digits(m1);  step_m1  <- 0.5 * 10^(-dig_m1)
   dig_m2  <- .get_digits(m2);  step_m2  <- 0.5 * 10^(-dig_m2)
   dig_sd1 <- .get_digits(sd1); step_sd1 <- 0.5 * 10^(-dig_sd1)
@@ -266,7 +264,7 @@ independent_t_test_summary <- function(
   
   for (adj_stats in adj_codes) {
     
-    # Adjust inputs by the ULP
+    # Adjust reported inputs by +/- ULP
     m1_star  <- .adjust_value(m1,  step_m1,  adj_stats)
     m2_star  <- .adjust_value(m2,  step_m2,  adj_stats)
     sd1_star <- .adjust_value(sd1, step_sd1, adj_stats)
@@ -277,7 +275,7 @@ independent_t_test_summary <- function(
       if (sd_mode == "sd") {
         sd1_eff <- sd1_star
         sd2_eff <- sd2_star
-      } else {
+      } else { # "se_converted": treat reported SDs as SEs, convert via sqrt(n)
         sd1_eff <- sd1_star * sqrt(n1)
         sd2_eff <- sd2_star * sqrt(n2)
       }
@@ -287,6 +285,7 @@ independent_t_test_summary <- function(
       df_s <- n1 + n2 - 2
       N    <- n1 + n2
       
+      # Pooled SD
       sp <- sqrt(((n1 - 1) * sd1_eff^2 + (n2 - 1) * sd2_eff^2) / df_s)
       if (!is.finite(sp) || sp <= 0) next
       
@@ -299,12 +298,12 @@ independent_t_test_summary <- function(
       df_w <- num_w / den_w
       if (!is.finite(df_w) || df_w <= 0) df_w <- NA_real_
       
-      # -----------------------------------------------------------------
-      # LOOP OVER DIRECTION MODES
-      # -----------------------------------------------------------------
+      # ----------------------------------------------------------
+      # Loop over direction modes
+      # ----------------------------------------------------------
       for (dir_mode in dir_modes) {
         
-        sign_factor <- if (dir_mode == "m1_minus_m2") 1 else -1
+        sign_factor    <- if (dir_mode == "m1_minus_m2") 1 else -1
         direction_label <- dir_mode
         
         diff_mean <- sign_factor * (m1_star - m2_star)
@@ -313,14 +312,14 @@ independent_t_test_summary <- function(
         t_pooled <- diff_mean / (sp * sqrt(1 / n1 + 1 / n2))
         t_welch  <- diff_mean / se_welch_base
         
-        # effect sizes
+        # Effect sizes
         d_raw <- diff_mean / sp
         J_s   <- 1 - 3 / (4 * df_s - 1)
         g_raw <- J_s * d_raw
         
-        # -----------------------------------------------------------------
-        # EFFECT SIZES + CONFIDENCE INTERVALS
-        # -----------------------------------------------------------------
+        # ----------------------------------------------------------
+        # Effect sizes + CIs
+        # ----------------------------------------------------------
         for (es_type in c("d", "g")) {
           
           es <- if (es_type == "d") d_raw else g_raw
@@ -331,23 +330,21 @@ independent_t_test_summary <- function(
           for (ci_method in ci_methods) {
             
             if (ci_method == "nct") {
-              
               delta_ci <- .nct_ci(t_pooled, df_s, alpha = alpha)
               if (any(is.na(delta_ci))) next
               
-              fac_d <- sqrt(1 / n1 + 1 / n2)
-              dL_raw <- delta_ci[1] * fac_d
-              dU_raw <- delta_ci[2] * fac_d
+              fac_d   <- sqrt(1 / n1 + 1 / n2)
+              dL_raw  <- delta_ci[1] * fac_d
+              dU_raw  <- delta_ci[2] * fac_d
               
               ci_lower <- if (es_type == "d") dL_raw else J_s * dL_raw
               ci_upper <- if (es_type == "d") dU_raw else J_s * dU_raw
               
             } else {
-              
               if (ci_method %in% c("wald_z", "wald_t")) {
                 se_use   <- se_pooled
                 df_for_t <- df_s
-              } else {
+              } else { # welch_t, welch_z
                 se_use   <- if (!is.na(se_welch)) se_welch else se_pooled
                 df_for_t <- if (!is.na(df_w)) df_w else df_s
               }
@@ -370,43 +367,44 @@ independent_t_test_summary <- function(
                 "half_up"   = function(x) roundwork::round_up(x,   d_digits),
                 "half_down" = function(x) roundwork::round_down(x, d_digits),
                 "bankers"   = function(x) round(x, d_digits),
-                "trunc"     = function(x) roundwork::round_trunc(x, d_digits)
+                "trunc"     = function(x) roundwork::round_trunc(x, d_digits),
+                stop("Unknown d_rounding option")
               )
               
-              es_rounded   <- d_round_fun(es)
-              ci_lower_rounded <- d_round_fun(ci_lower)
-              ci_upper_rounded <- d_round_fun(ci_upper)
+              est_r   <- d_round_fun(es)
+              lower_r <- d_round_fun(ci_lower)
+              upper_r <- d_round_fun(ci_upper)
               
               d_results[[idx_d]] <- data.frame(
-                source            = "summary",
-                direction         = direction_label,
-                es_type           = es_type,
-                ci_method         = ci_method,
-                d_rounding        = d_rounding,
-                input_adj_stats   = adj_stats,
-                input_adj_tdf     = NA_character_,
-                sd_interpretation = sd_mode,
-                m1_used           = m1_star,
-                m2_used           = m2_star,
-                sd1_used          = sd1_eff,
-                sd2_used          = sd2_eff,
-                t_used            = t_pooled,
-                df_used           = df_s,
-                d_unrounded       = es,
-                ci_lower_unrounded = ci_lower,
-                ci_upper_unrounded = ci_upper,
-                d_rounded         = es_rounded,
-                ci_lower_rounded  = ci_lower_rounded,
-                ci_upper_rounded  = ci_upper_rounded,
-                match_d         = if (!is.na(d_est_num))      isTRUE(all.equal(est_d, d_est_num)) else NA,
-                match_ci_lower    = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_d, d_ci_lower_num)) else NA,
-                match_ci_upper    = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_d, d_ci_upper_num)) else NA,
-                match_d_and_ci         = if (!any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))) {
-                  est_d == d_est_num &&
-                    lower_d == d_ci_lower_num &&
-                    upper_d == d_ci_upper_num
+                source              = "summary",
+                direction           = direction_label,
+                es_type             = es_type,
+                ci_method           = ci_method,
+                d_rounding          = d_rounding,
+                input_adj_stats     = adj_stats,
+                input_adj_tdf       = NA_character_,
+                sd_interpretation   = sd_mode,
+                m1_used             = m1_star,
+                m2_used             = m2_star,
+                sd1_used            = sd1_eff,
+                sd2_used            = sd2_eff,
+                t_used              = t_pooled,
+                df_used             = df_s,
+                es_unrounded        = es,
+                ci_lower_unrounded  = ci_lower,
+                ci_upper_unrounded  = ci_upper,
+                est_rounded         = est_r,
+                ci_lower_rounded    = lower_r,
+                ci_upper_rounded    = upper_r,
+                match_est      = if (!is.na(d_est_num))      isTRUE(all.equal(est_r,   d_est_num))      else NA,
+                match_ci_lower = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_r, d_ci_lower_num)) else NA,
+                match_ci_upper = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_r, d_ci_upper_num)) else NA,
+                match_all      = if (!any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))) {
+                  est_r   == d_est_num &&
+                    lower_r == d_ci_lower_num &&
+                    upper_r == d_ci_upper_num
                 } else NA,
-                stringsAsFactors = FALSE
+                stringsAsFactors    = FALSE
               )
               
               idx_d <- idx_d + 1
@@ -414,9 +412,9 @@ independent_t_test_summary <- function(
           }
         }
         
-        # -----------------------------------------------------------------
-        # P-VALUES
-        # -----------------------------------------------------------------
+        # ----------------------------------------------------------
+        # p-values
+        # ----------------------------------------------------------
         for (p_method in p_methods) {
           
           t_use <- switch(
@@ -424,7 +422,8 @@ independent_t_test_summary <- function(
             "student_t" = t_pooled,
             "welch_t"   = t_welch,
             "student_z" = t_pooled,
-            "welch_z"   = t_welch
+            "welch_z"   = t_welch,
+            NA_real_
           )
           
           df_use <- switch(
@@ -432,7 +431,8 @@ independent_t_test_summary <- function(
             "student_t" = df_s,
             "welch_t"   = df_w,
             "student_z" = Inf,
-            "welch_z"   = Inf
+            "welch_z"   = Inf,
+            NA_real_
           )
           
           if (is.na(t_use) || is.na(df_use) || (p_method == "welch_t" && is.na(df_w))) next
@@ -459,6 +459,7 @@ independent_t_test_summary <- function(
               p_method          = p_method,
               p_rounding        = p_rounding,
               input_adj_stats   = adj_stats,
+              input_adj_tdf     = NA_character_,
               sd_interpretation = sd_mode,
               t_used            = t_use,
               df_used           = df_use,
@@ -471,7 +472,7 @@ independent_t_test_summary <- function(
             idx_p <- idx_p + 1
           }
         }
-      } # end direction loop
+      } # end loop over dir_modes
     }
   }
   
