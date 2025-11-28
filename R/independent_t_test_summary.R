@@ -30,11 +30,11 @@
 #' @param sd2 Numeric. Standard Deviation of Group 2 (assumed sample SD by default).
 #' @param n1 Numeric. Sample size of Group 1.
 #' @param n2 Numeric. Sample size of Group 2.
-#' @param d_est Numeric. Reported Cohen's d or Hedges' g estimate.
+#' @param d Numeric. Reported Cohen's d or Hedges' g estimate.
 #' @param d_ci_lower Numeric. Reported lower bound of the CI for d.
 #' @param d_ci_upper Numeric. Reported upper bound of the CI for d.
 #' @param d_digits Integer. Number of decimal places reported for d/CI.
-#' @param p_est Numeric. Reported p-value.
+#' @param p Numeric. Reported p-value.
 #' @param p_digits Integer. Number of decimal places reported for p-value.
 #' @param alpha Numeric. Significance level for CIs (default is 0.05).
 #' @param ci_methods Character vector. CI methods to include.
@@ -66,9 +66,9 @@
 independent_t_test_summary <- function(
     m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL,
     n1 = NULL, n2 = NULL,
-    d_est = NULL, d_ci_lower = NULL, d_ci_upper = NULL,
+    d = NULL, d_ci_lower = NULL, d_ci_upper = NULL,
     d_digits = 2,
-    p_est = NULL, p_digits = 3,
+    p = NULL, p_digits = 3,
     alpha = 0.05,
     ci_methods     = NULL,
     p_methods      = NULL,
@@ -85,10 +85,10 @@ independent_t_test_summary <- function(
   )
 
   # Coerce reported values
-  d_est_num      <- if (!is.null(d_est)) as.numeric(d_est) else NA_real_
+  d_num      <- if (!is.null(d)) as.numeric(d) else NA_real_
   d_ci_lower_num <- if (!is.null(d_ci_lower)) as.numeric(d_ci_lower) else NA_real_
   d_ci_upper_num <- if (!is.null(d_ci_upper)) as.numeric(d_ci_upper) else NA_real_
-  p_est_num      <- if (!is.null(p_est)) as.numeric(p_est) else NA_real_
+  p_num      <- if (!is.null(p)) as.numeric(p) else NA_real_
 
   d_results <- list()
   p_results <- list()
@@ -99,7 +99,7 @@ independent_t_test_summary <- function(
     m1, m2, sd1, sd2, n1, n2,
     params$ci_methods, params$p_methods, params$d_rounding_set,
     d_digits, p_digits, alpha,
-    d_est_num, d_ci_lower_num, d_ci_upper_num, p_est_num,
+    d_num, d_ci_lower_num, d_ci_upper_num, p_num,
     idx_d, idx_p,
     direction = direction,
     include_se_sd_confusion = include_se_sd_confusion
@@ -238,7 +238,7 @@ independent_t_test_summary <- function(
     m1, m2, sd1, sd2, n1, n2,
     ci_methods, p_methods, d_rounding_set,
     d_digits, p_digits, alpha,
-    d_est_num, d_ci_lower_num, d_ci_upper_num, p_est_num,
+    d_num, d_ci_lower_num, d_ci_upper_num, p_num,
     idx_d, idx_p,
     direction = c("m1_minus_m2", "m2_minus_m1", "both"),
     include_se_sd_confusion = FALSE
@@ -371,9 +371,9 @@ independent_t_test_summary <- function(
                 stop("Unknown d_rounding option")
               )
               
-              est_r   <- d_round_fun(es)
-              lower_r <- d_round_fun(ci_lower)
-              upper_r <- d_round_fun(ci_upper)
+              est_d   <- d_round_fun(es)
+              lower_d <- d_round_fun(ci_lower)
+              upper_d <- d_round_fun(ci_upper)
               
               d_results[[idx_d]] <- data.frame(
                 source              = "summary",
@@ -390,19 +390,19 @@ independent_t_test_summary <- function(
                 sd2_used            = sd2_eff,
                 t_used              = t_pooled,
                 df_used             = df_s,
-                es_unrounded        = es,
+                d_unrounded        = es,
                 ci_lower_unrounded  = ci_lower,
                 ci_upper_unrounded  = ci_upper,
-                est_rounded         = est_r,
-                ci_lower_rounded    = lower_r,
-                ci_upper_rounded    = upper_r,
-                match_est      = if (!is.na(d_est_num))      isTRUE(all.equal(est_r,   d_est_num))      else NA,
-                match_ci_lower = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_r, d_ci_lower_num)) else NA,
-                match_ci_upper = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_r, d_ci_upper_num)) else NA,
-                match_all      = if (!any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))) {
-                  est_r   == d_est_num &&
-                    lower_r == d_ci_lower_num &&
-                    upper_r == d_ci_upper_num
+                d_rounded         = est_d,
+                ci_lower_rounded    = lower_d,
+                ci_upper_rounded    = upper_d,
+                match_est      = if (!is.na(d_num))      isTRUE(all.equal(est_d,   d_num))      else NA,
+                match_ci_lower = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_d, d_ci_lower_num)) else NA,
+                match_ci_upper = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_d, d_ci_upper_num)) else NA,
+                match_all      = if (!any(is.na(c(d_num, d_ci_lower_num, d_ci_upper_num)))) {
+                  est_d   == d_num &&
+                    lower_d == d_ci_lower_num &&
+                    upper_d == d_ci_upper_num
                 } else NA,
                 stringsAsFactors    = FALSE
               )
@@ -465,7 +465,7 @@ independent_t_test_summary <- function(
               df_used           = df_use,
               p_unrounded       = p_unr,
               p_rounded         = p_rounded,
-              match_p           = if (!is.na(p_est_num)) isTRUE(all.equal(p_rounded, p_est_num)) else NA,
+              match_p           = if (!is.na(p_num)) isTRUE(all.equal(p_rounded, p_num)) else NA,
               stringsAsFactors  = FALSE
             )
             
