@@ -1914,29 +1914,28 @@ M/SD/N</h1>
 <span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>  <span class="at">m_digits =</span> <span class="dv">2</span>, </span>
 <span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>  <span class="at">sd_digits =</span> <span class="dv">2</span>,</span>
 <span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a>  </span>
-<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>  <span class="co"># optionally specify output rounding method</span></span>
-<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>  <span class="at">output_rounding =</span> <span class="cn">NULL</span>, <span class="co"># if NULL, check all. or one of &quot;half_up&quot;, &quot;half_down&quot;, &quot;bankers&quot;, &quot;trunc&quot;</span></span>
-<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>  </span>
-<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>  <span class="co"># optionally supply the reported p value for comparison</span></span>
-<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a>  <span class="at">p =</span> <span class="fl">0.009</span>,</span>
-<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a>  <span class="at">p_digits =</span> <span class="dv">3</span>, <span class="co"># number of digits p was reported to</span></span>
-<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a>  <span class="co"># optionally specify p value calculation method</span></span>
-<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a>  <span class="at">p_methods =</span> <span class="cn">NULL</span>, <span class="co"># if NULL, check all. or one of &quot;student_t&quot;, &quot;welch_t&quot; </span></span>
-<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
-<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a>  </span>
-<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a>  <span class="co"># optionally supply the reported SMD estimate and its 95% CIs for comparison</span></span>
-<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>  <span class="at">d =</span> <span class="fl">0.53</span>,</span>
-<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a>  <span class="at">d_ci_lower =</span> <span class="fl">0.20</span>, <span class="co"># currently not used extensively</span></span>
-<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a>  <span class="at">d_ci_upper =</span> <span class="fl">0.90</span>, <span class="co"># currently not used extensively</span></span>
-<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a>  <span class="at">d_digits =</span> <span class="dv">2</span>, <span class="co"># number of digits SMD was reported to</span></span>
-<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a>  <span class="co"># optionally specify direction of effect, M1-M2 or M2-M1</span></span>
-<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a>  <span class="at">direction =</span> <span class="st">&quot;m1_minus_m2&quot;</span>, <span class="co"># one of c(&quot;m1_minus_m2&quot;, &quot;m2_minus_m1&quot;, &quot;both&quot;),</span></span>
-<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a>  <span class="co"># optionally specify CI calculation method. </span></span>
-<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a>  <span class="at">ci_methods =</span> <span class="cn">NULL</span>, <span class="co"># if NULL, check all. or one of &quot;wald_t&quot;, &quot;welch_t&quot;, &quot;nct&quot;.</span></span>
-<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a>  </span>
-<span id="cb2-32"><a href="#cb2-32" tabindex="-1"></a>  <span class="co"># optionally assess the reported SMD can be reproduced by assuming the reported SDs are actually SEs </span></span>
-<span id="cb2-33"><a href="#cb2-33" tabindex="-1"></a>  <span class="at">include_se_sd_confusion =</span> <span class="cn">FALSE</span></span>
-<span id="cb2-34"><a href="#cb2-34" tabindex="-1"></a>)</span></code></pre></div>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>  <span class="co"># optionally supply the reported p value for comparison</span></span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>  <span class="at">p =</span> <span class="fl">0.009</span>,</span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>  <span class="at">p_digits =</span> <span class="dv">3</span>,</span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>  <span class="co"># optionally specify p value calculation method</span></span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a>  <span class="at">p_methods =</span> <span class="cn">NULL</span>, <span class="co"># if NULL, check all. or one of &quot;student_t&quot;, &quot;welch_t&quot; </span></span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a>  </span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a>  <span class="co"># optionally supply the reported SMD estimate and its 95% CIs for comparison</span></span>
+<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a>  <span class="at">d =</span> <span class="fl">0.53</span>,</span>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a>  <span class="at">d_ci_lower =</span> <span class="fl">0.20</span>, <span class="co"># currently not used extensively</span></span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a>  <span class="at">d_ci_upper =</span> <span class="fl">0.90</span>, <span class="co"># currently not used extensively</span></span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>  <span class="co"># optionally specify direction of effect, M1-M2 or M2-M1</span></span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a>  <span class="at">direction =</span> <span class="st">&quot;m1_minus_m2&quot;</span>, <span class="co"># one of c(&quot;m1_minus_m2&quot;, &quot;m2_minus_m1&quot;, &quot;both&quot;),</span></span>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a>  <span class="co"># optionally specify output rounding method</span></span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a>  <span class="at">output_rounding =</span> <span class="cn">NULL</span>, <span class="co"># if NULL, check all. or one of &quot;half_up&quot;, &quot;half_down&quot;, &quot;bankers&quot;, &quot;trunc&quot;</span></span>
+<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a>  <span class="at">d_digits =</span> <span class="dv">2</span>, <span class="co"># number of digits to round SMD output to</span></span>
+<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a>  <span class="co"># optionally specify CI calculation method. </span></span>
+<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a>  <span class="at">ci_methods =</span> <span class="cn">NULL</span>, <span class="co"># if NULL, check all. or one of &quot;wald_t&quot;, &quot;welch_t&quot;, &quot;nct&quot;.</span></span>
+<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a>  </span>
+<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a>  <span class="co"># optionally assess the reported SMD can be reproduced by assuming the reported SDs are actually SEs </span></span>
+<span id="cb2-32"><a href="#cb2-32" tabindex="-1"></a>  <span class="at">include_se_sd_confusion =</span> <span class="cn">FALSE</span></span>
+<span id="cb2-33"><a href="#cb2-33" tabindex="-1"></a>)</span></code></pre></div>
 <div id="bounds" class="section level2">
 <h2>Bounds</h2>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>res<span class="sc">$</span>reproduced <span class="sc">|&gt;</span></span>

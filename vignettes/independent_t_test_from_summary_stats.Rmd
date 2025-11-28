@@ -36,12 +36,9 @@ res <- recalc::independent_t_test_summary(
   m_digits = 2, 
   sd_digits = 2,
   
-  # optionally specify output rounding method
-  output_rounding = NULL, # if NULL, check all. or one of "half_up", "half_down", "bankers", "trunc"
-  
   # optionally supply the reported p value for comparison
   p = 0.009,
-  p_digits = 3, # number of digits p was reported to
+  p_digits = 3,
   # optionally specify p value calculation method
   p_methods = NULL, # if NULL, check all. or one of "student_t", "welch_t" 
   alpha = 0.05,
@@ -50,9 +47,11 @@ res <- recalc::independent_t_test_summary(
   d = 0.53,
   d_ci_lower = 0.20, # currently not used extensively
   d_ci_upper = 0.90, # currently not used extensively
-  d_digits = 2, # number of digits SMD was reported to
   # optionally specify direction of effect, M1-M2 or M2-M1
   direction = "m1_minus_m2", # one of c("m1_minus_m2", "m2_minus_m1", "both"),
+  # optionally specify output rounding method
+  output_rounding = NULL, # if NULL, check all. or one of "half_up", "half_down", "bankers", "trunc"
+  d_digits = 2, # number of digits to round SMD output to
   # optionally specify CI calculation method. 
   ci_methods = NULL, # if NULL, check all. or one of "wald_t", "welch_t", "nct".
   
