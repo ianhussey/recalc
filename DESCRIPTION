@@ -1,6 +1,6 @@
 Package: recalc
 Title: Recalculate statistical results from reported summary and test statistics
-Version: 0.0.1
+Version: 0.0.2
 Authors@R: c(
     person("Ian", "Hussey", , "Ian.hussey@unibe.ch", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-8906-7559")),
@@ -11,11 +11,14 @@ Description: Recalculate statistical results from reported summary and test stat
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.2
 Imports:
-    stats,
-    roundwork,
-    dplyr
+    dplyr,
+    tibble,
+    ggplot2,
+    ggstance,
+    scales,
+    roundwork
 Suggests:
     devtools,
     roxygen2
