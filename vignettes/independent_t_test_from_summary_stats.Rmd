@@ -1,0 +1,40 @@
+
+# Independent t test and Cohen's d from M/SD/N
+
+```{r}
+
+library(dplyr)
+library(tibble)
+library(roundwork)
+library(ggplot2)
+library(ggstance)
+# devtools::install_github("ianhussey/recalc")
+library(recalc)
+
+res <- independent_t_test_summary(
+  m1 = 10.3,
+  m2 = 8.7,
+  sd1 = 3.1,
+  sd2 = 2.8,
+  n1 = 50,
+  n2 = 48,
+  # optionally supply the reported p value
+  p = .023,
+  # optionally supply the reported SMD estimate and its 95% CIs
+  d = 0.55,
+  d_ci_lower = 0.20, # currently not used extensively
+  d_ci_upper = 0.90, # currently not used extensively
+  d_digits = 2,
+  # optionally assess the reported SMD can be reproduced by assuming the reported SDs are actually SEs 
+  include_se_sd_confusion = FALSE
+)
+
+res
+
+plot_multiverse_d(res)
+
+plot_multiverse_p(res)
+
+```
+
+
