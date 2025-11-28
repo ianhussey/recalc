@@ -10,10 +10,10 @@
 #'   \item Input Rounding: Adjusting reported statistics by +/- half of the
 #'         last decimal place (ULP - Unit in the Last Place).
 #'   \item Effect Size Type: Using both Cohen's *d* and Hedges' *g*.
-#'   \item CI Methods: Wald-type CIs (using *z* or *t* distribution
+#'   \item CI Methods: Wald-type CIs (using *t* distribution
 #'         with pooled/Welch variance) and the Noncentral *t* (NCT) distribution.
 #'   \item P-value Methods: Using *t*-tests (Student's pooled or Welch's
-#'         unpooled) or *z*-approximations (pooled or Welch).
+#'         unpooled).
 #'   \item Output Rounding: Applying different rounding methods ("half_up",
 #'         "half_down", "bankers", "trunc") to the final *d*/CI and *p*-value
 #'         (governed by the \code{output_rounding} argument).
@@ -39,9 +39,9 @@
 #' @param p_digits Integer. Number of decimal places reported for p-value.
 #' @param alpha Numeric. Significance level for CIs (default is 0.05).
 #' @param ci_methods Character vector. CI methods to include.
-#'   Allowed: "wald_z", "wald_t", "welch_t", "welch_z", "nct".
+#'   Allowed: "wald_t", "welch_t", "nct".
 #' @param p_methods Character vector. P-value methods to include.
-#'   Allowed: "student_t", "welch_t", "student_z", "welch_z".
+#'   Allowed: "student_t", "welch_t".
 #' @param output_rounding Character vector. Rounding methods applied to both
 #'   effect sizes (d/g and CIs) and p-values.
 #'   Allowed: "half_up", "half_down", "bankers", "trunc".
@@ -54,8 +54,8 @@
 #'
 #' @return A list with three elements:
 #' \itemize{
-#'   \item \code{reproduced}: Logical. TRUE if a combination of calculated
-#'         and rounded *d* and CIs matches the reported ones.
+#'   \item \code{reproduced}: Data frame summarising whether reported d and p
+#'         fall within the multiverse.
 #'   \item \code{d_results}: Data frame detailing all calculated effect sizes and CIs.
 #'         Contains an additional column \code{sd_interpretation} indicating whether
 #'         SDs were used as reported ("sd") or derived from SE ("se_converted").
@@ -64,7 +64,7 @@
 #' }
 #'
 #' @importFrom roundwork round_up round_down round_trunc
-#' @importFrom stats pt pnorm qt qnorm uniroot
+#' @importFrom stats pt qt uniroot pnorm qnorm
 #' @importFrom dplyr summarise mutate arrange bind_cols select between
 #' @importFrom tibble as_tibble rownames_to_column
 #' @importFrom scales breaks_pretty
@@ -227,13 +227,13 @@ independent_t_test_summary <- function(
       }
     )
   }
-
+  
   fL <- function(delta) suppress_nct_warning(pt(t_obs, df = df, ncp = delta) - alpha / 2)
   fU <- function(delta) suppress_nct_warning(pt(t_obs, df = df, ncp = delta, lower.tail = FALSE) - alpha / 2)
-
+  
   lower <- -max_ncp
   upper <- max_ncp
-
+  
   fL_low <- fL(lower)
   fL_high <- fL(upper)
   if (is.na(fL_low) || is.na(fL_high) || fL_low * fL_high > 0) {
@@ -241,7 +241,7 @@ independent_t_test_summary <- function(
   } else {
     delta_L <- tryCatch(uniroot(fL, lower = lower, upper = upper)$root, error = function(e) NA_real_)
   }
-
+  
   fU_low_check <- fU(upper)
   fU_high_check <- fU(lower)
   if (is.na(fU_low_check) || is.na(fU_high_check) || fU_low_check * fU_high_check > 0) {
@@ -255,19 +255,18 @@ independent_t_test_summary <- function(
   } else {
     delta_U <- tryCatch(uniroot(fU, lower = lower, upper = upper)$root, error = function(e) NA_real_)
   }
-
+  
   c(delta_L, delta_U)
 }
 
-#' @keywords internal
 #' @keywords internal
 .multiverse_validate_and_setup_summary <- function(
     ci_methods, p_methods, output_rounding,
     m1, m2, sd1, sd2, n1, n2
 ) {
-  allowed_ci_methods        <- c("wald_z", "wald_t", "welch_t", "welch_z", "nct")
-  allowed_p_methods         <- c("student_t", "welch_t", "student_z", "welch_z")
-  allowed_output_rounding   <- c("half_up", "half_down", "bankers", "trunc")
+  allowed_ci_methods      <- c("wald_t", "welch_t", "nct")
+  allowed_p_methods       <- c("student_t", "welch_t")
+  allowed_output_rounding <- c("half_up", "half_down", "bankers", "trunc")
   
   check_methods <- function(input, allowed, name) {
     if (!is.null(input)) {
@@ -306,7 +305,6 @@ independent_t_test_summary <- function(
   )
 }
 
-#' @keywords internal
 #' @keywords internal
 .multiverse_from_summary_stats <- function(
     m1, m2, sd1, sd2, n1, n2,
@@ -414,20 +412,16 @@ independent_t_test_summary <- function(
               ci_lower <- if (es_type == "d") dL_raw else J_s * dL_raw
               ci_upper <- if (es_type == "d") dU_raw else J_s * dU_raw
               
-            } else {
-              if (ci_method %in% c("wald_z", "wald_t")) {
+            } else { # wald_t, welch_t
+              if (ci_method == "wald_t") {
                 se_use   <- se_pooled
                 df_for_t <- df_s
-              } else { # welch_t, welch_z
+              } else { # welch_t
                 se_use   <- if (!is.na(se_welch)) se_welch else se_pooled
                 df_for_t <- if (!is.na(df_w)) df_w else df_s
               }
               
-              crit <- if (ci_method %in% c("wald_z", "welch_z")) {
-                qnorm(1 - alpha / 2)
-              } else {
-                qt(1 - alpha / 2, df = df_for_t)
-              }
+              crit <- qt(1 - alpha / 2, df = df_for_t)
               
               ci_lower <- es - crit * se_use
               ci_upper <- es + crit * se_use
@@ -469,9 +463,9 @@ independent_t_test_summary <- function(
                 d_rounded           = est_d,
                 ci_lower_rounded    = lower_d,
                 ci_upper_rounded    = upper_d,
-                match_est      = if (!is.na(d_num))           isTRUE(all.equal(est_d,   d_num))           else NA,
-                match_ci_lower = if (!is.na(d_ci_lower_num))  isTRUE(all.equal(lower_d, d_ci_lower_num))  else NA,
-                match_ci_upper = if (!is.na(d_ci_upper_num))  isTRUE(all.equal(upper_d, d_ci_upper_num))  else NA,
+                match_est      = if (!is.na(d_num))          isTRUE(all.equal(est_d,   d_num))          else NA,
+                match_ci_lower = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_d, d_ci_lower_num)) else NA,
+                match_ci_upper = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_d, d_ci_upper_num)) else NA,
                 match_all      = if (!any(is.na(c(d_num, d_ci_lower_num, d_ci_upper_num)))) {
                   est_d   == d_num &&
                     lower_d == d_ci_lower_num &&
@@ -486,7 +480,7 @@ independent_t_test_summary <- function(
         }
         
         # ----------------------------------------------------------
-        # p-values
+        # p-values (t-based only)
         # ----------------------------------------------------------
         for (p_method in p_methods) {
           
@@ -494,8 +488,6 @@ independent_t_test_summary <- function(
             p_method,
             "student_t" = t_pooled,
             "welch_t"   = t_welch,
-            "student_z" = t_pooled,
-            "welch_z"   = t_welch,
             NA_real_
           )
           
@@ -503,18 +495,12 @@ independent_t_test_summary <- function(
             p_method,
             "student_t" = df_s,
             "welch_t"   = df_w,
-            "student_z" = Inf,
-            "welch_z"   = Inf,
             NA_real_
           )
           
-          if (is.na(t_use) || is.na(df_use) || (p_method == "welch_t" && is.na(df_w))) next
+          if (is.na(t_use) || is.na(df_use)) next
           
-          p_unr <- if (is.infinite(df_use)) {
-            2 * (1 - pnorm(abs(t_use)))
-          } else {
-            2 * (1 - pt(abs(t_use), df = df_use))
-          }
+          p_unr <- 2 * (1 - pt(abs(t_use), df = df_use))
           
           for (p_rounding in output_rounding) {
             
@@ -553,7 +539,6 @@ independent_t_test_summary <- function(
   
   list(d_results = d_results, p_results = p_results, idx_d = idx_d, idx_p = idx_p)
 }
-
 
 #' Plot multiverse of Cohen's d results from independent_t_test_summary
 #'
