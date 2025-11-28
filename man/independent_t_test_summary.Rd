@@ -11,17 +11,19 @@ independent_t_test_summary(
   sd2 = NULL,
   n1 = NULL,
   n2 = NULL,
+  m_digits = NULL,
+  sd_digits = NULL,
+  output_rounding = NULL,
+  p = NULL,
+  p_digits = NULL,
+  p_methods = NULL,
+  alpha = 0.05,
   d = NULL,
   d_ci_lower = NULL,
   d_ci_upper = NULL,
-  d_digits = 2,
-  p = NULL,
-  p_digits = 3,
-  alpha = 0.05,
-  ci_methods = NULL,
-  p_methods = NULL,
-  output_rounding = NULL,
+  d_digits = NULL,
   direction = c("m1_minus_m2", "m2_minus_m1", "both"),
+  ci_methods = NULL,
   include_se_sd_confusion = FALSE
 )
 }
@@ -30,56 +32,84 @@ independent_t_test_summary(
 
 \item{m2}{Numeric. Mean of Group 2.}
 
-\item{sd1}{Numeric. Standard Deviation of Group 1 (assumed sample SD by default).}
+\item{sd1}{Numeric. Standard deviation of Group 1 (assumed sample SD by default).}
 
-\item{sd2}{Numeric. Standard Deviation of Group 2 (assumed sample SD by default).}
+\item{sd2}{Numeric. Standard deviation of Group 2 (assumed sample SD by default).}
 
 \item{n1}{Numeric. Sample size of Group 1.}
 
 \item{n2}{Numeric. Sample size of Group 2.}
 
-\item{d}{Numeric. Reported Cohen's d or Hedges' g estimate.}
+\item{m_digits}{Integer. Number of decimal places to assume for the reported
+means (\code{m1}, \code{m2}) when constructing the +/- 0.5 ULP adjustment
+grid. This controls the width of the interval within which the unrounded
+mean is assumed to lie. If \code{NULL}, no adjustment grid is generated
+for the means (i.e., the reported means are treated as exact).}
 
-\item{d_ci_lower}{Numeric. Reported lower bound of the CI for d.}
+\item{sd_digits}{Integer. Number of decimal places to assume for the reported
+SDs (\code{sd1}, \code{sd2}) when constructing the +/- 0.5 ULP adjustment
+grid. This controls the width of the interval within which the unrounded
+SD is assumed to lie. If \code{NULL}, no adjustment grid is generated for
+the SDs (i.e., the reported SDs are treated as exact).
+Note that specifying \code{m_digits} and \code{sd_digits} defines only the
+size of the rounding unit; the actual rounding rule for the original
+reporting (e.g., round half up vs truncate) is not constrained and is
+implicitly allowed to be anything whose outputs fall within the +/- 0.5 ULP
+interval.}
 
-\item{d_ci_upper}{Numeric. Reported upper bound of the CI for d.}
-
-\item{d_digits}{Integer. Number of decimal places reported for d/CI.}
+\item{output_rounding}{Character vector. Rounding methods applied to both
+effect sizes (\emph{d}/\emph{g} and CIs) and p-values.
+Allowed: \code{"half_up"}, \code{"half_down"}, \code{"bankers"}, \code{"trunc"}.
+If \code{NULL}, all are used.}
 
 \item{p}{Numeric. Reported p-value.}
 
-\item{p_digits}{Integer. Number of decimal places reported for p-value.}
+\item{p_digits}{Integer. Number of decimal places to which the p-value was
+reported. Must be supplied if \code{p} is non-\code{NULL}.}
+
+\item{p_methods}{Character vector. P-value methods to include.
+Allowed: \code{"student_t"}, \code{"welch_t"}.
+If \code{NULL}, both are used.}
 
 \item{alpha}{Numeric. Significance level for CIs (default is 0.05).}
 
+\item{d}{Numeric. Reported Cohen's \emph{d} or Hedges' \emph{g} estimate.}
+
+\item{d_ci_lower}{Numeric. Reported lower bound of the CI for \emph{d}.}
+
+\item{d_ci_upper}{Numeric. Reported upper bound of the CI for \emph{d}.}
+
+\item{d_digits}{Integer. Number of decimal places to which \emph{d} and its CI
+bounds were reported. Must be supplied if \code{d} is non-\code{NULL}.}
+
+\item{direction}{Character. Whether to compute the effect as M1 - M2,
+M2 - M1, or both. One of \code{"m1_minus_m2"}, \code{"m2_minus_m1"},
+\code{"both"}.}
+
 \item{ci_methods}{Character vector. CI methods to include.
-Allowed: "wald_t", "welch_t", "nct".}
-
-\item{p_methods}{Character vector. P-value methods to include.
-Allowed: "student_t", "welch_t".}
-
-\item{output_rounding}{Character vector. Rounding methods applied to both
-effect sizes (d/g and CIs) and p-values.
-Allowed: "half_up", "half_down", "bankers", "trunc".}
-
-\item{direction}{Character. Whether to compute d as M1 - M2, M2 - M1,
-or both. One of "m1_minus_m2", "m2_minus_m1", "both".}
+Allowed: \code{"wald_t"}, \code{"welch_t"}, \code{"nct"}.
+If \code{NULL}, all are used.}
 
 \item{include_se_sd_confusion}{Logical. If \code{TRUE}, the multiverse also
-includes a branch that interprets \code{sd1} and \code{sd2} as standard errors
-and converts them to SDs via \eqn{SD = SE \times \sqrt{n}} before computing
-effect sizes, CIs, and p-values. Default is \code{FALSE}.}
+includes a branch that interprets \code{sd1} and \code{sd2} as standard
+errors and converts them to SDs via \eqn{SD = SE \times \sqrt{n}} before
+computing effect sizes, CIs, and p-values. Default is \code{FALSE}.}
 }
 \value{
 A list with three elements:
 \itemize{
-\item \code{reproduced}: Data frame summarising whether reported d and p
-fall within the multiverse.
-\item \code{d_results}: Data frame detailing all calculated effect sizes and CIs.
-Contains an additional column \code{sd_interpretation} indicating whether
-SDs were used as reported ("sd") or derived from SE ("se_converted").
+\item \code{reproduced}: Data frame summarising whether the reported \emph{d}
+and \emph{p} fall within the ranges generated by the multiverse.
+\item \code{d_results}: Data frame detailing all calculated effect sizes and
+CIs. Contains additional columns such as \code{sd_interpretation},
+indicating whether SDs were used as reported (\code{"sd"}) or derived
+from SE (\code{"se_converted"}), and \code{d_rounded},
+\code{ci_lower_rounded}, \code{ci_upper_rounded} for each combination
+of analytic choices and output rounding.
 \item \code{p_results}: Data frame detailing all calculated p-values.
-Also includes \code{sd_interpretation}.
+Includes \code{sd_interpretation}, \code{p_unrounded},
+\code{p_rounded}, and indicators of whether the rounded p-value
+matches the reported one under each rounding rule.
 }
 }
 \description{
@@ -90,20 +120,27 @@ of reported summary statistics (Means, SDs, Ns).
 The multiverse is generated by varying:
 \itemize{
 \item Input Rounding: Adjusting reported statistics by +/- half of the
-last decimal place (ULP - Unit in the Last Place).
+last decimal place (ULP - Unit in the Last Place), as specified by
+\code{m_digits} and \code{sd_digits}. This implicitly allows any
+rounding rule whose result lies within this interval (from truncation
+toward negative infinity up to truncation toward positive infinity);
+the rounding mechanism for the input M and SD cannot be restricted
+to a single specific rule.
 \item Effect Size Type: Using both Cohen's \emph{d} and Hedges' \emph{g}.
-\item CI Methods: Wald-type CIs (using \emph{t} distribution
-with pooled/Welch variance) and the Noncentral \emph{t} (NCT) distribution.
+\item CI Methods: Wald-type CIs (using \emph{t} distributions with pooled or
+Welch variance) and the Noncentral \emph{t} (NCT) distribution.
 \item P-value Methods: Using \emph{t}-tests (Student's pooled or Welch's
 unpooled).
 \item Output Rounding: Applying different rounding methods ("half_up",
 "half_down", "bankers", "trunc") to the final \emph{d}/CI and \emph{p}-value
 (governed by the \code{output_rounding} argument).
 \item Direction: The calculation uses the direction implied by the order of
-the supplied means (M1 - M2).
-\item SD vs. SE Interpretation (optional): If \code{include_se_sd_confusion = TRUE},
-the function also includes a branch where reported SDs are interpreted as
-standard errors and converted to SDs via \eqn{SD = SE \times \sqrt{n}} before
-computing \emph{d}, CIs, and \emph{p}-values.
+the supplied means (M1 - M2) or its reverse, depending on
+\code{direction}.
+\item SD vs. SE Interpretation (optional): If
+\code{include_se_sd_confusion = TRUE}, the function also includes
+a branch where reported SDs are interpreted as standard errors and
+converted to SDs via \eqn{SD = SE \times \sqrt{n}} before computing
+\emph{d}, CIs, and \emph{p}-values.
 }
 }
