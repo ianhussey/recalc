@@ -134,24 +134,105 @@ independent_t_test_summary <- function(
   d_ci_upper_num <- if (!is.null(d_ci_upper)) as.numeric(d_ci_upper) else NA_real_
   p_num          <- if (!is.null(p)) as.numeric(p) else NA_real_
   
-
-  # If user supplies m_digits, validate; otherwise infer from m1 and m2
-  if (!is.null(m_digits)) {
-    if (!is.numeric(m_digits) || length(m_digits) != 1L ||
-        !is.finite(m_digits) || m_digits < 0) {
-      stop("'m_digits' must be a single non-negative finite number (e.g. 1 or 2).")
-    }
-    m_digits <- as.integer(m_digits)
-  } 
   
-  # If user supplies sd_digits, validate; otherwise infer from sd1 and sd2
-  if (!is.null(sd_digits)) {
-    if (!is.numeric(sd_digits) || length(sd_digits) != 1L ||
-        !is.finite(sd_digits) || sd_digits < 0) {
-      stop("'sd_digits' must be a single non-negative finite number (e.g. 2).")
-    }
-    sd_digits <- as.integer(sd_digits)
-  } 
+  # # --- Validation of m_digits and sd_digits (ULP for M and SD) ---------------
+  # 
+  # # Basic numeric checks 
+  # if (!is.null(m_digits)) {
+  #   if (!is.numeric(m_digits) || length(m_digits) != 1L ||
+  #       !is.finite(m_digits) || m_digits < 0) {
+  #     stop("'m_digits' must be a single non-negative finite number (e.g. 1 or 2).")
+  #   }
+  #   m_digits <- as.integer(m_digits)
+  # }
+  # 
+  # if (!is.null(sd_digits)) {
+  #   if (!is.numeric(sd_digits) || length(sd_digits) != 1L ||
+  #       !is.finite(sd_digits) || sd_digits < 0) {
+  #     stop("'sd_digits' must be a single non-negative finite number (e.g. 2).")
+  #   }
+  #   sd_digits <- as.integer(sd_digits)
+  # }
+  
+  # --- Validation of m_digits and sd_digits (ULP for M and SD) ---------------
+  # Literal precision of inputs as written (for diagnostics)
+  obs_m_digits  <- max(.get_digits(m1),  .get_digits(m2))
+  obs_sd_digits <- max(.get_digits(sd1), .get_digits(sd2))
+  
+  # Require m_digits
+  if (is.null(m_digits)) {
+    stop(
+      "You must supply 'm_digits'. ",
+      "Specify the number of decimal places the means (m1, m2) were reported to, ",
+      "e.g. m_digits = 1 for 10.3 or m_digits = 2 for 10.30."
+    )
+  }
+  # Require sd_digits
+  if (is.null(sd_digits)) {
+    stop(
+      "You must supply 'sd_digits'. ",
+      "Specify the number of decimal places the SDs (sd1, sd2) were reported to, ",
+      "e.g. sd_digits = 2 for 3.10."
+    )
+  }
+  
+  # m_digits checks
+  if (!is.numeric(m_digits) || length(m_digits) != 1L ||
+      !is.finite(m_digits) || m_digits < 0) {
+    stop("'m_digits' must be a single non-negative finite integer (e.g. 1 or 2).")
+  }
+  if (m_digits %% 1 != 0) {
+    stop(
+      "'m_digits' must be an integer number of decimal places (e.g. 1 or 2), not ",
+      m_digits, "."
+    )
+  }
+  m_digits <- as.integer(m_digits)
+  
+  if (m_digits < obs_m_digits) {
+    stop(
+      "m_digits = ", m_digits, " is smaller than the apparent decimal precision of m1/m2 (",
+      obs_m_digits, "). This suggests that the means carry more decimal places than ",
+      "your rounding grid assumes (often due to floating-point artefacts or prior ",
+      "processing)."
+    )
+  }
+  if (m_digits > obs_m_digits) {
+    warning(
+      "m_digits = ", m_digits, " is larger than the apparent precision of m1/m2 (",
+      obs_m_digits, "). This assumes implied trailing zeros (e.g., stored 3.1 ",
+      "representing a reported 3.10). Please verify that this matches the reporting."
+    )
+  }
+  
+  # sd_digits checks
+  if (!is.numeric(sd_digits) || length(sd_digits) != 1L ||
+      !is.finite(sd_digits) || sd_digits < 0) {
+    stop("'sd_digits' must be a single non-negative finite integer (e.g. 2).")
+  }
+  if (sd_digits %% 1 != 0) {
+    stop(
+      "'sd_digits' must be an integer number of decimal places (e.g. 2), not ",
+      sd_digits, "."
+    )
+  }
+  sd_digits <- as.integer(sd_digits)
+  
+  if (sd_digits < obs_sd_digits) {
+    stop(
+      "sd_digits = ", sd_digits, " is smaller than the apparent decimal precision of sd1/sd2 (",
+      obs_sd_digits, "). This suggests that the SDs carry more decimal places than ",
+      "your rounding grid assumes (often due to floating-point artefacts)."
+    )
+  }
+  if (sd_digits > obs_sd_digits) {
+    warning(
+      "sd_digits = ", sd_digits, " is larger than the apparent precision of sd1/sd2 (",
+      obs_sd_digits, "). This assumes implied trailing zeros in the reported SDs ",
+      "(e.g., 2.3 representing 2.30). Please verify that this matches the reporting."
+    )
+  }
+  
   
   # If you report d, you must also tell us how many decimals it was rounded to
   if (!is.null(d) && is.null(d_digits)) {
@@ -195,7 +276,7 @@ independent_t_test_summary <- function(
     ci_methods, p_methods, output_rounding,
     m1, m2, sd1, sd2, n1, n2
   )
-
+  
   d_results <- list()
   p_results <- list()
   idx_d <- 1
@@ -394,6 +475,14 @@ independent_t_test_summary <- function(
     p_methods       = p_methods,
     output_rounding = output_rounding
   )
+}
+
+#' @keywords internal
+.get_digits <- function(x) {
+  if (is.null(x) || length(x) == 0 || is.na(x)) return(0L)
+  sx <- sub("^-", "", as.character(x[1L]))
+  if (!grepl("\\.", sx)) return(0L)
+  nchar(sub("^[^.]*\\.", "", sx))
 }
 
 #' @keywords internal
