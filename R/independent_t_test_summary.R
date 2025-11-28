@@ -31,6 +31,12 @@
 #' @param sd2 Numeric. Standard Deviation of Group 2 (assumed sample SD by default).
 #' @param n1 Numeric. Sample size of Group 1.
 #' @param n2 Numeric. Sample size of Group 2.
+#' @param m_digits Integer. Number of decimal places to assume for the reported
+#'   means (m1, m2) when constructing the +/- 0.5 ULP adjustment grid.
+#'   If \code{NULL}, it is inferred from m1 and m2.
+#' @param sd_digits Integer. Number of decimal places to assume for the reported
+#'   SDs (sd1, sd2) when constructing the +/- 0.5 ULP adjustment grid.
+#'   If \code{NULL}, it is inferred from sd1 and sd2.
 #' @param d Numeric. Reported Cohen's d or Hedges' g estimate.
 #' @param d_ci_lower Numeric. Reported lower bound of the CI for d.
 #' @param d_ci_upper Numeric. Reported upper bound of the CI for d.
@@ -71,25 +77,29 @@
 #'
 #' @export
 independent_t_test_summary <- function(
-    m1 = NULL, m2 = NULL, sd1 = NULL, sd2 = NULL,
-    n1 = NULL, n2 = NULL,
-    d = NULL, d_ci_lower = NULL, d_ci_upper = NULL,
-    d_digits = 2,
-    p = NULL, p_digits = 3,
-    alpha = 0.05,
-    ci_methods      = NULL,
-    p_methods       = NULL,
+    m1 = NULL, 
+    m2 = NULL, 
+    sd1 = NULL, 
+    sd2 = NULL,
+    n1 = NULL, 
+    n2 = NULL,
+    m_digits = NULL,
+    sd_digits = NULL,
     output_rounding = NULL,
-    direction       = c("m1_minus_m2", "m2_minus_m1", "both"),
+    p = NULL, 
+    p_digits = NULL,
+    p_methods = NULL,
+    alpha = 0.05,
+    d = NULL, 
+    d_ci_lower = NULL, 
+    d_ci_upper = NULL,
+    d_digits = NULL,
+    direction = c("m1_minus_m2", "m2_minus_m1", "both"),
+    ci_methods = NULL,
     include_se_sd_confusion = FALSE
 ) {
   
   direction <- match.arg(direction)
-  
-  params <- .multiverse_validate_and_setup_summary(
-    ci_methods, p_methods, output_rounding,
-    m1, m2, sd1, sd2, n1, n2
-  )
   
   # Coerce reported values
   d_num          <- if (!is.null(d)) as.numeric(d) else NA_real_
@@ -97,6 +107,68 @@ independent_t_test_summary <- function(
   d_ci_upper_num <- if (!is.null(d_ci_upper)) as.numeric(d_ci_upper) else NA_real_
   p_num          <- if (!is.null(p)) as.numeric(p) else NA_real_
   
+
+  # If user supplies m_digits, validate; otherwise infer from m1 and m2
+  if (!is.null(m_digits)) {
+    if (!is.numeric(m_digits) || length(m_digits) != 1L ||
+        !is.finite(m_digits) || m_digits < 0) {
+      stop("'m_digits' must be a single non-negative finite number (e.g. 1 or 2).")
+    }
+    m_digits <- as.integer(m_digits)
+  } 
+  
+  # If user supplies sd_digits, validate; otherwise infer from sd1 and sd2
+  if (!is.null(sd_digits)) {
+    if (!is.numeric(sd_digits) || length(sd_digits) != 1L ||
+        !is.finite(sd_digits) || sd_digits < 0) {
+      stop("'sd_digits' must be a single non-negative finite number (e.g. 2).")
+    }
+    sd_digits <- as.integer(sd_digits)
+  } 
+  
+  # If you report d, you must also tell us how many decimals it was rounded to
+  if (!is.null(d) && is.null(d_digits)) {
+    stop(
+      "You supplied 'd' but not 'd_digits'. ",
+      "Please provide the number of decimal places d was reported to, e.g. d_digits = 2."
+    )
+  }
+  
+  # If you report p, you must also tell us how many decimals it was rounded to
+  if (!is.null(p) && is.null(p_digits)) {
+    stop(
+      "You supplied 'p' but not 'p_digits'. ",
+      "Please provide the number of decimal places p was reported to, e.g. p_digits = 3."
+    )
+  }
+  
+  # Check that d_digits, if supplied, is a single non-negative integer
+  if (!is.null(d_digits)) {
+    if (!is.numeric(d_digits) || length(d_digits) != 1L || !is.finite(d_digits) || d_digits < 0) {
+      stop("'d_digits' must be a single non-negative finite number (e.g. 2).")
+    }
+    d_digits <- as.integer(d_digits)
+  } else {
+    # No reported d: we still need some rounding for the multiverse output
+    d_digits <- 2L
+  }
+  
+  # Check that p_digits, if supplied, is a single non-negative integer
+  if (!is.null(p_digits)) {
+    if (!is.numeric(p_digits) || length(p_digits) != 1L || !is.finite(p_digits) || p_digits < 1) {
+      stop("'p_digits' must be a single non-negative finite number greater than zero (e.g. 3).")
+    }
+    p_digits <- as.integer(p_digits)
+  } else {
+    # No reported p: we still need some rounding for the multiverse output
+    p_digits <- 3L
+  }
+  
+  params <- .multiverse_validate_and_setup_summary(
+    ci_methods, p_methods, output_rounding,
+    m1, m2, sd1, sd2, n1, n2
+  )
+
   d_results <- list()
   p_results <- list()
   idx_d <- 1
@@ -105,7 +177,7 @@ independent_t_test_summary <- function(
   res_summary <- .multiverse_from_summary_stats(
     m1, m2, sd1, sd2, n1, n2,
     params$ci_methods, params$p_methods, params$output_rounding,
-    d_digits, p_digits, alpha,
+    d_digits, p_digits, m_digits, sd_digits, alpha, 
     d_num, d_ci_lower_num, d_ci_upper_num, p_num,
     idx_d, idx_p,
     direction = direction,
@@ -197,14 +269,6 @@ independent_t_test_summary <- function(
 }
 
 # --- Internal Helper Functions ---
-
-#' @keywords internal
-.get_digits <- function(x) {
-  if (is.null(x) || length(x) == 0 || is.na(x)) return(0L)
-  sx <- sub("^-", "", as.character(x[1L]))
-  if (!grepl("\\.", sx)) return(0L)
-  nchar(sub("^[^.]*\\.", "", sx))
-}
 
 #' @keywords internal
 .adjust_value <- function(x, step, code) {
@@ -309,7 +373,7 @@ independent_t_test_summary <- function(
 .multiverse_from_summary_stats <- function(
     m1, m2, sd1, sd2, n1, n2,
     ci_methods, p_methods, output_rounding,
-    d_digits, p_digits, alpha,
+    d_digits, p_digits, m_digits, sd_digits, alpha,
     d_num, d_ci_lower_num, d_ci_upper_num, p_num,
     idx_d, idx_p,
     direction = c("m1_minus_m2", "m2_minus_m1", "both"),
@@ -321,11 +385,11 @@ independent_t_test_summary <- function(
   direction <- match.arg(direction)
   dir_modes <- if (direction == "both") c("m1_minus_m2", "m2_minus_m1") else direction
   
-  # Step sizes (based on reported values)
-  dig_m1  <- .get_digits(m1);  step_m1  <- 0.5 * 10^(-dig_m1)
-  dig_m2  <- .get_digits(m2);  step_m2  <- 0.5 * 10^(-dig_m2)
-  dig_sd1 <- .get_digits(sd1); step_sd1 <- 0.5 * 10^(-dig_sd1)
-  dig_sd2 <- .get_digits(sd2); step_sd2 <- 0.5 * 10^(-dig_sd2)
+  # Step sizes (based on user-specified digits)
+  step_m1  <- 0.5 * 10^(-m_digits)
+  step_m2  <- 0.5 * 10^(-m_digits)
+  step_sd1 <- 0.5 * 10^(-sd_digits)
+  step_sd2 <- 0.5 * 10^(-sd_digits)
   
   adj_codes <- c("reported", "minus", "plus")
   
