@@ -3,15 +3,10 @@
 
 ```{r}
 
-library(dplyr)
-library(tibble)
-library(roundwork)
-library(ggplot2)
-library(ggstance)
 # devtools::install_github("ianhussey/recalc")
 library(recalc)
 
-res <- independent_t_test_summary(
+res <- recalc::independent_t_test_summary(
   m1 = 10.3,
   m2 = 8.7,
   sd1 = 3.1,
@@ -29,7 +24,7 @@ res <- independent_t_test_summary(
   include_se_sd_confusion = FALSE
 )
 
-res
+res$reproduced
 
 plot_multiverse_d(res)
 
