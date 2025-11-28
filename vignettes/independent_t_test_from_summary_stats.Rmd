@@ -1,35 +1,92 @@
+---
+title: "Independent t test and Cohen's d from M/SD/N"
+author: "Ian Hussey"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document:
+    code_folding: show
+    highlight: haddock
+    theme: flatly
+    toc: yes
+    toc_float: yes
+---
 
-# Independent t test and Cohen's d from M/SD/N
+# Dependencies
 
 ```{r}
 
+library(knitr)
+library(kableExtra)
 # devtools::install_github("ianhussey/recalc")
 library(recalc)
 
+```
+
+# Recalculate independent t-test from summary stats
+
+```{r}
 res <- recalc::independent_t_test_summary(
-  m1 = 10.3,
-  m2 = 8.7,
-  sd1 = 3.1,
-  sd2 = 2.8,
+  # essential arguments: M/SD/N
+  m1 = 10.30,
+  m2 = 8.71,
+  sd1 = 3.12,
+  sd2 = 2.80,
   n1 = 50,
   n2 = 48,
-  # optionally supply the reported p value
-  p = .023,
-  # optionally supply the reported SMD estimate and its 95% CIs
-  d = 0.55,
+  m_digits = 2, 
+  sd_digits = 2,
+  
+  # optionally specify output rounding method
+  output_rounding = NULL, # if NULL, check all. or one of "half_up", "half_down", "bankers", "trunc"
+  
+  # optionally supply the reported p value for comparison
+  p = 0.009,
+  p_digits = 3, # number of digits p was reported to
+  # optionally specify p value calculation method
+  p_methods = NULL, # if NULL, check all. or one of "student_t", "welch_t" 
+  alpha = 0.05,
+  
+  # optionally supply the reported SMD estimate and its 95% CIs for comparison
+  d = 0.53,
   d_ci_lower = 0.20, # currently not used extensively
   d_ci_upper = 0.90, # currently not used extensively
-  d_digits = 2,
+  d_digits = 2, # number of digits SMD was reported to
+  # optionally specify direction of effect, M1-M2 or M2-M1
+  direction = "m1_minus_m2", # one of c("m1_minus_m2", "m2_minus_m1", "both"),
+  # optionally specify CI calculation method. 
+  ci_methods = NULL, # if NULL, check all. or one of "wald_t", "welch_t", "nct".
+  
   # optionally assess the reported SMD can be reproduced by assuming the reported SDs are actually SEs 
   include_se_sd_confusion = FALSE
 )
 
-res$reproduced
-
-plot_multiverse_d(res)
-
-plot_multiverse_p(res)
-
 ```
 
+## Bounds
+
+```{r}
+res$reproduced |>
+  kable() |>
+  kable_classic(full_width = FALSE)
+```
+
+## Individual possible values for p
+
+```{r}
+plot_multiverse_p(res)
+
+res$p_results |>
+  kable() |>
+  kable_classic(full_width = FALSE)
+```
+
+## Individual possible values for SMD
+
+```{r}
+plot_multiverse_d(res)
+
+res$d_results |>
+  kable() |>
+  kable_classic(full_width = FALSE)
+```
 
