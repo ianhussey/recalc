@@ -15,7 +15,8 @@
 #'   \item P-value Methods: Using *t*-tests (Student's pooled or Welch's
 #'         unpooled) or *z*-approximations (pooled or Welch).
 #'   \item Output Rounding: Applying different rounding methods ("half_up",
-#'         "half_down", "bankers", "trunc") to the final *d*/CI/p-value.
+#'         "half_down", "bankers", "trunc") to the final *d*/CI and *p*-value
+#'         (governed by the \code{output_rounding} argument).
 #'   \item Direction: The calculation uses the direction implied by the order of
 #'         the supplied means (M1 - M2).
 #'   \item SD vs. SE Interpretation (optional): If \code{include_se_sd_confusion = TRUE},
@@ -41,8 +42,11 @@
 #'   Allowed: "wald_z", "wald_t", "welch_t", "welch_z", "nct".
 #' @param p_methods Character vector. P-value methods to include.
 #'   Allowed: "student_t", "welch_t", "student_z", "welch_z".
-#' @param d_rounding_set Character vector. Rounding methods for d/CI.
+#' @param output_rounding Character vector. Rounding methods applied to both
+#'   effect sizes (d/g and CIs) and p-values.
 #'   Allowed: "half_up", "half_down", "bankers", "trunc".
+#' @param direction Character. Whether to compute d as M1 - M2, M2 - M1,
+#'   or both. One of "m1_minus_m2", "m2_minus_m1", "both".
 #' @param include_se_sd_confusion Logical. If \code{TRUE}, the multiverse also
 #'   includes a branch that interprets \code{sd1} and \code{sd2} as standard errors
 #'   and converts them to SDs via \eqn{SD = SE \times \sqrt{n}} before computing
@@ -73,34 +77,34 @@ independent_t_test_summary <- function(
     d_digits = 2,
     p = NULL, p_digits = 3,
     alpha = 0.05,
-    ci_methods     = NULL,
-    p_methods      = NULL,
-    d_rounding_set = NULL,
-    direction      = c("m1_minus_m2", "m2_minus_m1", "both"),
+    ci_methods      = NULL,
+    p_methods       = NULL,
+    output_rounding = NULL,
+    direction       = c("m1_minus_m2", "m2_minus_m1", "both"),
     include_se_sd_confusion = FALSE
 ) {
   
   direction <- match.arg(direction)
-
+  
   params <- .multiverse_validate_and_setup_summary(
-    ci_methods, p_methods, d_rounding_set,
+    ci_methods, p_methods, output_rounding,
     m1, m2, sd1, sd2, n1, n2
   )
-
+  
   # Coerce reported values
-  d_num      <- if (!is.null(d)) as.numeric(d) else NA_real_
+  d_num          <- if (!is.null(d)) as.numeric(d) else NA_real_
   d_ci_lower_num <- if (!is.null(d_ci_lower)) as.numeric(d_ci_lower) else NA_real_
   d_ci_upper_num <- if (!is.null(d_ci_upper)) as.numeric(d_ci_upper) else NA_real_
-  p_num      <- if (!is.null(p)) as.numeric(p) else NA_real_
-
+  p_num          <- if (!is.null(p)) as.numeric(p) else NA_real_
+  
   d_results <- list()
   p_results <- list()
   idx_d <- 1
   idx_p <- 1
-
+  
   res_summary <- .multiverse_from_summary_stats(
     m1, m2, sd1, sd2, n1, n2,
-    params$ci_methods, params$p_methods, params$d_rounding_set,
+    params$ci_methods, params$p_methods, params$output_rounding,
     d_digits, p_digits, alpha,
     d_num, d_ci_lower_num, d_ci_upper_num, p_num,
     idx_d, idx_p,
@@ -109,10 +113,10 @@ independent_t_test_summary <- function(
   )
   d_results <- c(d_results, res_summary$d_results)
   p_results <- c(p_results, res_summary$p_results)
-
+  
   d_out <- if (length(d_results) > 0) do.call(rbind, d_results) else NULL
   p_out <- if (length(p_results) > 0) do.call(rbind, p_results) else NULL
-
+  
   if (!is.null(d_out)) {
     d_out <- d_out[order(!d_out$match_all,
                          !d_out$match_est,
@@ -162,12 +166,11 @@ independent_t_test_summary <- function(
     )
     
     # ---- Logical checks (NULL-safe) -------------------------------------------
-    # d_inbounds only computed if min/max are present
     combined <- combined |>
       dplyr::mutate(
         d_inbounds = ifelse(
           is.na(d),
-          NA,  # cannot judge possibility
+          NA,
           dplyr::between(d, min_d_rounded, max_d_rounded)
         ),
         p_inbounds = ifelse(
@@ -177,16 +180,15 @@ independent_t_test_summary <- function(
         )
       )
     
-    # ---- Final tidy structure --------------------------------------------------
     combined |>
       dplyr::mutate(d = d,
-             p = p) |>
+                    p = p) |>
       dplyr::select(
         d, min_d_rounded, max_d_rounded, d_inbounds,
         p, min_p_unrounded, max_p_unrounded, p_inbounds
       )
   }
-
+  
   list(
     reproduced = reproduced_out,
     d_results  = d_out,
@@ -258,14 +260,15 @@ independent_t_test_summary <- function(
 }
 
 #' @keywords internal
+#' @keywords internal
 .multiverse_validate_and_setup_summary <- function(
-    ci_methods, p_methods, d_rounding_set,
+    ci_methods, p_methods, output_rounding,
     m1, m2, sd1, sd2, n1, n2
 ) {
-  allowed_ci_methods  <- c("wald_z", "wald_t", "welch_t", "welch_z", "nct")
-  allowed_p_methods   <- c("student_t", "welch_t", "student_z", "welch_z")
-  allowed_d_rounding  <- c("half_up", "half_down", "bankers", "trunc")
-
+  allowed_ci_methods        <- c("wald_z", "wald_t", "welch_t", "welch_z", "nct")
+  allowed_p_methods         <- c("student_t", "welch_t", "student_z", "welch_z")
+  allowed_output_rounding   <- c("half_up", "half_down", "bankers", "trunc")
+  
   check_methods <- function(input, allowed, name) {
     if (!is.null(input)) {
       bad <- setdiff(input, allowed)
@@ -280,33 +283,34 @@ independent_t_test_summary <- function(
     }
     allowed
   }
-
-  ci_methods      <- check_methods(ci_methods,      allowed_ci_methods, "ci_methods")
-  p_methods       <- check_methods(p_methods,       allowed_p_methods,  "p_methods")
-  d_rounding_set  <- check_methods(d_rounding_set,  allowed_d_rounding, "d_rounding_set")
-
+  
+  ci_methods      <- check_methods(ci_methods,      allowed_ci_methods,      "ci_methods")
+  p_methods       <- check_methods(p_methods,       allowed_p_methods,       "p_methods")
+  output_rounding <- check_methods(output_rounding, allowed_output_rounding, "output_rounding")
+  
   vals_summary <- list(m1, m2, sd1, sd2, n1, n2)
   have_summary <- all(vapply(
     vals_summary,
     function(z) !is.null(z) && length(z) > 0 && !is.na(z[1L]),
     logical(1)
   ))
-
+  
   if (!have_summary) {
     stop("Provide M/SD/N: m1, m2, sd1, sd2, n1, n2.")
   }
-
+  
   list(
-    ci_methods  = ci_methods,
-    p_methods   = p_methods,
-    d_rounding_set = d_rounding_set
+    ci_methods      = ci_methods,
+    p_methods       = p_methods,
+    output_rounding = output_rounding
   )
 }
 
 #' @keywords internal
+#' @keywords internal
 .multiverse_from_summary_stats <- function(
     m1, m2, sd1, sd2, n1, n2,
-    ci_methods, p_methods, d_rounding_set,
+    ci_methods, p_methods, output_rounding,
     d_digits, p_digits, alpha,
     d_num, d_ci_lower_num, d_ci_upper_num, p_num,
     idx_d, idx_p,
@@ -373,7 +377,7 @@ independent_t_test_summary <- function(
       # ----------------------------------------------------------
       for (dir_mode in dir_modes) {
         
-        sign_factor    <- if (dir_mode == "m1_minus_m2") 1 else -1
+        sign_factor     <- if (dir_mode == "m1_minus_m2") 1 else -1
         direction_label <- dir_mode
         
         diff_mean <- sign_factor * (m1_star - m2_star)
@@ -430,7 +434,7 @@ independent_t_test_summary <- function(
             }
             
             # Rounding of effect sizes
-            for (d_rounding in d_rounding_set) {
+            for (d_rounding in output_rounding) {
               
               d_round_fun <- switch(
                 d_rounding,
@@ -438,7 +442,7 @@ independent_t_test_summary <- function(
                 "half_down" = function(x) roundwork::round_down(x, d_digits),
                 "bankers"   = function(x) round(x, d_digits),
                 "trunc"     = function(x) roundwork::round_trunc(x, d_digits),
-                stop("Unknown d_rounding option")
+                stop("Unknown output_rounding option")
               )
               
               est_d   <- d_round_fun(es)
@@ -459,15 +463,15 @@ independent_t_test_summary <- function(
                 sd2_used            = sd2_eff,
                 t_used              = t_pooled,
                 df_used             = df_s,
-                d_unrounded        = es,
+                d_unrounded         = es,
                 ci_lower_unrounded  = ci_lower,
                 ci_upper_unrounded  = ci_upper,
-                d_rounded         = est_d,
+                d_rounded           = est_d,
                 ci_lower_rounded    = lower_d,
                 ci_upper_rounded    = upper_d,
-                match_est      = if (!is.na(d_num))      isTRUE(all.equal(est_d,   d_num))      else NA,
-                match_ci_lower = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_d, d_ci_lower_num)) else NA,
-                match_ci_upper = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_d, d_ci_upper_num)) else NA,
+                match_est      = if (!is.na(d_num))           isTRUE(all.equal(est_d,   d_num))           else NA,
+                match_ci_lower = if (!is.na(d_ci_lower_num))  isTRUE(all.equal(lower_d, d_ci_lower_num))  else NA,
+                match_ci_upper = if (!is.na(d_ci_upper_num))  isTRUE(all.equal(upper_d, d_ci_upper_num))  else NA,
                 match_all      = if (!any(is.na(c(d_num, d_ci_lower_num, d_ci_upper_num)))) {
                   est_d   == d_num &&
                     lower_d == d_ci_lower_num &&
@@ -512,13 +516,16 @@ independent_t_test_summary <- function(
             2 * (1 - pt(abs(t_use), df = df_use))
           }
           
-          for (p_rounding in c("half_up", "half_down")) {
+          for (p_rounding in output_rounding) {
             
-            p_round_fun <- if (p_rounding == "half_up") {
-              function(x) roundwork::round_up(x, p_digits)
-            } else {
-              function(x) roundwork::round_down(x, p_digits)
-            }
+            p_round_fun <- switch(
+              p_rounding,
+              "half_up"   = function(x) roundwork::round_up(x,   p_digits),
+              "half_down" = function(x) roundwork::round_down(x, p_digits),
+              "bankers"   = function(x) round(x, p_digits),
+              "trunc"     = function(x) roundwork::round_trunc(x, p_digits),
+              stop("Unknown output_rounding option")
+            )
             
             p_rounded <- p_round_fun(p_unr)
             
