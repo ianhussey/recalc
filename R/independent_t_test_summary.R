@@ -373,9 +373,9 @@ independent_t_test_summary <- function(
                 "trunc"     = function(x) roundwork::round_trunc(x, d_digits)
               )
               
-              est_d   <- d_round_fun(es)
-              lower_d <- d_round_fun(ci_lower)
-              upper_d <- d_round_fun(ci_upper)
+              es_rounded   <- d_round_fun(es)
+              ci_lower_rounded <- d_round_fun(ci_lower)
+              ci_upper_rounded <- d_round_fun(ci_upper)
               
               d_results[[idx_d]] <- data.frame(
                 source            = "summary",
@@ -392,16 +392,16 @@ independent_t_test_summary <- function(
                 sd2_used          = sd2_eff,
                 t_used            = t_pooled,
                 df_used           = df_s,
-                es_unrounded      = es,
+                d_unrounded       = es,
                 ci_lower_unrounded = ci_lower,
                 ci_upper_unrounded = ci_upper,
-                est_rounded       = est_d,
-                ci_lower_rounded  = lower_d,
-                ci_upper_rounded  = upper_d,
-                match_est         = if (!is.na(d_est_num))      isTRUE(all.equal(est_d, d_est_num)) else NA,
+                d_rounded         = es_rounded,
+                ci_lower_rounded  = ci_lower_rounded,
+                ci_upper_rounded  = ci_upper_rounded,
+                match_d         = if (!is.na(d_est_num))      isTRUE(all.equal(est_d, d_est_num)) else NA,
                 match_ci_lower    = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_d, d_ci_lower_num)) else NA,
                 match_ci_upper    = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_d, d_ci_upper_num)) else NA,
-                match_all         = if (!any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))) {
+                match_d_and_ci         = if (!any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))) {
                   est_d == d_est_num &&
                     lower_d == d_ci_lower_num &&
                     upper_d == d_ci_upper_num
@@ -459,7 +459,6 @@ independent_t_test_summary <- function(
               p_method          = p_method,
               p_rounding        = p_rounding,
               input_adj_stats   = adj_stats,
-              input_adj_tdf     = NA_character_,
               sd_interpretation = sd_mode,
               t_used            = t_use,
               df_used           = df_use,
