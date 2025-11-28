@@ -116,9 +116,76 @@ independent_t_test_summary <- function(
                          !d_out$match_ci_lower,
                          !d_out$match_ci_upper), ]
   }
+  
+  reproduced_out <- {
+    # ---- Summaries of multiverse d-values -------------------------------------
+    d_summary <- if (!is.null(d_out) && nrow(d_out) > 0 &&
+                     "d_rounded" %in% names(d_out)) {
+      d_out |>
+        dplyr::summarise(
+          min_d_rounded = min(d_rounded, na.rm = TRUE),
+          max_d_rounded = max(d_rounded, na.rm = TRUE)
+        )
+    } else {
+      tibble::tibble(
+        min_d_rounded = NA_real_,
+        max_d_rounded = NA_real_
+      )
+    }
+    
+    # ---- Summaries of multiverse p-values -------------------------------------
+    p_summary <- if (!is.null(p_out) && nrow(p_out) > 0 &&
+                     "p_unrounded" %in% names(p_out)) {
+      p_out |>
+        dplyr::summarise(
+          min_p_unrounded = min(p_unrounded, na.rm = TRUE),
+          max_p_unrounded = max(p_unrounded, na.rm = TRUE)
+        )
+    } else {
+      tibble::tibble(
+        min_p_unrounded = NA_real_,
+        max_p_unrounded = NA_real_
+      )
+    }
+    
+    # ---- Reported values (may be NULL) ----------------------------------------
+    reported_d <- if (exists("d") && !is.null(d)) d else NA_real_
+    reported_p <- if (exists("p") && !is.null(p)) p else NA_real_
+    
+    combined <- dplyr::bind_cols(
+      d_summary,
+      p_summary,
+      tibble::tibble(d = reported_d, p = reported_p)
+    )
+    
+    # ---- Logical checks (NULL-safe) -------------------------------------------
+    # d_inbounds only computed if min/max are present
+    combined <- combined |>
+      dplyr::mutate(
+        d_inbounds = ifelse(
+          is.na(d),
+          NA,  # cannot judge possibility
+          dplyr::between(d, min_d_rounded, max_d_rounded)
+        ),
+        p_inbounds = ifelse(
+          is.na(p),
+          NA,
+          dplyr::between(p, min_p_unrounded, max_p_unrounded)
+        )
+      )
+    
+    # ---- Final tidy structure --------------------------------------------------
+    combined |>
+      mutate(d = d,
+             p = p) |>
+      dplyr::select(
+        d, min_d_rounded, max_d_rounded, d_inbounds,
+        p, min_p_unrounded, max_p_unrounded, p_inbounds
+      )
+  }
 
   list(
-    reproduced = if (!is.null(d_out)) any(d_out$match_all, na.rm = TRUE) else FALSE,
+    reproduced = reproduced_out,
     d_results  = d_out,
     p_results  = p_out
   )
@@ -382,7 +449,6 @@ independent_t_test_summary <- function(
                 ci_method           = ci_method,
                 d_rounding          = d_rounding,
                 input_adj_stats     = adj_stats,
-                input_adj_tdf       = NA_character_,
                 sd_interpretation   = sd_mode,
                 m1_used             = m1_star,
                 m2_used             = m2_star,
@@ -459,7 +525,6 @@ independent_t_test_summary <- function(
               p_method          = p_method,
               p_rounding        = p_rounding,
               input_adj_stats   = adj_stats,
-              input_adj_tdf     = NA_character_,
               sd_interpretation = sd_mode,
               t_used            = t_use,
               df_used           = df_use,
@@ -477,4 +542,133 @@ independent_t_test_summary <- function(
   }
   
   list(d_results = d_results, p_results = p_results, idx_d = idx_d, idx_p = idx_p)
+}
+
+
+#' Plot multiverse of Cohen's d results from independent_t_test_summary
+#'
+#' @param res A list returned by independent_t_test_summary(),
+#'   containing an element `d_results` with columns:
+#'   `d_rounded`, `ci_lower_rounded`, and `ci_upper_rounded`.
+#'
+#' @return A ggplot object visualizing the range of recalculated rounded
+#'   Cohen's d and its 95% confidence intervals across all analytic choices.
+#'
+#' @examples
+#' plot_multiverse_d(res)
+#'
+#' @export
+plot_multiverse_d <- function(res) {
+  if (is.null(res$d_results) || nrow(res$d_results) == 0) {
+    stop("`res` must include a non-empty `d_results` data frame.")
+  }
+  
+  res_d <- res$d_results |>
+    tibble::as_tibble() |>
+    dplyr::arrange(.data$d_rounded) |>
+    tibble::rownames_to_column(var = "rowname") |>
+    dplyr::mutate(rowname = as.numeric(.data$rowname))
+  
+  # Define shaded regions based on range of CI limits and point estimates
+  xmin_shade  <- min(res_d$ci_lower_rounded, na.rm = TRUE)
+  xmax_shade  <- max(res_d$ci_upper_rounded, na.rm = TRUE)
+  xmin_shade2 <- min(res_d$d_rounded, na.rm = TRUE)
+  xmax_shade2 <- max(res_d$d_rounded, na.rm = TRUE)
+  
+  # Construct the plot
+  ggplot2::ggplot(
+    res_d,
+    ggplot2::aes(
+      y = .data$rowname,
+      x = .data$d_rounded,
+      xmin = .data$ci_lower_rounded,
+      xmax = .data$ci_upper_rounded
+    )
+  ) +
+    ggplot2::annotate(
+      "rect",
+      xmin = xmin_shade,
+      xmax = xmax_shade,
+      ymin = -Inf,
+      ymax = Inf,
+      alpha = 0.3
+    ) +
+    ggplot2::annotate(
+      "rect",
+      xmin = xmin_shade2,
+      xmax = xmax_shade2,
+      ymin = -Inf,
+      ymax = Inf,
+      alpha = 0.4
+    ) +
+    ggstance::geom_linerangeh() +
+    ggplot2::geom_point() +
+    ggplot2::theme_linedraw() +
+    ggplot2::scale_x_continuous(
+      name = "Recalculated rounded Cohen's d and 95% CIs",
+      breaks = scales::breaks_pretty(n = 8),
+      expand = ggplot2::expansion(mult = c(0.1, 0.1))
+    ) +
+    ggplot2::scale_y_continuous(
+      labels = NULL,
+      name = "Set of analytic choices"
+    ) +
+    ggplot2::ggtitle("Multiverse of Cohen's d and its 95% CIs")
+}
+
+#' Plot multiverse of p-values from independent_t_test_summary
+#'
+#' @param res A list returned by independent_t_test_summary(),
+#'   containing an element `p_results` with column `p_unrounded`.
+#'
+#' @return A ggplot object visualizing the distribution of recalculated
+#'   unrounded p-values across all analytic choices.
+#'
+#' @examples
+#' plot_multiverse_p(res)
+#'
+#' @export
+plot_multiverse_p <- function(res) {
+  if (is.null(res$p_results) || nrow(res$p_results) == 0) {
+    stop("`res` must include a non-empty `p_results` data frame.")
+  }
+  
+  res_p <- res$p_results |>
+    tibble::as_tibble() |>
+    dplyr::arrange(.data$p_unrounded) |>
+    tibble::rownames_to_column(var = "rowname") |>
+    dplyr::mutate(rowname = as.numeric(.data$rowname))
+  
+  # Shaded region showing full range of p-values
+  xmin_shade <- min(res_p$p_unrounded, na.rm = TRUE)
+  xmax_shade <- max(res_p$p_unrounded, na.rm = TRUE)
+  
+  # Build the plot
+  ggplot2::ggplot(
+    res_p,
+    ggplot2::aes(
+      y = .data$rowname,
+      x = .data$p_unrounded
+    )
+  ) +
+    ggplot2::annotate(
+      "rect",
+      xmin = xmin_shade,
+      xmax = xmax_shade,
+      ymin = -Inf,
+      ymax = Inf,
+      alpha = 0.4
+    ) +
+    ggplot2::geom_point() +
+    ggplot2::theme_linedraw() +
+    ggplot2::scale_x_continuous(
+      name = "Recalculated unrounded p-value",
+      breaks = scales::breaks_pretty(n = 8),
+      expand = ggplot2::expansion(mult = c(0.1, 0.1))
+    ) +
+    ggplot2::scale_y_continuous(
+      labels = NULL,
+      name = "Set of analytic choices"
+    ) +
+    ggplot2::ggtitle("Multiverse of p-values")
 }
