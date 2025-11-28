@@ -61,6 +61,9 @@
 #'
 #' @importFrom roundwork round_up round_down round_trunc
 #' @importFrom stats pt pnorm qt qnorm uniroot
+#' @importFrom dplyr summarise mutate arrange bind_cols select between
+#' @importFrom tibble as_tibble rownames_to_column
+#' @importFrom scales breaks_pretty
 #'
 #' @export
 independent_t_test_summary <- function(
@@ -176,7 +179,7 @@ independent_t_test_summary <- function(
     
     # ---- Final tidy structure --------------------------------------------------
     combined |>
-      mutate(d = d,
+      dplyr::mutate(d = d,
              p = p) |>
       dplyr::select(
         d, min_d_rounded, max_d_rounded, d_inbounds,
