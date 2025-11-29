@@ -25,7 +25,8 @@ library(recalc)
 # Recalculate independent t-test from summary stats
 
 ```{r}
-res <- recalc::independent_t_test_summary(
+
+res <- independent_t_test_summary(
   # essential arguments: M/SD/N
   m1 = 10.30,
   m2 = 8.71,
@@ -50,6 +51,7 @@ res <- recalc::independent_t_test_summary(
   # optionally specify direction of effect, M1-M2 or M2-M1
   direction = "m1_minus_m2", # one of c("m1_minus_m2", "m2_minus_m1", "both"),
   # optionally specify output rounding method
+  input_rounding = NULL, # if NULL, check all. or one of "rounded", "truncated"
   output_rounding = NULL, # if NULL, check all. or one of "half_up", "half_down", "bankers", "trunc"
   d_digits = 2, # number of digits to round SMD output to
   # optionally specify CI calculation method. 
@@ -73,19 +75,21 @@ res$reproduced |>
 
 ```{r}
 plot_multiverse_p(res)
+plot_multiverse_p(res, distinct_and_rounded = FALSE)
 
-res$p_results |>
-  kable() |>
-  kable_classic(full_width = FALSE)
+# res$p_results |>
+#   kable() |>
+#   kable_classic(full_width = FALSE)
 ```
 
 ## Individual possible values for SMD
 
 ```{r}
 plot_multiverse_d(res)
+plot_multiverse_d(res, distinct_and_rounded = FALSE)
 
-res$d_results |>
-  kable() |>
-  kable_classic(full_width = FALSE)
+# res$d_results |>
+#   kable() |>
+#   kable_classic(full_width = FALSE)
 ```
 
