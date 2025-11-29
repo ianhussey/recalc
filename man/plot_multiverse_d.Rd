@@ -19,6 +19,8 @@ Cohen's d and its 95\% confidence intervals across all analytic choices.
 Plot multiverse of Cohen's d results from independent_t_test_summary
 }
 \examples{
+\dontrun{
 plot_multiverse_d(res)
+}
 
 }

@@ -839,8 +839,10 @@ independent_t_test_summary <- function(
 #'   Cohen's d and its 95% confidence intervals across all analytic choices.
 #'
 #' @examples
+#' \dontrun{
 #' plot_multiverse_d(res)
-#'
+#' }
+#' 
 #' @export
 plot_multiverse_d <- function(res) {
   if (is.null(res$d_results) || nrow(res$d_results) == 0) {
@@ -909,8 +911,10 @@ plot_multiverse_d <- function(res) {
 #'   unrounded p-values across all analytic choices.
 #'
 #' @examples
+#' \dontrun{
 #' plot_multiverse_p(res)
-#'
+#' }
+#' 
 #' @export
 plot_multiverse_p <- function(res) {
   if (is.null(res$p_results) || nrow(res$p_results) == 0) {

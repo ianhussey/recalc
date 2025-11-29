@@ -18,6 +18,8 @@ unrounded p-values across all analytic choices.
 Plot multiverse of p-values from independent_t_test_summary
 }
 \examples{
+\dontrun{
 plot_multiverse_p(res)
+}
 
 }

@@ -1,6 +1,6 @@
 Package: recalc
 Title: Recalculate statistical results from reported summary and test statistics
-Version: 0.0.2
+Version: 0.0.3
 Authors@R: c(
     person("Ian", "Hussey", , "Ian.hussey@unibe.ch", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-8906-7559")),
@@ -12,6 +12,8 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
+Depends: 
+    R (>= 4.1.0)
 Imports:
     dplyr,
     tibble,
