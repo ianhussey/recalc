@@ -5,6 +5,11 @@ output:
   html
 ---
 
+# TODO
+
+- how to handle "< .001"?
+
+
 ```{r include=FALSE}
 
 # formatting options
@@ -320,6 +325,3 @@ simulation_summary
 
 ```
 
-- still some issues if the inputs were truncated.
-- p value rounding probably needs APA format too
-- how to handle "< .001"?
