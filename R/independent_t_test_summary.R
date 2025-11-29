@@ -134,26 +134,6 @@ independent_t_test_summary <- function(
   d_ci_upper_num <- if (!is.null(d_ci_upper)) as.numeric(d_ci_upper) else NA_real_
   p_num          <- if (!is.null(p)) as.numeric(p) else NA_real_
   
-  
-  # # --- Validation of m_digits and sd_digits (ULP for M and SD) ---------------
-  # 
-  # # Basic numeric checks 
-  # if (!is.null(m_digits)) {
-  #   if (!is.numeric(m_digits) || length(m_digits) != 1L ||
-  #       !is.finite(m_digits) || m_digits < 0) {
-  #     stop("'m_digits' must be a single non-negative finite number (e.g. 1 or 2).")
-  #   }
-  #   m_digits <- as.integer(m_digits)
-  # }
-  # 
-  # if (!is.null(sd_digits)) {
-  #   if (!is.numeric(sd_digits) || length(sd_digits) != 1L ||
-  #       !is.finite(sd_digits) || sd_digits < 0) {
-  #     stop("'sd_digits' must be a single non-negative finite number (e.g. 2).")
-  #   }
-  #   sd_digits <- as.integer(sd_digits)
-  # }
-  
   # --- Validation of m_digits and sd_digits (ULP for M and SD) ---------------
   # Literal precision of inputs as written (for diagnostics)
   obs_m_digits  <- max(.get_digits(m1),  .get_digits(m2))
@@ -322,16 +302,16 @@ independent_t_test_summary <- function(
     
     # ---- Summaries of multiverse p-values -------------------------------------
     p_summary <- if (!is.null(p_out) && nrow(p_out) > 0 &&
-                     "p_unrounded" %in% names(p_out)) {
+                     "p_rounded" %in% names(p_out)) {
       p_out |>
         dplyr::summarise(
-          min_p_unrounded = min(p_unrounded, na.rm = TRUE),
-          max_p_unrounded = max(p_unrounded, na.rm = TRUE)
+          min_p_rounded = min(p_rounded, na.rm = TRUE),
+          max_p_rounded = max(p_rounded, na.rm = TRUE)
         )
     } else {
       tibble::tibble(
-        min_p_unrounded = NA_real_,
-        max_p_unrounded = NA_real_
+        min_p_rounded = NA_real_,
+        max_p_rounded = NA_real_
       )
     }
     
@@ -356,7 +336,7 @@ independent_t_test_summary <- function(
         p_inbounds = ifelse(
           is.na(p),
           NA,
-          dplyr::between(p, min_p_unrounded, max_p_unrounded)
+          dplyr::between(p, min_p_rounded, max_p_rounded)
         )
       )
     
@@ -365,7 +345,7 @@ independent_t_test_summary <- function(
                     p = p) |>
       dplyr::select(
         d, min_d_rounded, max_d_rounded, d_inbounds,
-        p, min_p_unrounded, max_p_unrounded, p_inbounds
+        p, min_p_rounded, max_p_rounded, p_inbounds
       )
   }
   
@@ -501,33 +481,80 @@ independent_t_test_summary <- function(
   direction <- match.arg(direction)
   dir_modes <- if (direction == "both") c("m1_minus_m2", "m2_minus_m1") else direction
   
-  # Step sizes (based on user-specified digits)
+  # Step sizes
   step_m1  <- 0.5 * 10^(-m_digits)
   step_m2  <- 0.5 * 10^(-m_digits)
   step_sd1 <- 0.5 * 10^(-sd_digits)
   step_sd2 <- 0.5 * 10^(-sd_digits)
   
-  adj_codes <- c("reported", "minus", "plus")
+  # Define the grid of adjustments.
+  # Instead of one "adj_stats" applied to all, we generate combinations.
+  # To save compute time, we don't need every permutation of Reported/Plus/Minus.
+  # We mostly need the extremes. However, a full grid for 4 vars is only 
+  # 3^4 = 81 iterations, which is computationally trivial.
+  
+  adj_levels <- c("reported", "minus", "plus")
+  
+  # Create a grid of all possible adjustment combinations
+  # We use integer indices: 1=reported, 2=minus, 3=plus
+  grid_indices <- expand.grid(
+    m1_idx  = 1:3,
+    m2_idx  = 1:3,
+    sd1_idx = 1:3,
+    sd2_idx = 1:3
+  )
   
   sd_modes  <- c("sd")
   if (isTRUE(include_se_sd_confusion)) {
     sd_modes <- c(sd_modes, "se_converted")
   }
   
-  for (adj_stats in adj_codes) {
+  # Pre-calculate adjusted values to avoid re-calc inside loop
+  m1_vals  <- c(m1, m1 - step_m1, m1 + step_m1)
+  m2_vals  <- c(m2, m2 - step_m2, m2 + step_m2)
+  sd1_vals <- c(sd1, sd1 - step_sd1, sd1 + step_sd1)
+  sd2_vals <- c(sd2, sd2 - step_sd2, sd2 + step_sd2)
+  
+  # Iterate through the grid
+  for (i in seq_len(nrow(grid_indices))) {
     
-    # Adjust reported inputs by +/- ULP
-    m1_star  <- .adjust_value(m1,  step_m1,  adj_stats)
-    m2_star  <- .adjust_value(m2,  step_m2,  adj_stats)
-    sd1_star <- .adjust_value(sd1, step_sd1, adj_stats)
-    sd2_star <- .adjust_value(sd2, step_sd2, adj_stats)
+    # Retrieve adjusted values based on grid indices
+    row <- grid_indices[i, ]
+    # m1_star  <- m1_vals[row$m1_idx]
+    # m2_star  <- m2_vals[row$m2_idx]
+    # sd1_star <- sd1_vals[row$sd1_idx]
+    # sd2_star <- sd2_vals[row$sd2_idx]
+    # 
+    # # Construct a label for the input adjustment (e.g., "m1-,m2+,sd-")
+    # adj_stats_label <- paste0(
+    #   "m1:", adj_levels[row$m1_idx], "|",
+    #   "m2:", adj_levels[row$m2_idx], "|",
+    #   "sds:", adj_levels[row$sd1_idx] # simplifying label for brevity
+    # )
+    
+    m1_code  <- adj_levels[row$m1_idx]
+    m2_code  <- adj_levels[row$m2_idx]
+    sd1_code <- adj_levels[row$sd1_idx]
+    sd2_code <- adj_levels[row$sd2_idx]
+    
+    m1_star  <- .adjust_value(m1,  step_m1,  m1_code)
+    m2_star  <- .adjust_value(m2,  step_m2,  m2_code)
+    sd1_star <- .adjust_value(sd1, step_sd1, sd1_code)
+    sd2_star <- .adjust_value(sd2, step_sd2, sd2_code)
+    
+    adj_stats_label <- paste0(
+      "m1:",  m1_code,  "|",
+      "m2:",  m2_code,  "|",
+      "sd1:", sd1_code, "|",
+      "sd2:", sd2_code
+    )
     
     for (sd_mode in sd_modes) {
       
       if (sd_mode == "sd") {
         sd1_eff <- sd1_star
         sd2_eff <- sd2_star
-      } else { # "se_converted": treat reported SDs as SEs, convert via sqrt(n)
+      } else { 
         sd1_eff <- sd1_star * sqrt(n1)
         sd2_eff <- sd2_star * sqrt(n2)
       }
@@ -629,7 +656,7 @@ independent_t_test_summary <- function(
                 es_type             = es_type,
                 ci_method           = ci_method,
                 d_rounding          = d_rounding,
-                input_adj_stats     = adj_stats,
+                input_adj_stats     = adj_stats_label, # Updated label
                 sd_interpretation   = sd_mode,
                 m1_used             = m1_star,
                 m2_used             = m2_star,
@@ -700,7 +727,7 @@ independent_t_test_summary <- function(
               direction         = direction_label,
               p_method          = p_method,
               p_rounding        = p_rounding,
-              input_adj_stats   = adj_stats,
+              input_adj_stats   = adj_stats_label, # Updated label
               sd_interpretation = sd_mode,
               t_used            = t_use,
               df_used           = df_use,
