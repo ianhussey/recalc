@@ -904,6 +904,11 @@ independent_t_test_summary <- function(
 #' @param res A list returned by independent_t_test_summary(),
 #'   containing an element `d_results` with columns:
 #'   `d_rounded`, `ci_lower_rounded`, and `ci_upper_rounded`.
+#' @param distinct_and_rounded If TRUE, return only distinct values of 
+#'   the rounded effect size and its confidence intervals. If FALSE, 
+#'   plot all unrounded values.
+#'   
+#' @importFrom dplyr distinct
 #'
 #' @return A ggplot object visualizing the range of recalculated rounded
 #'   Cohen's d and its 95% confidence intervals across all analytic choices.
@@ -914,31 +919,54 @@ independent_t_test_summary <- function(
 #' }
 #' 
 #' @export
-plot_multiverse_d <- function(res) {
+plot_multiverse_d <- function(res, distinct_and_rounded = TRUE) {
   if (is.null(res$d_results) || nrow(res$d_results) == 0) {
     stop("`res` must include a non-empty `d_results` data frame.")
   }
   
-  res_d <- res$d_results |>
-    tibble::as_tibble() |>
-    dplyr::arrange(.data$d_rounded) |>
-    tibble::rownames_to_column(var = "rowname") |>
-    dplyr::mutate(rowname = as.numeric(.data$rowname))
+  if (!is.logical(distinct_and_rounded) || length(distinct_and_rounded) != 1L || is.na(distinct_and_rounded)) {
+    stop("'distinct_and_rounded' must be a single TRUE/FALSE value.")
+  }
+  
+  if(distinct_and_rounded){
+    res_d <- res$d_results |>
+      tibble::as_tibble() |>
+      dplyr::distinct(d_rounded, ci_lower_rounded, ci_upper_rounded, .keep_all = TRUE) |>
+      dplyr::arrange(.data$d_rounded) |>
+      tibble::rownames_to_column(var = "rowname") |>
+      dplyr::mutate(rowname = as.numeric(.data$rowname)) |>
+      dplyr::rename(d_plot = d_rounded, 
+                    ci_lower_plot = ci_lower_rounded, 
+                    ci_upper_plot = ci_upper_rounded)
+    
+    plot_name <- "Recalculated distinct rounded Cohen's d and its 95% CIs"
+  } else if(!distinct_and_rounded){
+    res_d <- res$d_results |>
+      tibble::as_tibble() |>
+      dplyr::arrange(.data$d_unrounded) |>
+      tibble::rownames_to_column(var = "rowname") |>
+      dplyr::mutate(rowname = as.numeric(.data$rowname)) |>
+      dplyr::rename(d_plot = d_unrounded, 
+                    ci_lower_plot = ci_lower_unrounded, 
+                    ci_upper_plot = ci_upper_unrounded)
+    
+    plot_name <- "Recalculated unrounded Cohen's d and its 95% CIs"
+  }
   
   # Define shaded regions based on range of CI limits and point estimates
-  xmin_shade  <- min(res_d$ci_lower_rounded, na.rm = TRUE)
-  xmax_shade  <- max(res_d$ci_upper_rounded, na.rm = TRUE)
-  xmin_shade2 <- min(res_d$d_rounded, na.rm = TRUE)
-  xmax_shade2 <- max(res_d$d_rounded, na.rm = TRUE)
+  xmin_shade  <- min(res_d$ci_lower_plot, na.rm = TRUE)
+  xmax_shade  <- max(res_d$ci_upper_plot, na.rm = TRUE)
+  xmin_shade2 <- min(res_d$d_plot, na.rm = TRUE)
+  xmax_shade2 <- max(res_d$d_plot, na.rm = TRUE)
   
   # Construct the plot
   ggplot2::ggplot(
     res_d,
     ggplot2::aes(
       y = .data$rowname,
-      x = .data$d_rounded,
-      xmin = .data$ci_lower_rounded,
-      xmax = .data$ci_upper_rounded
+      x = .data$d_plot,
+      xmin = .data$ci_lower_plot,
+      xmax = .data$ci_upper_plot
     )
   ) +
     ggplot2::annotate(
@@ -961,7 +989,7 @@ plot_multiverse_d <- function(res) {
     ggplot2::geom_point() +
     ggplot2::theme_linedraw() +
     ggplot2::scale_x_continuous(
-      name = "Recalculated rounded Cohen's d and 95% CIs",
+      name = plot_name,
       breaks = scales::breaks_pretty(n = 8),
       expand = ggplot2::expansion(mult = c(0.1, 0.1))
     ) +
@@ -975,10 +1003,14 @@ plot_multiverse_d <- function(res) {
 #' Plot multiverse of p-values from independent_t_test_summary
 #'
 #' @param res A list returned by independent_t_test_summary(),
-#'   containing an element `p_results` with column `p_unrounded`.
+#'   containing an element `p_results` with column `p_rounded`.
+#' @param distinct_and_rounded If TRUE, return only distinct values of 
+#'   the rounded p values. If FALSE, plot all unrounded values.
+#'   
+#' @importFrom dplyr distinct
 #'
 #' @return A ggplot object visualizing the distribution of recalculated
-#'   unrounded p-values across all analytic choices.
+#'   rounded p-values across all analytic choices.
 #'
 #' @examples
 #' \dontrun{
@@ -986,27 +1018,46 @@ plot_multiverse_d <- function(res) {
 #' }
 #' 
 #' @export
-plot_multiverse_p <- function(res) {
+plot_multiverse_p <- function(res, distinct_and_rounded = TRUE) {
   if (is.null(res$p_results) || nrow(res$p_results) == 0) {
     stop("`res` must include a non-empty `p_results` data frame.")
   }
   
-  res_p <- res$p_results |>
-    tibble::as_tibble() |>
-    dplyr::arrange(.data$p_unrounded) |>
-    tibble::rownames_to_column(var = "rowname") |>
-    dplyr::mutate(rowname = as.numeric(.data$rowname))
+  if (!is.logical(distinct_and_rounded) || length(distinct_and_rounded) != 1L || is.na(distinct_and_rounded)) {
+    stop("'distinct_and_rounded' must be a single TRUE/FALSE value.")
+  }
+  
+  if(distinct_and_rounded){
+    res_p <- res$p_results |>
+      tibble::as_tibble() |>
+      dplyr::distinct(p_rounded, .keep_all = TRUE) |>
+      dplyr::arrange(.data$p_rounded) |>
+      tibble::rownames_to_column(var = "rowname") |>
+      dplyr::mutate(rowname = as.numeric(.data$rowname)) |>
+      dplyr::rename(p_plot = p_rounded)
+    
+    plot_name <- "Recalculated distinct rounded p-values"
+  } else if(!distinct_and_rounded){
+    res_p <- res$p_results |>
+      tibble::as_tibble() |>
+      dplyr::arrange(.data$p_unrounded) |>
+      tibble::rownames_to_column(var = "rowname") |>
+      dplyr::mutate(rowname = as.numeric(.data$rowname)) |>
+      dplyr::rename(p_plot = p_unrounded)
+    
+    plot_name <- "Recalculated unrounded p-values"
+  }
   
   # Shaded region showing full range of p-values
-  xmin_shade <- min(res_p$p_unrounded, na.rm = TRUE)
-  xmax_shade <- max(res_p$p_unrounded, na.rm = TRUE)
+  xmin_shade <- min(res_p$p_plot, na.rm = TRUE)
+  xmax_shade <- max(res_p$p_plot, na.rm = TRUE)
   
   # Build the plot
   ggplot2::ggplot(
     res_p,
     ggplot2::aes(
       y = .data$rowname,
-      x = .data$p_unrounded
+      x = .data$p_plot
     )
   ) +
     ggplot2::annotate(
@@ -1020,7 +1071,7 @@ plot_multiverse_p <- function(res) {
     ggplot2::geom_point() +
     ggplot2::theme_linedraw() +
     ggplot2::scale_x_continuous(
-      name = "Recalculated unrounded p-value",
+      name = plot_name,
       breaks = scales::breaks_pretty(n = 8),
       expand = ggplot2::expansion(mult = c(0.1, 0.1))
     ) +

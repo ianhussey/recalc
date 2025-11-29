@@ -4,15 +4,18 @@
 \alias{plot_multiverse_p}
 \title{Plot multiverse of p-values from independent_t_test_summary}
 \usage{
-plot_multiverse_p(res)
+plot_multiverse_p(res, distinct_and_rounded = TRUE)
 }
 \arguments{
 \item{res}{A list returned by independent_t_test_summary(),
-containing an element \code{p_results} with column \code{p_unrounded}.}
+containing an element \code{p_results} with column \code{p_rounded}.}
+
+\item{distinct_and_rounded}{If TRUE, return only distinct values of
+the rounded p values. If FALSE, plot all unrounded values.}
 }
 \value{
 A ggplot object visualizing the distribution of recalculated
-unrounded p-values across all analytic choices.
+rounded p-values across all analytic choices.
 }
 \description{
 Plot multiverse of p-values from independent_t_test_summary
