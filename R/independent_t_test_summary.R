@@ -57,6 +57,11 @@
 #' @param p Numeric. Reported p-value.
 #' @param p_digits Integer. Number of decimal places to which the p-value was
 #'   reported. Must be supplied if \code{p} is non-\code{NULL}.
+#' @param p_operator Character. Defines the relationship between the reported 
+#'   p-value and the actual calculated value. Use this to handle censored 
+#'   values (e.g., "p < .001"). 
+#'   Options: \code{"equals"}, \code{"less_than"}, \code{"greater_than"}.
+#'   Default is \code{"equals"}.
 #' @param p_methods Character vector. P-value methods to include.
 #'   Allowed: \code{"student_t"}, \code{"welch_t"}.
 #'   If \code{NULL}, both are used.
@@ -104,7 +109,7 @@
 #' # Scenario: A paper reports:
 #' #   Group 1: M = 10.30, SD = 3.12, N = 50
 #' #   Group 2: M = 8.71,  SD = 2.80, N = 48
-#' #   Results: t-test p = 0.009, Cohen's d = 0.53, 95% CI [0.20, 0.90]
+#' #   Results: t-test p < .01, Cohen's d = 0.53, 95% CI [0.20, 0.90]
 #'
 #' res <- independent_t_test_summary(
 #'   # --- Essential Arguments ---
@@ -119,9 +124,10 @@
 #'   sd_digits = 2,
 #'
 #'   # --- Comparison Targets ---
-#'   # Reported p-value
-#'   p = 0.009,
-#'   p_digits = 3,
+#'   # Reported p-value is < .01
+#'   p = 0.01,
+#'   p_digits = 2,
+#'   p_operator = "less_than",
 #'
 #'   # Reported Effect Size (Cohen's d) and CIs
 #'   d = 0.53,
@@ -161,6 +167,7 @@ independent_t_test_summary <- function(
     sd_digits = NULL,
     input_rounding = NULL,
     output_rounding = NULL,
+    p_operator = c("equals", "less_than", "greater_than", "less_than_or_equal_to", "greater_than_or_equal_to"),
     p = NULL, 
     p_digits = NULL,
     p_methods = NULL,
@@ -174,13 +181,16 @@ independent_t_test_summary <- function(
     include_se_sd_confusion = FALSE
 ) {
   
-  direction <- match.arg(direction)
+  direction  <- match.arg(direction)
+  p_operator <- match.arg(p_operator)
 
   # Coerce reported values
   d_num          <- if (!is.null(d)) as.numeric(d) else NA_real_
   d_ci_lower_num <- if (!is.null(d_ci_lower)) as.numeric(d_ci_lower) else NA_real_
   d_ci_upper_num <- if (!is.null(d_ci_upper)) as.numeric(d_ci_upper) else NA_real_
   p_num          <- if (!is.null(p)) as.numeric(p) else NA_real_
+  
+  
   
   # --- Validation of m_digits and sd_digits (ULP for M and SD) ---------------
   # Literal precision of inputs as written (for diagnostics)
@@ -388,18 +398,27 @@ independent_t_test_summary <- function(
       tibble::tibble(d = reported_d, p = reported_p)
     )
     
-    # ---- Logical checks (NULL-safe) -------------------------------------------
     combined <- combined |>
       dplyr::mutate(
-        d_inbounds = ifelse(
-          is.na(d),
-          NA,
-          dplyr::between(d, min_d_rounded, max_d_rounded)
+        d_inbounds = dplyr::case_when(
+          is.na(d) ~ NA,
+          TRUE ~ dplyr::between(d, min_d_rounded, max_d_rounded),
         ),
-        p_inbounds = ifelse(
-          is.na(p),
-          NA,
-          dplyr::between(p, min_p_rounded, max_p_rounded)
+        p_operator = p_operator,
+        p_inbounds = dplyr::case_when(
+          is.na(p) ~ NA,
+          # Exact match: The reported P is inside the calculated Min/Max range
+          p_operator == "equals" ~ dplyr::between(p, min_p_rounded, max_p_rounded),
+          
+          # Less than (< .001): 
+          # We check if the MINIMUM calculated p-value is consistent with the threshold.
+          # If Min(Calc) is 0.000 and Threshold is 0.001: 0.000 <= 0.001 is TRUE.
+          p_operator %in% c("less_than", "less_than_or_equal_to") ~ min_p_rounded <= p,
+          
+          # Greater than (> .05):
+          # We check if the MAXIMUM calculated p-value is consistent with the threshold.
+          # If Max(Calc) is 0.06 and Threshold is 0.05: 0.06 >= 0.05 is TRUE.
+          p_operator %in% c("greater_than", "greater_than_or_equal_to") ~ max_p_rounded >= p
         )
       )
     
@@ -408,7 +427,7 @@ independent_t_test_summary <- function(
                     p = p) |>
       dplyr::select(
         d, min_d_rounded, max_d_rounded, d_inbounds,
-        p, min_p_rounded, max_p_rounded, p_inbounds
+        p_operator, p, min_p_rounded, max_p_rounded, p_inbounds
       )
   }
   

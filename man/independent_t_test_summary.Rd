@@ -15,6 +15,8 @@ independent_t_test_summary(
   sd_digits = NULL,
   input_rounding = NULL,
   output_rounding = NULL,
+  p_operator = c("equals", "less_than", "greater_than", "less_than_or_equal_to",
+    "greater_than_or_equal_to"),
   p = NULL,
   p_digits = NULL,
   p_methods = NULL,
@@ -62,6 +64,12 @@ Default is \code{"truncated"} if NULL.}
 calculated results (effect sizes and p-values) to check for matches with
 reported values. Allowed: \code{"half_up"}, \code{"half_down"},
 \code{"bankers"}, \code{"trunc"}. If \code{NULL}, all are used.}
+
+\item{p_operator}{Character. Defines the relationship between the reported
+p-value and the actual calculated value. Use this to handle censored
+values (e.g., "p < .001").
+Options: \code{"equals"}, \code{"less_than"}, \code{"greater_than"}.
+Default is \code{"equals"}.}
 
 \item{p}{Numeric. Reported p-value.}
 
@@ -148,7 +156,7 @@ SDs via \eqn{SD = SE \times \sqrt{n}}.
 # Scenario: A paper reports:
 #   Group 1: M = 10.30, SD = 3.12, N = 50
 #   Group 2: M = 8.71,  SD = 2.80, N = 48
-#   Results: t-test p = 0.009, Cohen's d = 0.53, 95\% CI [0.20, 0.90]
+#   Results: t-test p < .01, Cohen's d = 0.53, 95\% CI [0.20, 0.90]
 
 res <- independent_t_test_summary(
   # --- Essential Arguments ---
@@ -163,9 +171,10 @@ res <- independent_t_test_summary(
   sd_digits = 2,
 
   # --- Comparison Targets ---
-  # Reported p-value
-  p = 0.009,
-  p_digits = 3,
+  # Reported p-value is < .01
+  p = 0.01,
+  p_digits = 2,
+  p_operator = "less_than",
 
   # Reported Effect Size (Cohen's d) and CIs
   d = 0.53,
