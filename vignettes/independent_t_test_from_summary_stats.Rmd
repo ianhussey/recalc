@@ -38,7 +38,8 @@ res <- independent_t_test_summary(
   sd_digits = 2,
   
   # optionally supply the reported p value for comparison
-  p = 0.009,
+  p_operator = "less_than_or_equal_to",
+  p = 0.05,
   p_digits = 3,
   # optionally specify p value calculation method
   p_methods = NULL, # if NULL, check all. or one of "student_t", "welch_t" 
@@ -54,6 +55,7 @@ res <- independent_t_test_summary(
   input_rounding = NULL, # if NULL, check all. or one of "rounded", "truncated"
   output_rounding = NULL, # if NULL, check all. or one of "half_up", "half_down", "bankers", "trunc"
   d_digits = 2, # number of digits to round SMD output to
+  hedges_correction = NULL, # check both applying and not applying hedges correction
   # optionally specify CI calculation method. 
   ci_methods = NULL, # if NULL, check all. or one of "wald_t", "welch_t", "nct".
   
