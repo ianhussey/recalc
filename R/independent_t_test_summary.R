@@ -191,7 +191,7 @@ independent_t_test_summary <- function(
   
   direction  <- match.arg(direction)
   p_operator <- match.arg(p_operator)
-
+  
   # Coerce reported values
   d_num          <- if (!is.null(d)) as.numeric(d) else NA_real_
   d_ci_lower_num <- if (!is.null(d_ci_lower)) as.numeric(d_ci_lower) else NA_real_
@@ -741,194 +741,164 @@ independent_t_test_summary <- function(
     
     for (sd_mode in sd_modes) {
       
+      # Handle SD interpretation (reported SD vs misreported SE)
       if (sd_mode == "sd") {
         sd1_eff <- sd1_star
         sd2_eff <- sd2_star
-      } else { 
+      } else {
         sd1_eff <- sd1_star * sqrt(n1)
         sd2_eff <- sd2_star * sqrt(n2)
       }
       
       if (sd1_eff <= 0 || sd2_eff <= 0) next
       
-      df_s <- n1 + n2 - 2
-      N    <- n1 + n2
+      # 1. Calculate Base Stats (Pooled) - Reused for d, g, and student t
+      stats_base <- .calculate_cohen_d_stats(m1_star, m2_star, sd1_eff, sd2_eff, n1, n2)
       
-      # Pooled SD
-      sp <- sqrt(((n1 - 1) * sd1_eff^2 + (n2 - 1) * sd2_eff^2) / df_s)
-      if (!is.finite(sp) || sp <= 0) next
+      # 2. Calculate Welch Stats
+      stats_welch <- .calculate_welch_t(m1_star, m2_star, sd1_eff, sd2_eff, n1, n2)
       
-      var1 <- sd1_eff^2
-      var2 <- sd2_eff^2
-      se_welch_base <- sqrt(var1 / n1 + var2 / n2)
-      
-      num_w <- (var1 / n1 + var2 / n2)^2
-      den_w <- (var1^2 / (n1^2 * (n1 - 1))) + (var2^2 / (n2^2 * (n2 - 1)))
-      df_w <- num_w / den_w
-      if (!is.finite(df_w) || df_w <= 0) df_w <- NA_real_
-      
-      # ----------------------------------------------------------
       # Loop over direction modes
-      # ----------------------------------------------------------
-      for (sd_mode in sd_modes) {
+      for (dir_mode in dir_modes) {
         
-        # Handle SD interpretation
-        if (sd_mode == "sd") {
-          sd1_eff <- sd1_star
-          sd2_eff <- sd2_star
-        } else { 
-          sd1_eff <- sd1_star * sqrt(n1)
-          sd2_eff <- sd2_star * sqrt(n2)
+        sign_factor     <- if (dir_mode == "m1_minus_m2") 1 else -1
+        direction_label <- dir_mode
+        
+        # Adjust effect direction
+        # Note: stats_base$d_raw assumes m1-m2. We flip if needed.
+        d_raw_directed <- stats_base$d_raw * sign_factor
+        diff_mean_dir  <- stats_base$diff_mean * sign_factor
+        
+        # 3. Calculate Student t (using directed mean diff)
+        res_student <- .calculate_student_t(diff_mean_dir, stats_base$sp, n1, n2, stats_base$df_s)
+        
+        # 4. Calculate Hedges g
+        g_raw_directed <- .hedges_correction(d_raw_directed, stats_base$df_s)
+        
+        # ----------------------------------------------------------
+        # Effect sizes + CIs
+        # ----------------------------------------------------------
+        for (hedges_correction_current in hedges_correction) {
+          
+          es_est <- if (hedges_correction_current) g_raw_directed else d_raw_directed
+          N      <- n1 + n2
+          
+          # Pre-calculate SE of the Effect Size (needed for Wald/Welch CIs)
+          # Note: This is SE of *d*, not SE of the mean difference.
+          se_pooled_es <- sqrt(N / (n1 * n2) + es_est^2 / (2 * stats_base$df_s))
+          se_welch_es  <- if (!is.na(stats_welch$df)) sqrt(N / (n1 * n2) + es_est^2 / (2 * stats_welch$df)) else NA
+          
+          for (ci_method in ci_methods) {
+            
+            # Select T and DF based on method
+            # If using Wald/Student, we use pooled T. If Welch, we use Welch T.
+            if (ci_method == "welch_t") {
+              t_use  <- stats_welch$t * sign_factor # Apply direction
+              df_use <- stats_welch$df
+            } else {
+              t_use  <- res_student$t # Already directed
+              df_use <- res_student$df
+            }
+            
+            # Call new CI Helper
+            ci_vals <- .calculate_es_ci(
+              es_est, hedges_correction_current, ci_method, 
+              t_use, df_use, n1, n2, alpha,
+              se_pooled_es, se_welch_es
+            )
+            
+            if (is.na(ci_vals["lower"])) next
+            
+            # Rounding Loop
+            for (d_rounding in output_rounding) {
+              
+              d_round_fun <- switch(
+                d_rounding,
+                "half_up"   = function(x) roundwork::round_up(x,   d_digits),
+                "half_down" = function(x) roundwork::round_down(x, d_digits),
+                "bankers"   = function(x) round(x, d_digits),
+                "trunc"     = function(x) roundwork::round_trunc(x, d_digits)
+              )
+              
+              est_d   <- d_round_fun(es_est)
+              lower_d <- d_round_fun(ci_vals["lower"])
+              upper_d <- d_round_fun(ci_vals["upper"])
+              
+              # Save Results
+              d_results[[idx_d]] <- data.frame(
+                source              = "summary",
+                direction           = direction_label,
+                hedges_correction   = hedges_correction_current,
+                ci_method           = ci_method,
+                d_rounding          = d_rounding,
+                input_adj_stats     = adj_stats_label,
+                sd_interpretation   = sd_mode,
+                # Store Used Stats from our objects
+                t_used              = t_use,
+                df_used             = df_use,
+                d_unrounded         = es_est,
+                ci_lower_unrounded  = ci_vals["lower"],
+                ci_upper_unrounded  = ci_vals["upper"],
+                d_rounded           = est_d,
+                ci_lower_rounded    = lower_d,
+                ci_upper_rounded    = upper_d,
+                # [Matching logic remains the same...]
+                match_est      = if (!is.na(d_num))          isTRUE(all.equal(est_d,   d_num))          else NA,
+                match_ci_lower = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_d, d_ci_lower_num)) else NA,
+                match_ci_upper = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_d, d_ci_upper_num)) else NA,
+                match_all      = if (!any(is.na(c(d_num, d_ci_lower_num, d_ci_upper_num)))) {
+                  est_d   == d_num &&
+                    lower_d == d_ci_lower_num &&
+                    upper_d == d_ci_upper_num
+                } else NA,
+                stringsAsFactors = FALSE
+              )
+              idx_d <- idx_d + 1
+            }
+          }
         }
         
-        if (sd1_eff <= 0 || sd2_eff <= 0) next
-        
-        # 1. Calculate Base Stats (Pooled) - Reused for d, g, and student t
-        stats_base <- .calculate_cohen_d_stats(m1_star, m2_star, sd1_eff, sd2_eff, n1, n2)
-        
-        # 2. Calculate Welch Stats
-        stats_welch <- .calculate_welch_t(m1_star, m2_star, sd1_eff, sd2_eff, n1, n2)
-        
-        # Loop over direction modes
-        for (dir_mode in dir_modes) {
+        # ----------------------------------------------------------
+        # p-values 
+        # ----------------------------------------------------------
+        for (p_method in p_methods) {
           
-          sign_factor     <- if (dir_mode == "m1_minus_m2") 1 else -1
-          direction_label <- dir_mode
+          # Select result object based on method
+          res_obj <- if (p_method == "student_t") res_student else stats_welch
           
-          # Adjust effect direction
-          # Note: stats_base$d_raw assumes m1-m2. We flip if needed.
-          d_raw_directed <- stats_base$d_raw * sign_factor
-          diff_mean_dir  <- stats_base$diff_mean * sign_factor
+          if (is.na(res_obj$t) || is.na(res_obj$df)) next
           
-          # 3. Calculate Student t (using directed mean diff)
-          res_student <- .calculate_student_t(diff_mean_dir, stats_base$sp, n1, n2, stats_base$df_s)
+          p_unr <- res_obj$p
           
-          # 4. Calculate Hedges g
-          g_raw_directed <- .hedges_correction(d_raw_directed, stats_base$df_s)
-          
-          # ----------------------------------------------------------
-          # Effect sizes + CIs
-          # ----------------------------------------------------------
-          for (hedges_correction_current in hedges_correction) {
+          for (p_rounding in output_rounding) {
             
-            es_est <- if (hedges_correction_current) d_raw_directed else g_raw_directed
-            N      <- n1 + n2
+            p_round_fun <- switch(
+              p_rounding,
+              "half_up"   = function(x) roundwork::round_up(x,   p_digits),
+              "half_down" = function(x) roundwork::round_down(x, p_digits),
+              "bankers"   = function(x) round(x, p_digits),
+              "trunc"     = function(x) roundwork::round_trunc(x, p_digits)
+            )
             
-            # Pre-calculate SE of the Effect Size (needed for Wald/Welch CIs)
-            # Note: This is SE of *d*, not SE of the mean difference.
-            se_pooled_es <- sqrt(N / (n1 * n2) + es_est^2 / (2 * stats_base$df_s))
-            se_welch_es  <- if (!is.na(stats_welch$df)) sqrt(N / (n1 * n2) + es_est^2 / (2 * stats_welch$df)) else NA
+            p_rounded <- p_round_fun(p_unr)
             
-            for (ci_method in ci_methods) {
-              
-              # Select T and DF based on method
-              # If using Wald/Student, we use pooled T. If Welch, we use Welch T.
-              if (ci_method == "welch_t") {
-                t_use  <- stats_welch$t * sign_factor # Apply direction
-                df_use <- stats_welch$df
-              } else {
-                t_use  <- res_student$t # Already directed
-                df_use <- res_student$df
-              }
-              
-              # Call new CI Helper
-              ci_vals <- .calculate_es_ci(
-                es_est, hedges_correction_current, ci_method, 
-                t_use, df_use, n1, n2, alpha,
-                se_pooled_es, se_welch_es
-              )
-              
-              if (is.na(ci_vals['lower'])) next
-              
-              # Rounding Loop
-              for (d_rounding in output_rounding) {
-                
-                d_round_fun <- switch(d_rounding,
-                                      "half_up"   = function(x) roundwork::round_up(x,   d_digits),
-                                      "half_down" = function(x) roundwork::round_down(x, d_digits),
-                                      "bankers"   = function(x) round(x, d_digits),
-                                      "trunc"     = function(x) roundwork::round_trunc(x, d_digits)
-                )
-                
-                est_d   <- d_round_fun(es_est)
-                lower_d <- d_round_fun(ci_vals['lower'])
-                upper_d <- d_round_fun(ci_vals['upper'])
-                
-                # Save Results
-                d_results[[idx_d]] <- data.frame(
-                  source              = "summary",
-                  direction           = direction_label,
-                  hedges_correction   = hedges_correction_current,
-                  ci_method           = ci_method,
-                  d_rounding          = d_rounding,
-                  input_adj_stats     = adj_stats_label,
-                  sd_interpretation   = sd_mode,
-                  # Store Used Stats from our objects
-                  t_used              = t_use,
-                  df_used             = df_use,
-                  d_unrounded         = es_est,
-                  ci_lower_unrounded  = ci_vals['lower'],
-                  ci_upper_unrounded  = ci_vals['upper'],
-                  d_rounded           = est_d,
-                  ci_lower_rounded    = lower_d,
-                  ci_upper_rounded    = upper_d,
-                  # [Matching logic remains the same...]
-                  match_est      = if (!is.na(d_num))          isTRUE(all.equal(est_d,   d_num))          else NA,
-                  match_ci_lower = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_d, d_ci_lower_num)) else NA,
-                  match_ci_upper = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_d, d_ci_upper_num)) else NA,
-                  match_all      = if (!any(is.na(c(d_num, d_ci_lower_num, d_ci_upper_num)))) {
-                    est_d   == d_num &&
-                      lower_d == d_ci_lower_num &&
-                      upper_d == d_ci_upper_num
-                  } else NA,
-                  stringsAsFactors = FALSE
-                )
-                idx_d <- idx_d + 1
-              }
-            }
+            p_results[[idx_p]] <- data.frame(
+              source            = "summary",
+              direction         = direction_label,
+              p_method          = p_method,
+              p_rounding        = p_rounding,
+              input_adj_stats   = adj_stats_label,
+              sd_interpretation = sd_mode,
+              t_used            = res_obj$t * sign_factor, # Apply direction to T
+              df_used           = res_obj$df,
+              p_unrounded       = p_unr,
+              p_rounded         = p_rounded,
+              match_p           = if (!is.na(p_num)) isTRUE(all.equal(p_rounded, p_num)) else NA,
+              stringsAsFactors  = FALSE
+            )
+            idx_p <- idx_p + 1
           }
-          
-          # ----------------------------------------------------------
-          # p-values 
-          # ----------------------------------------------------------
-          for (p_method in p_methods) {
-            
-            # Select result object based on method
-            res_obj <- if(p_method == "student_t") res_student else stats_welch
-            
-            if (is.na(res_obj$t) || is.na(res_obj$df)) next
-            
-            p_unr <- res_obj$p
-            
-            for (p_rounding in output_rounding) {
-              
-              p_round_fun <- switch(p_rounding,
-                                    "half_up"   = function(x) roundwork::round_up(x,   p_digits),
-                                    "half_down" = function(x) roundwork::round_down(x, p_digits),
-                                    "bankers"   = function(x) round(x, p_digits),
-                                    "trunc"     = function(x) roundwork::round_trunc(x, p_digits)
-              )
-              
-              p_rounded <- p_round_fun(p_unr)
-              
-              p_results[[idx_p]] <- data.frame(
-                source            = "summary",
-                direction         = direction_label,
-                p_method          = p_method,
-                p_rounding        = p_rounding,
-                input_adj_stats   = adj_stats_label,
-                sd_interpretation = sd_mode,
-                t_used            = res_obj$t * sign_factor, # Apply direction to T
-                df_used           = res_obj$df,
-                p_unrounded       = p_unr,
-                p_rounded         = p_rounded,
-                match_p           = if (!is.na(p_num)) isTRUE(all.equal(p_rounded, p_num)) else NA,
-                stringsAsFactors  = FALSE
-              )
-              idx_p <- idx_p + 1
-            }
-          }
-        } 
+        }
       }
     }
   }
