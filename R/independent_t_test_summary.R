@@ -13,7 +13,8 @@
 #'         This relies on the \code{input_rounding} argument to determine if the 
 #'         values should be treated as "rounded" (interval +/- 0.5 ULP) or 
 #'         "truncated".
-#'   \item \strong{Effect Size Type}: Computing both Cohen's *d* and Hedges' *g*.
+#'   \item \strong{Effect Size Type}: Computing both Cohen's *d* and Hedges' *g* 
+#'         (controlled by \code{hedges_correction}).
 #'   \item \strong{CI Methods}: Calculating Wald-type CIs (using *t* distributions 
 #'         with pooled or Welch variance) and Noncentral *t* (NCT) distribution CIs.
 #'   \item \strong{P-value Methods}: Using *t*-tests (Student's pooled or Welch's 
@@ -60,7 +61,8 @@
 #' @param p_operator Character. Defines the relationship between the reported 
 #'   p-value and the actual calculated value. Use this to handle censored 
 #'   values (e.g., "p < .001"). 
-#'   Options: \code{"equals"}, \code{"less_than"}, \code{"greater_than"}.
+#'   Options: \code{"equals"}, \code{"less_than"}, \code{"greater_than"}, 
+#'   \code{"less_than_or_equal_to"}, \code{"greater_than_or_equal_to"}.
 #'   Default is \code{"equals"}.
 #' @param p_methods Character vector. P-value methods to include.
 #'   Allowed: \code{"student_t"}, \code{"welch_t"}.
@@ -77,6 +79,10 @@
 #' @param ci_methods Character vector. CI methods to include.
 #'   Allowed: \code{"wald_t"}, \code{"welch_t"}, \code{"nct"}.
 #'   If \code{NULL}, all are used.
+#' @param hedges_correction Logical or NULL. If \code{TRUE}, the calculation applies 
+#'   Hedges' correction factor (calculating Hedges' *g*). If \code{FALSE}, it 
+#'   calculates Cohen's *d*. If \code{NULL} (default), the multiverse iterates 
+#'   over both possibilities.
 #' @param include_se_sd_confusion Logical. If \code{TRUE}, the multiverse also
 #'   includes a branch that interprets \code{sd1} and \code{sd2} as standard
 #'   errors and converts them to SDs via \eqn{SD = SE \times \sqrt{n}} before
@@ -141,6 +147,7 @@
 #'   ci_methods = NULL,      # Check Wald (Student/Welch) and NCT
 #'   output_rounding = NULL, # Check all rounding methods (half_up, bankers, etc.)
 #'   input_rounding = "truncated", # Assume inputs might be truncated or rounded
+#'   hedges_correction = NULL, # Check both d and g
 #'
 #'   # Assumptions
 #'   alpha = 0.05,
@@ -178,6 +185,7 @@ independent_t_test_summary <- function(
     d_digits = NULL,
     direction = c("m1_minus_m2", "m2_minus_m1", "both"),
     ci_methods = NULL,
+    hedges_correction = NULL,
     include_se_sd_confusion = FALSE
 ) {
   
@@ -299,6 +307,15 @@ independent_t_test_summary <- function(
     d_digits <- 2L
   }
   
+  # Hedges Correction validation
+  if (is.null(hedges_correction)) {
+    hedges_correction <- c(TRUE, FALSE)
+  } else {
+    if (!is.logical(hedges_correction) || any(is.na(hedges_correction))) {
+      stop("'hedges_correction' must be TRUE, FALSE, or NULL (which checks both).")
+    }
+  }
+  
   # Check that p_digits, if supplied, is a single non-negative integer
   if (!is.null(p_digits)) {
     if (!is.numeric(p_digits) || length(p_digits) != 1L || !is.finite(p_digits) || p_digits < 1) {
@@ -316,7 +333,6 @@ independent_t_test_summary <- function(
   input_rounding <- match.arg(input_rounding, choices = c("truncated", "rounded"))
   
   if (!is.null(output_rounding)) {
-    # This automatically checks validity and stops with an error if invalid
     output_rounding <- match.arg(
       output_rounding, 
       choices = c("half_up", "half_down", "bankers", "trunc"), 
@@ -339,7 +355,8 @@ independent_t_test_summary <- function(
     params$ci_methods, params$p_methods, 
     input_rounding = input_rounding, params$output_rounding,
     d_digits, p_digits, m_digits, sd_digits, alpha, 
-    d_num, d_ci_lower_num, d_ci_upper_num, p_num,
+    d_num, d_ci_lower_num, d_ci_upper_num, hedges_correction,
+    p_num,
     idx_d, idx_p,
     direction = direction,
     include_se_sd_confusion = include_se_sd_confusion
@@ -498,7 +515,7 @@ independent_t_test_summary <- function(
 }
 
 #' @keywords internal
-.calculate_es_ci <- function(es_est, es_type, ci_method, 
+.calculate_es_ci <- function(es_est, hedges_correction, ci_method, 
                              t_val, df, n1, n2, alpha, 
                              se_pooled_es, se_welch_es = NA) {
   
@@ -514,7 +531,7 @@ independent_t_test_summary <- function(
     dU    <- delta_ci[2] * fac_d
     
     # Apply Hedges correction to bounds if necessary
-    if (es_type == "g") {
+    if (hedges_correction) {
       J_s <- 1 - 3 / (4 * df - 1)
       dL  <- dL * J_s
       dU  <- dU * J_s
@@ -647,7 +664,8 @@ independent_t_test_summary <- function(
     m1, m2, sd1, sd2, n1, n2,
     ci_methods, p_methods, input_rounding, output_rounding,
     d_digits, p_digits, m_digits, sd_digits, alpha,
-    d_num, d_ci_lower_num, d_ci_upper_num, p_num,
+    d_num, d_ci_lower_num, d_ci_upper_num, hedges_correction,
+    p_num,
     idx_d, idx_p,
     direction = c("m1_minus_m2", "m2_minus_m1", "both"),
     include_se_sd_confusion = FALSE
@@ -791,9 +809,9 @@ independent_t_test_summary <- function(
           # ----------------------------------------------------------
           # Effect sizes + CIs
           # ----------------------------------------------------------
-          for (es_type in c("d", "g")) {
+          for (hedges_correction_current in hedges_correction) {
             
-            es_est <- if (es_type == "d") d_raw_directed else g_raw_directed
+            es_est <- if (hedges_correction_current) d_raw_directed else g_raw_directed
             N      <- n1 + n2
             
             # Pre-calculate SE of the Effect Size (needed for Wald/Welch CIs)
@@ -815,7 +833,7 @@ independent_t_test_summary <- function(
               
               # Call new CI Helper
               ci_vals <- .calculate_es_ci(
-                es_est, es_type, ci_method, 
+                es_est, hedges_correction_current, ci_method, 
                 t_use, df_use, n1, n2, alpha,
                 se_pooled_es, se_welch_es
               )
@@ -840,7 +858,7 @@ independent_t_test_summary <- function(
                 d_results[[idx_d]] <- data.frame(
                   source              = "summary",
                   direction           = direction_label,
-                  es_type             = es_type,
+                  hedges_correction   = hedges_correction_current,
                   ci_method           = ci_method,
                   d_rounding          = d_rounding,
                   input_adj_stats     = adj_stats_label,

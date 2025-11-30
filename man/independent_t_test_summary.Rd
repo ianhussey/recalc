@@ -27,6 +27,7 @@ independent_t_test_summary(
   d_digits = NULL,
   direction = c("m1_minus_m2", "m2_minus_m1", "both"),
   ci_methods = NULL,
+  hedges_correction = NULL,
   include_se_sd_confusion = FALSE
 )
 }
@@ -68,7 +69,8 @@ reported values. Allowed: \code{"half_up"}, \code{"half_down"},
 \item{p_operator}{Character. Defines the relationship between the reported
 p-value and the actual calculated value. Use this to handle censored
 values (e.g., "p < .001").
-Options: \code{"equals"}, \code{"less_than"}, \code{"greater_than"}.
+Options: \code{"equals"}, \code{"less_than"}, \code{"greater_than"},
+\code{"less_than_or_equal_to"}, \code{"greater_than_or_equal_to"}.
 Default is \code{"equals"}.}
 
 \item{p}{Numeric. Reported p-value.}
@@ -98,6 +100,11 @@ M2 - M1, or both. One of \code{"m1_minus_m2"}, \code{"m2_minus_m1"},
 \item{ci_methods}{Character vector. CI methods to include.
 Allowed: \code{"wald_t"}, \code{"welch_t"}, \code{"nct"}.
 If \code{NULL}, all are used.}
+
+\item{hedges_correction}{Logical or NULL. If \code{TRUE}, the calculation applies
+Hedges' correction factor (calculating Hedges' \emph{g}). If \code{FALSE}, it
+calculates Cohen's \emph{d}. If \code{NULL} (default), the multiverse iterates
+over both possibilities.}
 
 \item{include_se_sd_confusion}{Logical. If \code{TRUE}, the multiverse also
 includes a branch that interprets \code{sd1} and \code{sd2} as standard
@@ -132,7 +139,7 @@ the precision limits defined by \code{m_digits} and \code{sd_digits}.
 This relies on the \code{input_rounding} argument to determine if the
 values should be treated as "rounded" (interval +/- 0.5 ULP) or
 "truncated".
-\item \strong{Effect Size Type}: Computing both Cohen's \emph{d} and Hedges' \emph{g}.
+\item \strong{Effect Size Type}: Computing both Cohen's \emph{d} and Hedges' \emph{g} #'         (controlled by \code{hedges_correction}).
 \item \strong{CI Methods}: Calculating Wald-type CIs (using \emph{t} distributions
 with pooled or Welch variance) and Noncentral \emph{t} (NCT) distribution CIs.
 \item \strong{P-value Methods}: Using \emph{t}-tests (Student's pooled or Welch's
@@ -188,6 +195,7 @@ res <- independent_t_test_summary(
   ci_methods = NULL,      # Check Wald (Student/Welch) and NCT
   output_rounding = NULL, # Check all rounding methods (half_up, bankers, etc.)
   input_rounding = "truncated", # Assume inputs might be truncated or rounded
+  hedges_correction = NULL, # Check both d and g
 
   # Assumptions
   alpha = 0.05,
