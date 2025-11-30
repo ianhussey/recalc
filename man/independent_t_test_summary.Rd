@@ -139,7 +139,8 @@ the precision limits defined by \code{m_digits} and \code{sd_digits}.
 This relies on the \code{input_rounding} argument to determine if the
 values should be treated as "rounded" (interval +/- 0.5 ULP) or
 "truncated".
-\item \strong{Effect Size Type}: Computing both Cohen's \emph{d} and Hedges' \emph{g} #'         (controlled by \code{hedges_correction}).
+\item \strong{Effect Size Type}: Computing both Cohen's \emph{d} and Hedges' \emph{g}
+(controlled by \code{hedges_correction}).
 \item \strong{CI Methods}: Calculating Wald-type CIs (using \emph{t} distributions
 with pooled or Welch variance) and Noncentral \emph{t} (NCT) distribution CIs.
 \item \strong{P-value Methods}: Using \emph{t}-tests (Student's pooled or Welch's
