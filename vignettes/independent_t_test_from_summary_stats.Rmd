@@ -55,9 +55,9 @@ res <- independent_t_test_summary(
   input_rounding = NULL, # if NULL, check all. or one of "rounded", "truncated"
   output_rounding = NULL, # if NULL, check all. or one of "half_up", "half_down", "bankers", "trunc"
   d_digits = 2, # number of digits to round SMD output to
-  hedges_correction = NULL, # check both applying and not applying hedges correction
+  hedges_correction = NULL, # if NULL, check both applying and not applying hedges correction
   # optionally specify CI calculation method. 
-  ci_methods = NULL, # if NULL, check all. or one of "wald_t", "welch_t", "nct".
+  ci_methods = NULL, # if NULL, check all or one of "wald_t", "welch_t", "nct".
   
   # optionally assess the reported SMD can be reproduced by assuming the reported SDs are actually SEs 
   include_se_sd_confusion = FALSE
