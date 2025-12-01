@@ -7,8 +7,12 @@ output:
 
 # TODO
 
-- how to handle "< .001"?
-
+- other versions of d?
+- d still shows discrepancies in 1% of cases up to d - .02 beyond bounds
+- input assumes both Ms and both SDs have identical precision. is this ever violated?
+- t = results_original_t, # bounds?
+- df = results_original_df) # value?
+- consider using scrutiny::restore_zeros in min and max output, using m_digits, sd_digits, and d_digits
 
 ```{r include=FALSE}
 
@@ -30,7 +34,7 @@ library(tibble)
 library(roundwork)
 library(ggstance)
 # devtools::install_github("ianhussey/recalc")
-#library(recalc)
+library(recalc)
 
 library(tidyr)
 library(dplyr)
@@ -54,12 +58,12 @@ options(scipen=999)
 ```{r}
 
 # functions for simulation
-generate_data <- function(m1 = 0,
-                          m2 = 0,
-                          sd1 = 1,
-                          sd2 = 1,
-                          n1 = 20,
-                          n2 = 20) {
+generate_data <- function(m1,
+                          m2,
+                          sd1,
+                          sd2,
+                          n1,
+                          n2) {
   
   data1 <- 
     tibble(condition = "1",
@@ -106,7 +110,7 @@ analyze <- function(data,
     select(d = Cohens_d,
            d_ci_lower = CI_low,
            d_ci_upper = CI_high)
-    
+  
   res <- bind_cols(res_summary, 
                    res_ttest,
                    res_d)
@@ -120,7 +124,9 @@ analyze <- function(data,
              d = round_up(d, d_digits),
              d_ci_lower = round_up(d_ci_lower, d_digits),
              d_ci_upper = round_up(d_ci_upper, d_digits),
-             p = round_up(p, p_digits))
+             p = round_up(p, p_digits),
+             p_operator = dplyr::if_else(dplyr::near(p, 0), "less_than", "equals"),
+             p = dplyr::if_else(dplyr::near(p, 0), 1 * 10^-p_digits, p))
   } else if(input_rounding_method == "half_down"){
     res <- res |>
       mutate(m1 = round_down(m1, m_digits),
@@ -130,7 +136,9 @@ analyze <- function(data,
              d = round_down(d, d_digits),
              d_ci_lower = round_down(d_ci_lower, d_digits),
              d_ci_upper = round_down(d_ci_upper, d_digits),
-             p = round_down(p, p_digits))
+             p = round_down(p, p_digits),
+             p_operator = dplyr::if_else(dplyr::near(p, 0), "less_than", "equals"),
+             p = dplyr::if_else(dplyr::near(p, 0), 1 * 10^-p_digits, p))
   } else if(input_rounding_method == "bankers"){
     res <- res |>
       mutate(m1 = round(m1, m_digits),
@@ -140,7 +148,9 @@ analyze <- function(data,
              d = round(d, d_digits),
              d_ci_lower = round(d_ci_lower, d_digits),
              d_ci_upper = round(d_ci_upper, d_digits),
-             p = round(p, p_digits))
+             p = round(p, p_digits),
+             p_operator = dplyr::if_else(dplyr::near(p, 0), "less_than", "equals"),
+             p = dplyr::if_else(dplyr::near(p, 0), 1 * 10^-p_digits, p))
   } else if(input_rounding_method == "trunc"){
     res <- res |>
       mutate(m1 = round_trunc(m1, m_digits),
@@ -150,7 +160,9 @@ analyze <- function(data,
              d = round_trunc(d, d_digits),
              d_ci_lower = round_trunc(d_ci_lower, d_digits),
              d_ci_upper = round_trunc(d_ci_upper, d_digits),
-             p = round_trunc(p, p_digits))
+             p = round_trunc(p, p_digits),
+             p_operator = dplyr::if_else(dplyr::near(p, 0), "less_than", "equals"),
+             p = dplyr::if_else(dplyr::near(p, 0), 1 * 10^-p_digits, p))
   } 
   
   return(res)
@@ -162,6 +174,7 @@ reconstruct <- function(results,
                         d_digits,
                         p_digits,
                         direction,
+                        hedges_correction,
                         include_se_sd_confusion){
   independent_t_test_summary(
     m1 = results$m1,
@@ -173,11 +186,13 @@ reconstruct <- function(results,
     d = results$d,
     d_ci_lower = results$d_ci_lower,
     d_ci_upper = results$d_ci_upper,
+    p_operator = results$p_operator,
     p = results$p,
     m_digits = m_digits,
     sd_digits = sd_digits,
     d_digits = d_digits,
     direction = direction,
+    hedges_correction = hedges_correction,
     p_digits = p_digits,
     include_se_sd_confusion = include_se_sd_confusion
   )$reproduced
@@ -192,35 +207,19 @@ reconstruct <- function(results,
 # simulation parameters
 experiment_parameters <- expand_grid(
   pop_m1 = 0,
-  pop_m2 = c(0, 0.5),
+  pop_m2 = c(0, 2),
   pop_sd1 = 1,
-  pop_sd2 = c(1, 1.5),
+  pop_sd2 = 1, # c(1, 1.5),
   pop_n1 = 25,
-  pop_n2 = c(25, 100),
+  pop_n2 = 25, # c(25, 100),
   m_digits = 2,
   sd_digits = 2,
   d_digits = 2,
   p_digits = 3,
   input_rounding_method = c("half_up", "half_down", "bankers", "trunc"),
   include_se_sd_confusion = FALSE,
-  direction = c("m1_minus_m2", "m2_minus_m1"),
-  iteration = 1:1
-) 
-
-experiment_parameters <- expand_grid(
-  pop_m1 = 0,
-  pop_m2 = 0,
-  pop_sd1 = 1,
-  pop_sd2 = 1,
-  pop_n1 = 25,
-  pop_n2 = 25,
-  m_digits = 2,
-  sd_digits = 2,
-  d_digits = 2,
-  p_digits = 3,
-  input_rounding_method = "trunc",
-  include_se_sd_confusion = FALSE,
   direction = "m1_minus_m2",
+  hedges_correction = FALSE, 
   iteration = 1:100
 ) 
 
@@ -230,48 +229,55 @@ plan(multisession, workers = future::availableCores())
 # set seed
 set.seed(42)
 
-# run simulation
-simulation <- experiment_parameters |>
-  mutate(generated_data = future_pmap(.l = list(m1 = pop_m1,
-                                                m2 = pop_m2,
-                                                sd1 = pop_sd1,
-                                                sd2 = pop_sd2,
-                                                n1 = pop_n1,
-                                                n2 = pop_n2),
-                                      .f = generate_data,
-                                      .progress = TRUE,
-                                      .options = furrr_options(seed = TRUE))) |>
-  mutate(results_original = future_pmap(.l = list(data = generated_data,
-                                                  m_digits = m_digits,
-                                                  sd_digits = sd_digits,
-                                                  d_digits = d_digits,
-                                                  p_digits = p_digits,
-                                                  input_rounding_method = input_rounding_method),
-                                        .f = analyze,
+if(file.exists("simulation.rds")){
+  simulation <- read_rds("simulation.rds")
+} else {
+  
+  # run simulation
+  simulation <- experiment_parameters |>
+    mutate(generated_data = future_pmap(.l = list(m1 = pop_m1,
+                                                  m2 = pop_m2,
+                                                  sd1 = pop_sd1,
+                                                  sd2 = pop_sd2,
+                                                  n1 = pop_n1,
+                                                  n2 = pop_n2),
+                                        .f = generate_data,
                                         .progress = TRUE,
                                         .options = furrr_options(seed = TRUE))) |>
-  mutate(results_reconstructed = future_pmap(.l = list(results = results_original,
-                                                       m_digits = m_digits,
-                                                       sd_digits = sd_digits,
-                                                       d_digits = d_digits,
-                                                       p_digits = p_digits,
-                                                       direction = direction,
-                                                       include_se_sd_confusion = include_se_sd_confusion),
-                                             .f = reconstruct,
-                                             .progress = TRUE,
-                                             .options = furrr_options(seed = TRUE))) |>
-  # unnest results
-  unnest(results_reconstructed) |>
-  mutate(d_beyond_bounds = case_when(d < min_d_rounded ~ d-min_d_rounded,
-                                     d > max_d_rounded ~ max_d_rounded-d,
-                                     TRUE ~ 0),
-         d_abs_beyond_bounds = abs(d_beyond_bounds),
-         p_beyond_bounds = case_when(p < min_p_rounded ~ p-min_p_rounded,
-                                     p > max_p_rounded ~ max_p_rounded-p,
-                                     TRUE ~ 0),
-         p_abs_beyond_bounds = abs(p_beyond_bounds))
-
-#write_rds(simulation, "simulation.rds")
+    mutate(results_original = future_pmap(.l = list(data = generated_data,
+                                                    m_digits = m_digits,
+                                                    sd_digits = sd_digits,
+                                                    d_digits = d_digits,
+                                                    p_digits = p_digits,
+                                                    input_rounding_method = input_rounding_method),
+                                          .f = analyze,
+                                          .progress = TRUE,
+                                          .options = furrr_options(seed = TRUE))) |>
+    mutate(results_reconstructed = future_pmap(.l = list(results = results_original,
+                                                         m_digits = m_digits,
+                                                         sd_digits = sd_digits,
+                                                         d_digits = d_digits,
+                                                         p_digits = p_digits,
+                                                         direction = direction,
+                                                         hedges_correction = hedges_correction,
+                                                         include_se_sd_confusion = include_se_sd_confusion),
+                                               .f = reconstruct,
+                                               .progress = TRUE,
+                                               .options = furrr_options(seed = TRUE))) |>
+    # unnest results
+    unnest(results_reconstructed) |>
+    mutate(d_beyond_bounds = case_when(d < min_d_rounded ~ d-min_d_rounded,
+                                       d > max_d_rounded ~ max_d_rounded-d,
+                                       TRUE ~ 0),
+           d_abs_beyond_bounds = abs(d_beyond_bounds),
+           p_beyond_bounds = case_when(p < min_p_rounded ~ p-min_p_rounded,
+                                       p > max_p_rounded ~ max_p_rounded-p,
+                                       TRUE ~ 0),
+           p_abs_beyond_bounds = abs(p_beyond_bounds))
+  
+  write_rds(simulation, "simulation.rds")
+  
+}
 
 ```
 
@@ -279,9 +285,15 @@ simulation <- experiment_parameters |>
 
 ```{r}
 
-#simulation <- read_rds("simulation.rds")
-
 # summarize across iterations
+simulation_summary <- simulation |>
+  summarize(prop_d_beyond_bounds = 1 - mean(d_inbounds),
+            max_d_abs_beyond_bounds = max(d_abs_beyond_bounds),
+            prop_p_beyond_bounds = 1 - mean(p_inbounds),
+            max_p_abs_beyond_bounds = max(p_abs_beyond_bounds))
+
+simulation_summary
+
 simulation_summary_by_argument <- simulation |>
   group_by(pop_m1,
            pop_m2,
@@ -300,14 +312,7 @@ simulation_summary_by_argument <- simulation |>
   summarize(max_d_abs_beyond_bounds = max(d_abs_beyond_bounds),
             max_p_abs_beyond_bounds = max(p_abs_beyond_bounds))
 
-simulation_summary <- simulation |>
-  summarize(prop_d_beyond_bounds = 1 - mean(d_inbounds),
-            max_d_abs_beyond_bounds = max(d_abs_beyond_bounds),
-            prop_p_beyond_bounds = 1 - mean(p_inbounds),
-            max_p_abs_beyond_bounds = max(p_abs_beyond_bounds))
-
-simulation_summary
-
+simulation_summary_by_argument
 
 # # table of results
 # simulation_summary |>
@@ -324,4 +329,5 @@ simulation_summary
 #   scale_x_discrete(name = "Population effect size")
 
 ```
+
 
