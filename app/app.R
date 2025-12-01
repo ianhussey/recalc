@@ -30,7 +30,7 @@ ui <- fluidPage(
         "p_operator",
         "p operator",
         choices = c("less_than", "more_than", "equals"),
-        selected = "less_than"
+        selected = "equals"
       ),
       numericInput("p", "Reported p", value = NA, min = 0, max = 1, step = 0.01),
       numericInput("p_digits", "Digits used for p (p_digits)", value = 3, min = 0, step = 1),
@@ -110,6 +110,14 @@ ui <- fluidPage(
       hr(),
       actionButton("run", "Run analysis"),
       hr(),
+      
+      textInput(
+        "report_title",
+        "html report name",
+        value = "e.g., Recalculation of Jones et al. (2015) outcome 1"
+      ),
+      
+      hr(),
       downloadButton("downloadReport", "Download HTML report")
     ),
     
@@ -120,6 +128,20 @@ ui <- fluidPage(
       br(),
       plotOutput("plot_d", height = "400px")
     )
+  ),
+  
+  tags$hr(),
+  tags$div(
+    "Developed by Ian Hussey – ",
+    tags$a(
+      href  = "https://github.com/ianhussey/recalc", 
+      "{recalc} GitHub repository",
+      target = "_blank"
+    ),
+    style = "text-align: center; 
+             padding: 10px 0 5px 0; 
+             font-size: 0.9em; 
+             color: #555;"
   )
 )
 
@@ -238,8 +260,18 @@ server <- function(input, output, session) {
   })
   
   output$downloadReport <- downloadHandler(
+    # filename = function() {
+    #   paste0("recalc_report_", Sys.Date(), ".html")
+    # },
     filename = function() {
-      paste0("recalc_report_", Sys.Date(), ".html")
+      report_name <- input$report_title
+      if (is.null(report_name) || report_name == "") {
+        report_name <- "report"
+      }
+      # sanitize: replace non-alphanumeric characters with "_"
+      report_name <- gsub("[^A-Za-z0-9_-]+", "_", report_name)
+      timestamp <- format(Sys.time(), "%Y-%m-%d_%H-%M-%S")
+      paste0("recalc_report_", report_name, "_", timestamp, ".html")
     },
     content = function(file) {
       # Ensure report.Rmd is in the working directory used by render()
@@ -249,6 +281,7 @@ server <- function(input, output, session) {
       file.copy(src, "report.Rmd", overwrite = TRUE)
       
       params <- list(
+        report_title = input$report_title,
         m1 = input$m1,
         m2 = input$m2,
         sd1 = input$sd1,
