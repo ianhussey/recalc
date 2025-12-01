@@ -1,0 +1,13 @@
+name: recalc_independent_t_test
+title: recalc_independent_t_test
+username: errors
+account: errors
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16207113
+bundleId: 11257736
+url: https://errors.shinyapps.io/recalc_independent_t_test/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: dev.Rmd
