@@ -32,7 +32,7 @@ ui <- fluidPage(
         choices = c("less_than", "more_than", "equals"),
         selected = "less_than"
       ),
-      numericInput("p", "Reported p", value = 0.05, min = 0, max = 1, step = 0.01),
+      numericInput("p", "Reported p", value = NA, min = 0, max = 1, step = 0.01),
       numericInput("p_digits", "Digits used for p (p_digits)", value = 3, min = 0, step = 1),
       selectInput(
         "p_methods",
@@ -44,9 +44,9 @@ ui <- fluidPage(
       
       hr(),
       h4("Reported Cohen's d and 95% Confidence Intervals (optional)"),
-      numericInput("d", "Reported SMD (Cohen's d or Hedges' g)", value = 0.53, step = 0.01),
-      numericInput("d_ci_lower", "Reported d CI lower", value = 0.20, step = 0.01),
-      numericInput("d_ci_upper", "Reported d CI upper", value = 0.90, step = 0.01),
+      numericInput("d", "Reported SMD (Cohen's d or Hedges' g)", value = NA, step = 0.01),
+      numericInput("d_ci_lower", "Reported d CI lower", value = NA, step = 0.01),
+      numericInput("d_ci_upper", "Reported d CI upper", value = NA, step = 0.01),
       
       selectInput(
         "direction",
@@ -101,7 +101,7 @@ ui <- fluidPage(
       
       checkboxInput(
         "include_se_sd_confusion",
-        "Treat SDs as if they were SEs confused for SDs",
+        "Treat SDs as if they may have been SEs confused for SDs",
         value = FALSE
       ),
       
@@ -145,64 +145,57 @@ server <- function(input, output, session) {
     if (identical(input$ci_methods, "NULL")) NULL else input$ci_methods
   })
   
-  recalc_res <- reactive({
-    req(!is.na(input$m1),
+  # Only runs when the button is clicked
+  recalc_res <- eventReactive(
+    input$run,
+    {
+      # Validate that all necessary numeric inputs are filled in
+      req(
+        !is.na(input$m1),
         !is.na(input$m2),
         !is.na(input$sd1),
         !is.na(input$sd2),
         !is.na(input$n1),
-        !is.na(input$n2),
-        !is.na(input$m_digits),
-        !is.na(input$sd_digits))
-    
-    recalc::independent_t_test_summary(
-      # mandatory arguments
-      m1 = input$m1,
-      m2 = input$m2,
-      sd1 = input$sd1,
-      sd2 = input$sd2,
-      n1 = input$n1,
-      n2 = input$n2,
-      m_digits = input$m_digits,
-      sd_digits = input$sd_digits,
+        !is.na(input$n2)
+      )
       
-      # optional reported p
-      p_operator = input$p_operator,
-      p = input$p,
-      p_digits = input$p_digits,
-      p_methods = input$p_methods,
-      alpha = input$alpha,
-      
-      # optional reported SMD + CI
-      d = input$d,
-      d_ci_lower = input$d_ci_lower,
-      d_ci_upper = input$d_ci_upper,
-      direction = input$direction,
-      
-      # rounding / method options
-      input_rounding = get_input_rounding(),
-      output_rounding = get_output_rounding(),
-      d_digits = input$d_digits,
-      hedges_correction = get_hedges_correction(),
-      ci_methods = get_ci_methods(),
-      
-      include_se_sd_confusion = isTRUE(input$include_se_sd_confusion)
-    )
-  })
+      recalc::independent_t_test_summary(
+        m1 = input$m1,
+        m2 = input$m2,
+        sd1 = input$sd1,
+        sd2 = input$sd2,
+        n1 = input$n1,
+        n2 = input$n2,
+        m_digits = input$m_digits,
+        sd_digits = input$sd_digits,
+        
+        p_operator = input$p_operator,
+        p = input$p,
+        p_digits = input$p_digits,
+        p_methods = input$p_methods,
+        alpha = input$alpha,
+        
+        d = input$d,
+        d_ci_lower = input$d_ci_lower,
+        d_ci_upper = input$d_ci_upper,
+        direction = input$direction,
+        
+        input_rounding = get_input_rounding(),
+        output_rounding = get_output_rounding(),
+        d_digits = input$d_digits,
+        hedges_correction = get_hedges_correction(),
+        ci_methods = get_ci_methods(),
+        include_se_sd_confusion = isTRUE(input$include_se_sd_confusion)
+      )
+    },
+    ignoreNULL = TRUE   # before first click, recalc_res() returns NULL
+  )
   
+  # Outputs depend ONLY on recalc_res()
   output$tbl_reproduced <- renderTable({
     res <- recalc_res()
-    req(res)
-    res$reproduced |>
-      select(p_operator,
-             p_reported = p,
-             p_min_rounded = min_p_rounded,
-             p_max_rounded = max_p_rounded,
-             p_in_bounds_given_operator = p_inbounds,
-             d_reported = d,
-             d_min_rounded = min_d_rounded,
-             d_max_rounded = max_d_rounded,
-             d_in_bounds = d_inbounds)
+    req(res)               # ensures the button has been clicked successfully
+    res$reproduced
   })
   
   output$plot_p <- renderPlot({
