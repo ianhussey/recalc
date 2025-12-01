@@ -1,5 +1,5 @@
 ---
-title: "Independent t test and Cohen's d from M/SD/N"
+title: "{recalc}: Find the bounds of an independent t test's p-value and Cohen's d from M/SD/N"
 author: "Ian Hussey"
 date: "`r format(Sys.time(), '%d %B %Y')`"
 output:
@@ -94,4 +94,3 @@ plot_multiverse_d(res, distinct_and_rounded = FALSE)
 #   kable() |>
 #   kable_classic(full_width = FALSE)
 ```
-
