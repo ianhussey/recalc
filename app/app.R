@@ -37,8 +37,10 @@ ui <- fluidPage(
       selectInput(
         "p_methods",
         "P-value method",
-        choices = c("student_t", "welch_t"),
-        selected = "student_t"
+        choices = c("Both Student's t and Welch's t" = "NULL", 
+                    "Student's t" = "student_t", 
+                    "Welch's t" = "welch_t"),
+        selected = "NULL"
       ),
       numericInput("alpha", "alpha", value = 0.05, min = 0, max = 1, step = 0.01),
       
@@ -132,6 +134,10 @@ server <- function(input, output, session) {
     if (identical(input$output_rounding, "NULL")) NULL else input$output_rounding
   })
   
+  get_p_methods <- reactive({
+    if (identical(input$p_methods, "NULL")) NULL else input$p_methods
+  })
+  
   get_hedges_correction <- reactive({
     switch(
       input$hedges_correction,
@@ -172,7 +178,7 @@ server <- function(input, output, session) {
         p_operator = input$p_operator,
         p = input$p,
         p_digits = input$p_digits,
-        p_methods = input$p_methods,
+        p_methods = get_p_methods(),
         alpha = input$alpha,
         
         d = input$d,
@@ -195,7 +201,16 @@ server <- function(input, output, session) {
   output$tbl_reproduced <- renderTable({
     res <- recalc_res()
     req(res)               # ensures the button has been clicked successfully
-    res$reproduced
+    res$reproduced |>
+      select(p_operator,
+             p_reported = p,
+             p_min_rounded = min_p_rounded,
+             p_max_rounded = max_p_rounded,
+             p_in_bounds_given_operator = p_inbounds,
+             d_reported = d,
+             d_min_rounded = min_d_rounded,
+             d_max_rounded = max_d_rounded,
+             d_in_bounds = d_inbounds)
   })
   
   output$plot_p <- renderPlot({
