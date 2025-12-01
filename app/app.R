@@ -198,20 +198,32 @@ server <- function(input, output, session) {
   )
   
   # Outputs depend ONLY on recalc_res()
-  output$tbl_reproduced <- renderTable({
-    res <- recalc_res()
-    req(res)               # ensures the button has been clicked successfully
-    res$reproduced |>
-      select(p_operator,
-             p_reported = p,
-             p_min_rounded = min_p_rounded,
-             p_max_rounded = max_p_rounded,
-             p_in_bounds_given_operator = p_inbounds,
-             d_reported = d,
-             d_min_rounded = min_d_rounded,
-             d_max_rounded = max_d_rounded,
-             d_in_bounds = d_inbounds)
-  })
+  output$tbl_reproduced <- renderTable(
+    {
+      res <- recalc_res()
+      req(res)             # ensures the button has been clicked successfully
+      res$reproduced |>
+        dplyr::select(
+          p_operator,
+          p_reported         = p,
+          p_min_rounded      = min_p_rounded,
+          p_max_rounded      = max_p_rounded,
+          p_in_bounds_given_operator = p_inbounds,
+          d_reported         = d,
+          d_min_rounded      = min_d_rounded,
+          d_max_rounded      = max_d_rounded,
+          d_in_bounds        = d_inbounds
+        )
+    },
+    digits = function(df) {
+      max(
+        input$m_digits,
+        input$sd_digits,
+        input$p_digits,
+        input$d_digits
+      )
+    }
+  )
   
   output$plot_p <- renderPlot({
     res <- recalc_res()
