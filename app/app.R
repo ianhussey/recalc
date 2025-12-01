@@ -15,14 +15,14 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       h4("Summary statistics (required)"),
-      numericInput("m1", "Mean group 1", value = 10.30, step = 0.01),
-      numericInput("m2", "Mean group 2", value = 8.71, step = 0.01),
-      numericInput("sd1", "SD group 1", value = 3.12, step = 0.01),
-      numericInput("sd2", "SD group 2", value = 2.80, step = 0.01),
-      numericInput("n1", "N group 1", value = 50, min = 2, step = 1),
-      numericInput("n2", "N group 2", value = 48, min = 2, step = 1),
-      numericInput("m_digits", "Number of digits means reported to", value = 2, min = 0, step = 1),
-      numericInput("sd_digits", "Number of digits SDs reported to", value = 2, min = 0, step = 1),
+      numericInput("m1", "Mean group 1", value = NA, step = 0.01),
+      numericInput("m2", "Mean group 2", value = NA, step = 0.01),
+      numericInput("sd1", "SD group 1", value = NA, step = 0.01),
+      numericInput("sd2", "SD group 2", value = NA, step = 0.01),
+      numericInput("n1", "N group 1", value = NA, min = 2, step = 1),
+      numericInput("n2", "N group 2", value = NA, min = 2, step = 1),
+      numericInput("m_digits", "Number of digits means reported to", value = NA, min = 0, step = 1),
+      numericInput("sd_digits", "Number of digits SDs reported to", value = NA, min = 0, step = 1),
       
       hr(),
       h4("Reported p-value (optional)"),
@@ -106,28 +106,11 @@ ui <- fluidPage(
       ),
       
       hr(),
+      actionButton("run", "Run analysis"),
+      hr(),
       downloadButton("downloadReport", "Download HTML report")
     ),
     
-    # mainPanel(
-    #   tabsetPanel(
-    #     tabPanel(
-    #       "Reproduced results",
-    #       br(),
-    #       tableOutput("tbl_reproduced")
-    #     ),
-    #     tabPanel(
-    #       "P-value multiverse",
-    #       br(),
-    #       plotOutput("plot_p", height = "400px")
-    #     ),
-    #     tabPanel(
-    #       "Effect-size multiverse",
-    #       br(),
-    #       plotOutput("plot_d", height = "400px")
-    #     )
-    #   )
-    # )
     mainPanel(
       tableOutput("tbl_reproduced"),
       br(),
@@ -163,6 +146,15 @@ server <- function(input, output, session) {
   })
   
   recalc_res <- reactive({
+    req(!is.na(input$m1),
+        !is.na(input$m2),
+        !is.na(input$sd1),
+        !is.na(input$sd2),
+        !is.na(input$n1),
+        !is.na(input$n2),
+        !is.na(input$m_digits),
+        !is.na(input$sd_digits))
+    
     recalc::independent_t_test_summary(
       # mandatory arguments
       m1 = input$m1,
