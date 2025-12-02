@@ -45,3 +45,10 @@ remotes::install_github("ianhussey/recalc")
 ## Web app
 
 Shiny app available [here](https://errors.shinyapps.io/recalc_independent_t_test/).
+
+
+
+## TODO
+
+- Expand to include dependent t-test. The 'within' repo has some code for this, but the basis should be the code in this repo. Need to add choice of also using the reported t value, or p value, or pre-post correlation, or a reasonable estimate of this (eg .5 to .7, or perhaps .25 to .9) to be able to reproduce the p and d. produce estimates of both d_z and d_av. 
+- Use independent t test code to expand to one-way and two-way ANOVA, following Nick's original goal.
