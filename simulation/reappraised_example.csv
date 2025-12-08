@@ -1,0 +1,3 @@
+population_d,reconstruct_rounding,m1,m2,sd1,sd2,n1,n2,p,recalc_p_min_rounded,recalc_p_max_rounded,recalc_p_inbounds,bolland_p_min,bolland_p_max,bolland_p_inbounds,analysis_rounding
+Population Cohen's d = 0,rounded,-0.13,0,1.09,1.19,25,25,0.708,0.665,0.713,TRUE,9.662913960793492e-4,0.6901761465898465,FALSE,half_up
+Population Cohen's d = 2,rounded,-0.23,2.19,0.73,0.64,25,25,0.001,0,0,TRUE,7.652202896964087e-17,1.77463873503363e-16,FALSE,half_up
