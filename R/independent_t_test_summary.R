@@ -775,9 +775,7 @@ independent_t_test_summary <- function(
         # 4. Calculate Hedges g
         g_raw_directed <- .hedges_correction(d_raw_directed, stats_base$df_s)
         
-        # ----------------------------------------------------------
-        # Effect sizes + CIs
-        # ----------------------------------------------------------
+        # --- Effect sizes + CIs
         for (hedges_correction_current in hedges_correction) {
           
           es_est <- if (hedges_correction_current) g_raw_directed else d_raw_directed
@@ -858,9 +856,7 @@ independent_t_test_summary <- function(
           }
         }
         
-        # ----------------------------------------------------------
-        # p-values 
-        # ----------------------------------------------------------
+        # --- p-values 
         for (p_method in p_methods) {
           
           # Select result object based on method
