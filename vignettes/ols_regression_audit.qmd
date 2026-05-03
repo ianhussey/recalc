@@ -1,0 +1,345 @@
+---
+title: "Recalculation Checks for OLS Regression"
+subtitle: "A catalog of identities for the {recalc} package"
+author: "Ian Hussey"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    toc_float: true
+    code-fold: false
+    code-overflow: wrap
+    code-tools: true
+    warning: false
+    df-print: kable
+    theme:
+      light: cosmo
+      dark: darkly
+    highlight-style:
+      light: breeze
+      dark: dracula
+---
+
+# Purpose
+
+`{statcheck}` recalculates a single relationship: $p$ from a reported test statistic and degrees of freedom. OLS multiple regression admits many more recalculation identities — each one a hard mathematical relationship between quantities a paper typically reports separately. Any inconsistency between reported and recomputed values is either a transcription error, a labeling error (e.g., $b$ mislabeled as $\beta$), or a model-specification problem.
+
+This document catalogs identities testable from quantities **routinely** present in APA psychology manuscripts. Identities that depend on rarely-reported inputs — VIF, full ANOVA SS tables, partial-$r$ columns, fitted Cohen's $f^2$, single-predictor regressions reported as such — are not included here, because in practice the gating input never appears.
+
+**Inputs are rounded.** Every reported number has known precision — typically 2 or 3 decimal places. Under half-up / half-down rounding, a value $x$ to $d$ decimal places came from a true value in $[x - 0.5 \cdot 10^{-d},\, x + 0.5 \cdot 10^{-d}]$. Each function in this document propagates those rounding intervals through the identity and returns the achievable interval for the recomputed quantity. The check passes iff the recomputed and reported intervals overlap. Each numeric input has a paired `*_digits` argument; defaults reflect typical APA reporting (2 d.p. for coefficients, correlations, $R^2$; 3 d.p. for $p$-values; 0 d.p. for $N$, $k$, df).
+
+**Notation.** $Y$ is the outcome, $X_i$ the $i$th predictor, $k$ the number of predictors, $N$ the sample size, $\text{df} = N - k - 1$ the residual degrees of freedom. $b_i$ is unstandardized, $\beta_i$ standardized, $t_i$ its $t$-statistic, $\text{SE}_i$ its standard error. $r_{Yi}$ is the zero-order correlation between $X_i$ and $Y$, $r_{ij}$ inter-predictor correlation. $R^2$ is the model coefficient of determination.
+
+```{r}
+library(recalc)
+```
+
+# Types of checks
+
+## A. Single-coefficient identities
+
+### A1. $t$ from $b$ and SE
+
+$$t_i = b_i / \text{SE}_i$$
+
+The definition. Catches transcription errors and sign flips. Composes with A2 to recover $p$.
+
+```{r}
+recalc_t_from_b_se(b = -5.34, se = 0.56, t = -9.56)
+```
+
+### A2. $p$ from $t$ and df
+
+$$p_i = 2 \cdot \left[1 - F_t(|t_i|;\,\text{df})\right]$$
+
+Use `p_op = "lt"` for reports of the form `p < .001`. Composes with A1 (recover $t$ first if only $b$ and SE are reported).
+
+```{r}
+recalc_p_from_t_df(t = -9.56, df = 30, p = 0.001, p_op = "lt")
+```
+
+### A3. CI from $b$, SE, and df
+
+$$\text{CI}_{1-\alpha} = b_i \pm t_{1-\alpha/2,\,\text{df}} \cdot \text{SE}_i$$
+
+Particularly useful in reverse: when SE is missing, $\text{SE} = (\text{CI}_\text{upper} - \text{CI}_\text{lower})/(2 t_\text{crit})$ recovers it (see `recalc_se_from_ci()` in section D), which then feeds into A1 and A2.
+
+```{r}
+recalc_ci_from_b_se(b = -5.34, se = 0.56, df = 30, ci = c(-6.49, -4.20))
+```
+
+### A4. Standardization identity
+
+$$\beta_i = b_i \cdot \text{SD}_{X_i} / \text{SD}_Y$$
+
+The diagnostic for $b$/$\beta$ label confusion (see `diagnose_beta_label()` in section E). With SDs at 1 d.p. (typical), the recomputed-$\beta$ interval can be wide.
+
+```{r}
+recalc_beta_from_b(b = -5.34, sd_x = 0.98, sd_y = 6.03, beta = -0.87)
+```
+
+### A6. Bound on $|t|$ from $\beta$ and $R^2$
+
+VIF is rarely reported in APA psychology manuscripts, so the full identity $t_i = \beta_i \sqrt{(N-k-1)/((1-R^2)\,\text{VIF}_i)}$ is usually not testable. But $\text{VIF}_i \geq 1$ always, so the inequality
+
+$$|t_i| \leq |\beta_i| \cdot \sqrt{(N - k - 1)/(1 - R^2)}$$
+
+is testable from quantities that *are* routinely reported ($\beta$, $R^2$, $N$, $k$). A reported $|t|$ exceeding this bound is impossible.
+
+```{r}
+recalc_t_bound_from_beta(beta = 0.30, r2 = 0.20, n = 200, k = 3, t = 4.20)
+```
+
+### A8. Semipartial $r^2$ (= $\Delta R^2$) from $t$
+
+$$\text{sr}_i^2 = t_i^2 (1 - R^2) / \text{df}$$
+
+The squared semipartial equals $\Delta R^2$ for adding $X_i$ to the model. Useful in hierarchical regressions that report per-step $\Delta R^2$.
+
+```{r}
+recalc_semipartial_r2_from_t(t = 3.50, r2 = 0.40, df = 200, sr2 = 0.037)
+```
+
+## B. Model-level identities
+
+### B1. $R^2 \leftrightarrow F$
+
+$$F = \frac{R^2 / k}{(1 - R^2)/(N - k - 1)}, \qquad R^2 = \frac{F k}{F k + (N - k - 1)}$$
+
+Composes with B2 in either direction. Most common chain: paper omits $F$ but reports $R^2$, $N$, $k$ — `recalc_f_from_r2()` reconstructs $F$, then `recalc_p_from_f()` gives $p_\text{model}$.
+
+```{r}
+recalc_f_from_r2(r2 = 0.41, n = 1923, k = 2, f = 665.4)
+recalc_r2_from_f(f = 665.4, n = 1923, k = 2, r2 = 0.41)
+```
+
+### B2. Model $p$ from $F$
+
+$$p_\text{model} = 1 - F_F(F;\, k,\, N - k - 1)$$
+
+Composes with B1: when $F$ is not reported, recompute it from $R^2$ first (B1), then call B2 with the resulting $F$. The intervals propagate through the chain — i.e., the resulting $p$ interval reflects rounding on $R^2$, $N$, and $k$.
+
+```{r}
+recalc_p_from_f(f = 665.4, df1 = 2, df2 = 1920, p = 0.001, p_op = "lt")
+```
+
+### B3. Adjusted $R^2$
+
+$$R^2_\text{adj} = 1 - (1 - R^2)\,(N - 1)/(N - k - 1)$$
+
+The check is also the diagnostic for $R^2$/$R^2_\text{adj}$ label confusion: when "$R^2$" doesn't satisfy B4 but does match $R^2_\text{adj}$ derived from a B4-consistent raw $R^2$, the column is mislabeled. See `diagnose_r2_label()` in section E.
+
+```{r}
+recalc_adj_r2(r2 = 0.41, n = 1923, k = 2, adj_r2 = 0.41)
+```
+
+### B4. $R^2 = \sum \beta_i r_{Yi}$
+
+The standardized OLS solution decomposes $R^2$ as $\sum_i \beta_i r_{Yi}$. Inputs are vectors; rounding is propagated by enumerating $2^{2k}$ corner combinations.
+
+```{r}
+recalc_r2_from_betas_corrs(betas = c(-0.39, 0.47), r_y = c(-0.53, 0.61),
+                           r2 = 0.41)
+```
+
+### B5. Hierarchical $\Delta R^2$ blocks
+
+$$R^2_\text{full} = \sum_j \Delta R^2_j$$
+
+Holds by construction in any hierarchical regression. Composes with A8: each per-step $\Delta R^2$ should also equal $\text{sr}_i^2$ for the predictor added that step (when the step adds one predictor).
+
+```{r}
+recalc_r2_from_blocks(delta_r2 = c(0.18, 0.23), r2 = 0.41)
+```
+
+## C. Cross-equation / multi-predictor identities
+
+### C1. Standardized normal equations ($k = 2$)
+
+$$r_{12} = (r_{Y1} - \beta_1)/\beta_2 = (r_{Y2} - \beta_2)/\beta_1$$
+
+For an internally consistent OLS fit the two derivations of $r_{12}$ must agree. Composes with C2: if Table 1 reports $r_{12}$, the same value should also satisfy B4 via C2's closed form.
+
+```{r}
+recalc_r12_from_normal_eqs(beta1 = -0.39, beta2 = 0.47,
+                           r_y1 = -0.53, r_y2 = 0.61)
+```
+
+### C2. Closed-form $\beta$ from correlations ($k = 2$)
+
+$$\beta_1 = \frac{r_{Y1} - r_{12} r_{Y2}}{1 - r_{12}^2}, \qquad \beta_2 = \frac{r_{Y2} - r_{12} r_{Y1}}{1 - r_{12}^2}$$
+
+Hard cross-check between Table 1 (correlation matrix) and Table 2 (regression) for any $k = 2$ paper. When both Table 1 and Table 2 are reported, this is independent of B4.
+
+```{r}
+recalc_betas_from_corrs_k2(r_y1 = -0.53, r_y2 = 0.61, r_12 = -0.45,
+                           betas = c(-0.39, 0.47))
+```
+
+### C4. $R^2$ floor from zero-order correlations
+
+$$R^2_\text{full} \geq \max_i r_{Yi}^2$$
+
+A reported full-model $R^2$ below this floor is impossible. Cheap, one-sided, and applicable whenever Table 1 reports correlations of predictors with $Y$. Often passes; the value is in the rare case it fails.
+
+```{r}
+recalc_r2_floor_from_correlations(r_y = c(-0.53, 0.61), r2 = 0.41)
+```
+
+### C5. Hierarchical $\Delta F$
+
+$$\Delta F = \frac{(R^2_2 - R^2_1)/\Delta k}{(1 - R^2_2)/(N - k_2 - 1)}$$
+
+Composes with B2 (recalc model $p$ from a recomputed $\Delta F$ on $\Delta k$, $N - k_2 - 1$ df).
+
+```{r}
+recalc_delta_f(r2_full = 0.41, r2_reduced = 0.18, delta_k = 1,
+               n = 1923, k_full = 2, delta_f = 750.1)
+```
+
+### C6. $\sum \beta_i r_{Yi} = F k / (Fk + N - k - 1)$
+
+Combines B1 and B4 into a single check that bypasses a missing $R^2$. When the paper omits $R^2$ but reports $F$ along with $\beta$s and $r_{Yi}$s, this is the most economical check available.
+
+```{r}
+recalc_betar_from_f(betas = c(-0.39, 0.47), r_y = c(-0.53, 0.61),
+                   f = 665.4, n = 1923, k = 2)
+```
+
+# Composing checks: filling in unreported quantities
+
+Many APA papers omit one or two quantities that other quantities pin down. Composing the checks above lets you reconstruct the missing piece and then audit the rest. Common chains:
+
+1. **$F$ not reported, $R^2$ is.** Use B1 (`recalc_f_from_r2`) to compute $F$, then B2 (`recalc_p_from_f`) to compute $p_\text{model}$. Both intervals propagate input rounding, so the resulting $p_\text{model}$ interval correctly reflects rounding on $R^2$, $N$, and $k$.
+
+2. **SE not reported, $b$ and CI are.** Solve A3 backwards: $\text{SE} = (\text{CI}_\text{upper} - \text{CI}_\text{lower})/(2 t_\text{crit})$. The recovered SE then feeds A1 (gives $t$) and A2 (gives $p$). Provided as `recalc_se_from_ci()` below.
+
+3. **$R^2$ not reported, $F$ is.** Use B1 inverse (`recalc_r2_from_f`). Or, when Table 1 is available, skip the intermediate step with C6.
+
+4. **$R^2$ not reported, $F$ also not reported, but $\beta$s and $r_{Yi}$s are.** Use B4 directly to get $R^2$. Then chain into B1 to get $F$, B2 to get $p_\text{model}$.
+
+5. **df implicit only.** A2 needs df. If only $N$ and $k$ are reported, $\text{df} = N - k - 1$. The functions in section A take df directly; the calling code computes df from $N$ and $k$.
+
+6. **Per-predictor $\Delta R^2$ in a hierarchical model, but $t$s only in the final model.** A8 computes $\text{sr}_i^2$ from the final-model $t$ and the full-model $R^2$. That value should equal the reported $\Delta R^2$ when $X_i$ was added in its own block.
+
+7. **Whole-paper audit, typical inputs.** For papers reporting $\beta$, $r_{Yi}$, $R^2$, $F$, $p_\text{model}$, $N$, $k$: run B1 (F vs R²), B2 (p_model from F), B3 (adj R² if reported), B4 (β·r → R²), C4 (R² floor), and — if $k = 2$ and the correlation table includes $r_{12}$ — C1 and C2. Inconsistencies in the model summary are caught by B1–B3; inconsistencies between coefficients and the model summary are caught by B4 and C1.
+
+`recalc_se_from_ci()` — inverse of A3:
+
+```{r}
+recalc_se_from_ci(ci = c(-6.49, -4.20), df = 30)
+```
+
+`recalc_p_model_from_r2()` — chains B1 → B2 in one step so rounding propagates across both stages:
+
+```{r}
+recalc_p_model_from_r2(r2 = 0.41, n = 1923, k = 2,
+                       p_model = 0.001, p_op = "lt")
+```
+
+# Misreporting diagnostics
+
+Some inconsistencies are not arithmetic errors but **label confusions**: a column intended as one quantity is reported as another. The checks above will flag them, but framing the diagnostic explicitly tells you *which* labeling resolves the discrepancy. Two label confusions are particularly common in OLS regression reporting.
+
+## $\beta$ mislabeled as $b$ (or vice versa)
+
+The most common label error is unstandardized coefficients in a column titled "$\beta$" (or, less often, standardized coefficients in a column titled "$b$"). Diagnostic: compute $R^2$ under both interpretations and report which (if any) is consistent with the reported $R^2$.
+
+- Interpretation A (column is true $\beta$): apply B4 directly with `betas = coef_reported`.
+- Interpretation B (column is $b$ mislabeled as $\beta$): convert each value via $\beta_\text{implied} = b \cdot \text{SD}_X / \text{SD}_Y$ (A4), then apply B4 with the implied $\beta$s.
+
+If A is consistent and B is not, the labeling is correct (and any remaining inconsistency is arithmetic). If B is consistent and A is not, the column is mislabeled. If neither is consistent, the gap is structural — the model that was fit is not the model described.
+
+```{r}
+diagnose_beta_label(
+  coef_reported = c(-0.39, 0.47),
+  r_y = c(-0.53, 0.61),
+  sd_x = c(1.2, 0.5),
+  sd_y = 1.4,
+  r2 = 0.41,
+  sd_x_digits = 1, sd_y_digits = 1
+)
+```
+
+## $R^2$ mislabeled as $R^2_\text{adj}$ (or vice versa)
+
+Papers occasionally report a value called "$R^2$" that is actually adjusted $R^2$ (or vice versa). Diagnostic: invert B3 to back out the implied raw $R^2$ from a candidate adjusted-$R^2$ reading, then test against an independent recomputation (B4 from $\beta$ and $r_{Yi}$).
+
+If $R^2_\text{reported}$ matches B4 directly, it is the raw $R^2$ as labeled. If it does not match B4 but the raw $R^2$ implied by $R^2_\text{reported} = R^2_\text{adj}$ does match B4, the value is mislabeled adjusted $R^2$. (At large $N$ the two are nearly identical and the diagnostic has little power — by design.)
+
+```{r}
+diagnose_r2_label(
+  r2_reported = 0.41,
+  betas = c(-0.39, 0.47), r_y = c(-0.53, 0.61),
+  n = 1923, k = 2
+)
+```
+
+## One-tailed $p$ reported as two-tailed (or vice versa)
+
+A reported $p$ that fails A2 under the default two-tailed assumption may be consistent with a one-tailed test. The diagnostic runs A2 under both tail conventions and reports both intervals; if exactly one is consistent with the reported $p$, the tail convention is the issue.
+
+This matters most for borderline-significant findings. Catches a common error in directional-hypothesis reporting.
+
+```{r}
+diagnose_p_tails(t = 1.85, df = 200, p = 0.033)
+```
+
+# Wrappers: audit and report
+
+`audit_regression()` takes the complete set of quantities a paper might report and dispatches every recalculation check whose inputs are present. Per-predictor checks (A1–A4, A6 bound, A8) run once for each predictor whose inputs are available; model-level (B1–B5) and cross-equation (C1, C2, C4, C6) checks run once when their inputs are available. Missing inputs cause the corresponding checks to be skipped silently. Result rows carry a `predictor` column identifying the row's scope (`"model"` or a predictor name/index).
+
+By default the wrapper *also* runs the section-E label-confusion diagnostics (`diagnostics = TRUE`): E1 ($\beta$ vs $b$), E2 ($R^2$ vs $R^2_\text{adj}$), and E3 (one- vs two-tailed $p$, per predictor). Diagnostic rows are emitted under the same column structure with `check` strings prefixed `E1`, `E2`, `E3`. To disable diagnostics for a coefficient-only audit, pass `diagnostics = FALSE`.
+
+C5 (hierarchical $\Delta F$) is structurally distinct (requires a nested-model pair with separate $R^2$, $k$, and increment metadata) and is not dispatched by the wrapper — call `recalc_delta_f()` directly.
+
+The audit tibble is consumed by `summarise_audit()`, which produces a natural-language report: an overall conclusion (consistent / inconsistent / inconsistent-but-resolved-by-labeling), per-check failure details with reported value, recomputed interval, and minimum interval gap, a list of passed checks and reconstructed quantities, and a verdict for each diagnostic group (whether a labeling alternative reconciles the report).
+
+# Worked example: Baldeo (2025)
+
+Baldeo's reported quantities (to the precision printed in the manuscript):
+
+- $\beta_1 = -0.39$, $\beta_2 = 0.47$
+- $r_{Y1} = -0.53$, $r_{Y2} = 0.61$
+- $R^2 = 0.41$
+- $\text{SD}_{X_1} = 1.2$, $\text{SD}_{X_2} = 0.5$, $\text{SD}_Y = 1.4$ (1 d.p.)
+- $N = 1923$, $k = 2$
+
+A complete audit using the wrapper. With `diagnostics = TRUE` (the default), the result tibble contains direct checks (B1, B3, B2-via-chain, B4, C1, C4) *and* the label-confusion diagnostics (E1, E2):
+
+```{r}
+#| label: baldeo-audit
+
+baldeo <- audit_regression(
+  n = 1923, 
+  k = 2,
+  r2 = 0.41,
+  beta = c(-0.39, 0.47),
+  r_y = c(-0.53, 0.61),
+  sd_y = 1.4, 
+  sd_x = c(1.2, 0.5),
+  sd_y_digits = 1, 
+  sd_x_digits = 1,
+  predictor_names = c("AI_reliance", "override_freq")
+)
+
+baldeo
+```
+
+The natural-language report:
+
+```{r}
+#| label: baldeo-summary
+
+summarise_audit(baldeo)
+```
+
+The summary states the overall verdict (inconsistent, with no labeling correction reconciling the gap), enumerates each failed check with reported value, recomputed interval, and minimum interval gap, lists passes and reconstructed quantities, and reports a verdict for each diagnostic group: both E1 and E2 are flagged "does not explain" because neither labeling interpretation is consistent. This matches the conclusion in `trustworthiness_assessment.qmd`: the reported quantities are mutually irreconcilable under any of the standard labeling errors.
+
+# Summary
+
+The catalog covers 16 recalculation identities organised into single-coefficient (A1–A4, A6, A8), model-level (B1–B5), and cross-equation (C1, C2, C4–C6) groups, plus composition helpers (D), label-confusion diagnostics (E), a dispatcher wrapper (F: `audit_regression()`), and a natural-language reporter (F: `summarise_audit()`). Every identity uses inputs that are routinely reported in APA psychology manuscripts.
+
+Each function takes numeric inputs paired with `*_digits` arguments specifying their reported precision; rounding is propagated through the identity by enumerating corners of the input-interval product, and the recomputed quantity is returned as a `[lower, upper]` interval. The check passes iff the reported and recomputed intervals overlap. `audit_regression()` accepts whatever subset of quantities a paper reports and runs every check that has all its inputs available, including label-confusion diagnostics by default; results are returned as a single tibble. `summarise_audit()` consumes that tibble and returns a verdict-oriented report: an overall conclusion (consistent / inconsistent / inconsistent-but-resolved-by-labeling), per-check failures with reported values and recomputed intervals, passed checks, reconstructed quantities, and per-diagnostic labeling verdicts. Composition helpers (D) and chained variants like `recalc_p_model_from_r2()` fill in unreported quantities while keeping rounding propagation correct across the chain.
