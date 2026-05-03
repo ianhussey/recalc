@@ -6,9 +6,7 @@
 \alias{recalc-package}
 \title{recalc: Tools for Recalculation Multiverses}
 \description{
-This package provides functions to explore multiverses of effect sizes,
-confidence intervals, and p-values compatible with reported summary
-statistics.
+Recalculate statistical results from reported summary and test statistics.
 }
 \author{
 \strong{Maintainer}: Ian Hussey \email{Ian.hussey@unibe.ch} (\href{https://orcid.org/0000-0001-8906-7559}{ORCID})
