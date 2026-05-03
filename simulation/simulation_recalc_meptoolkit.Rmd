@@ -1,0 +1,501 @@
+---
+title: "Validation of {recalc} and {MEPtoolkit}"
+author: "Ian Hussey"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    highlight: haddock
+    theme: flatly
+    toc: yes
+    toc_float: yes
+---
+
+# TODO package
+
+- add one vs two sided p value?
+- other versions of d?
+- input assumes both Ms and both SDs have identical precision. is this ever violated?
+- t = results_original_t, # bounds?
+- df = results_original_df) # value?
+- consider using scrutiny::restore_zeros in min and max output, using m_digits, sd_digits, and d_digits
+
+# TODO sims
+
+- add welch's test and unbalanced SDs
+- 
+
+```{r include=FALSE}
+
+# formatting options
+# set default chunk options
+knitr::opts_chunk$set(message = FALSE, 
+                      warning = FALSE)
+
+# disable scientific notation
+options(scipen = 999) 
+
+```
+
+# Dependencies
+
+```{r}
+
+library(tibble)
+library(roundwork)
+# devtools::install_github("ianhussey/recalc")
+library(recalc)
+library(MEPtoolkit)
+
+library(tidyr)
+library(dplyr)
+library(forcats)
+library(readr)
+library(purrr) 
+library(furrr)
+library(ggplot2)
+library(ggstance)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(parameters)
+library(effectsize)
+
+```
+
+# Functions
+
+```{r}
+
+# functions for simulation
+generate_data <- function(m1,
+                          m2,
+                          sd1,
+                          sd2,
+                          n1,
+                          n2) {
+  
+  data1 <- 
+    tibble(condition = "1",
+           score = rnorm(n = n1, mean = m1, sd = sd1))
+  
+  data2 <- 
+    tibble(condition = "2",
+           score = rnorm(n = n2, mean = m2, sd = sd2))
+  
+  data_combined <- bind_rows(data1,
+                             data2)
+  
+  return(data_combined)
+}
+
+analyze <- function(data, 
+                    m_digits,
+                    sd_digits,
+                    d_digits,
+                    p_digits,
+                    analysis_rounding) {
+  
+  res_summary <- data |>
+    group_by(condition) |>
+    summarize(m = mean(score),
+              sd = sd(score),
+              n = n()) |>
+    pivot_wider(names_from = condition, 
+                names_sep = "",
+                values_from = c("m", "sd", "n"))
+  
+  res_ttest <- 
+    t.test(formula = score ~ condition, 
+           data = data,
+           var.equal = TRUE,
+           alternative = "two.sided") |>
+    model_parameters() |>
+    as_tibble() |>
+    select(t, df = df_error, p)
+  
+  res_d <- effectsize::cohens_d(score ~ condition,
+                                data = data) |>
+    as_tibble() |>
+    select(d = Cohens_d,
+           d_ci_lower = CI_low,
+           d_ci_upper = CI_high)
+  
+  res <- bind_cols(res_summary, 
+                   res_ttest,
+                   res_d)
+  
+  if(analysis_rounding == "half_up"){
+    res <- res |>
+      mutate(m1 = round_up(m1, m_digits),
+             m2 = round_up(m2, m_digits),
+             sd1 = round_up(sd1, sd_digits),
+             sd2 = round_up(sd2, sd_digits),
+             d = round_up(d, d_digits),
+             d_ci_lower = round_up(d_ci_lower, d_digits),
+             d_ci_upper = round_up(d_ci_upper, d_digits),
+             p = round_up(p, p_digits),
+             p_operator = dplyr::if_else(dplyr::near(p, 0), "less_than", "equals"),
+             p = dplyr::if_else(dplyr::near(p, 0), 1 * 10^-p_digits, p))
+  } else if(analysis_rounding == "half_down"){
+    res <- res |>
+      mutate(m1 = round_down(m1, m_digits),
+             m2 = round_down(m2, m_digits),
+             sd1 = round_down(sd1, sd_digits),
+             sd2 = round_down(sd2, sd_digits),
+             d = round_down(d, d_digits),
+             d_ci_lower = round_down(d_ci_lower, d_digits),
+             d_ci_upper = round_down(d_ci_upper, d_digits),
+             p = round_down(p, p_digits),
+             p_operator = dplyr::if_else(dplyr::near(p, 0), "less_than", "equals"),
+             p = dplyr::if_else(dplyr::near(p, 0), 1 * 10^-p_digits, p))
+  } else if(analysis_rounding == "bankers"){
+    res <- res |>
+      mutate(m1 = round(m1, m_digits),
+             m2 = round(m2, m_digits),
+             sd1 = round(sd1, sd_digits),
+             sd2 = round(sd2, sd_digits),
+             d = round(d, d_digits),
+             d_ci_lower = round(d_ci_lower, d_digits),
+             d_ci_upper = round(d_ci_upper, d_digits),
+             p = round(p, p_digits),
+             p_operator = dplyr::if_else(dplyr::near(p, 0), "less_than", "equals"),
+             p = dplyr::if_else(dplyr::near(p, 0), 1 * 10^-p_digits, p))
+  } else if(analysis_rounding == "trunc"){
+    res <- res |>
+      mutate(m1 = round_trunc(m1, m_digits),
+             m2 = round_trunc(m2, m_digits),
+             sd1 = round_trunc(sd1, sd_digits),
+             sd2 = round_trunc(sd2, sd_digits),
+             d = round_trunc(d, d_digits),
+             d_ci_lower = round_trunc(d_ci_lower, d_digits),
+             d_ci_upper = round_trunc(d_ci_upper, d_digits),
+             p = round_trunc(p, p_digits),
+             p_operator = dplyr::if_else(dplyr::near(p, 0), "less_than", "equals"),
+             p = dplyr::if_else(dplyr::near(p, 0), 1 * 10^-p_digits, p))
+  } 
+  
+  return(res)
+}
+
+reconstruct <- function(results, 
+                        m_digits,
+                        sd_digits,
+                        d_digits,
+                        p_digits,
+                        direction,
+                        hedges_correction,
+                        include_se_sd_confusion,
+                        reconstruct_rounding,
+                        output_rounding){
+  independent_t_test_summary(
+    m1 = results$m1,
+    m2 = results$m2,
+    sd1 = results$sd1,
+    sd2 = results$sd2,
+    n1 = results$n1,
+    n2 = results$n2,
+    d = results$d,
+    d_ci_lower = results$d_ci_lower,
+    d_ci_upper = results$d_ci_upper,
+    p_operator = results$p_operator,
+    p = results$p,
+    input_rounding = reconstruct_rounding,
+    output_rounding = output_rounding,
+    m_digits = m_digits,
+    sd_digits = sd_digits,
+    d_digits = d_digits,
+    direction = direction,
+    hedges_correction = hedges_correction,
+    p_digits = p_digits,
+    include_se_sd_confusion = include_se_sd_confusion
+  )$reproduced
+}
+
+
+
+#' @export
+reconstruct_t_slicer <- function(results, output = FALSE){
+  
+  fit <- t_slicer(m1 = as.character(results$m1),
+                  s1 = as.character(results$sd1),
+                  n1 = results$n1,
+                  m2 = as.character(results$m2),
+                  s2 = as.character(results$sd2),
+                  n2 = results$n2,
+                  p  = as.character(results$p),
+                  output = output)
+  
+  res <- data.frame(
+    tslicer_p_rivits_student = fit$Student_RIVETS,
+    tslicer_p_min_student = fit$Student_min,
+    tslicer_p_max_student = fit$Student_max,
+    tslicer_p_min_welch = fit$Welch_min,
+    tslicer_p_max_welch = fit$Welch_max
+  ) |>
+    mutate_all(as.numeric) |>
+    mutate(p_inbounds_tslicer = if_else(between(results$p, tslicer_p_min_student, tslicer_p_max_student) |
+                                  between(results$p, tslicer_p_min_welch, tslicer_p_max_welch), 
+                                TRUE,
+                                FALSE))
+  
+  return(res)
+}
+
+```
+
+# Run simulation
+
+```{r}
+
+if(file.exists("simulation.rds")){
+  simulation <- read_rds("simulation_mep.rds")
+} else {
+  
+  # simulation parameters
+  experiment_parameters <- expand_grid(
+    pop_m1 = 0,
+    pop_m2 = c(0, 2),
+    pop_sd1 = 1,
+    pop_sd2 = 1, 
+    pop_n1 = 25,
+    pop_n2 = 25, 
+    m_digits = 2,
+    sd_digits = 2,
+    d_digits = 2,
+    p_digits = 3,
+    analysis_rounding = c("half_up", "half_down", "bankers", "trunc"),
+    reconstruct_rounding = c("truncated", "rounded"),
+    output_rounding = c("half_up", "half_down", "bankers", "trunc"),
+    include_se_sd_confusion = FALSE,
+    direction = "m1_minus_m2",
+    hedges_correction = FALSE, 
+    iteration = 1:100
+  ) 
+  
+  # set up parallelization
+  plan(multisession, workers = future::availableCores())
+  
+  # set seed
+  set.seed(42)
+  
+  # run simulation
+  simulation <- experiment_parameters |>
+    # generate datasets
+    mutate(generated_data = future_pmap(.l = list(m1 = pop_m1,
+                                                  m2 = pop_m2,
+                                                  sd1 = pop_sd1,
+                                                  sd2 = pop_sd2,
+                                                  n1 = pop_n1,
+                                                  n2 = pop_n2),
+                                        .f = generate_data,
+                                        .progress = TRUE,
+                                        .options = furrr_options(seed = TRUE))) |>
+    # analyze data to create the real p and d values and summary stats
+    mutate(results_original = future_pmap(.l = list(data = generated_data,
+                                                    m_digits = m_digits,
+                                                    sd_digits = sd_digits,
+                                                    d_digits = d_digits,
+                                                    p_digits = p_digits,
+                                                    analysis_rounding = analysis_rounding),
+                                          .f = analyze,
+                                          .progress = TRUE,
+                                          .options = furrr_options(seed = TRUE))) |>
+    # use recalc to reconstruct the p and d bounds
+    mutate(results_reconstructed = future_pmap(.l = list(results = results_original,
+                                                         m_digits = m_digits,
+                                                         sd_digits = sd_digits,
+                                                         d_digits = d_digits,
+                                                         p_digits = p_digits,
+                                                         direction = direction,
+                                                         hedges_correction = hedges_correction,
+                                                         include_se_sd_confusion = include_se_sd_confusion,
+                                                         reconstruct_rounding = reconstruct_rounding,
+                                                         output_rounding = output_rounding),
+                                               .f = reconstruct,
+                                               .progress = TRUE,
+                                               .options = furrr_options(seed = TRUE))) |>
+    unnest(results_reconstructed) |>
+    mutate(d_beyond_bounds = case_when(d < min_d_rounded ~ d-min_d_rounded,
+                                       d > max_d_rounded ~ max_d_rounded-d,
+                                       TRUE ~ 0),
+           d_abs_beyond_bounds = abs(d_beyond_bounds),
+           p_beyond_bounds = case_when(p < min_p_rounded ~ p-min_p_rounded,
+                                       p > max_p_rounded ~ max_p_rounded-p,
+                                       TRUE ~ 0),
+           p_abs_beyond_bounds = abs(p_beyond_bounds)) |>
+    
+    # use reappraised to reconstruct the p bounds
+    mutate(results_reconstructed_t_slicer = future_pmap(.l = list(results = results_original),
+                                                       .f = reconstruct_t_slicer,
+                                                       .progress = TRUE,
+                                                       .options = furrr_options(seed = TRUE))) |>
+    unnest(results_reconstructed_t_slicer) 
+  
+  write_rds(simulation, "simulation_mep.rds", compress = "gz")
+  
+}
+
+```
+
+# Summarize results
+
+## recalc's coverage
+
+All results
+
+```{r}
+
+simulation_coverage <- simulation |>
+  filter(pop_m2 == 0) |> # hack for the moment
+  #group_by(pop_es = pop_m2, analysis_rounding, reconstruct_rounding, output_rounding) |>
+  summarize(
+    coverage_p_recalc = mean(p_inbounds),
+    coverage_p_tslicer = mean(p_inbounds_tslicer)
+  )
+
+simulation_coverage |>
+  kable() |>
+  kable_classic(full_width = FALSE)
+
+```
+
+By factorial, only cells with imperfect coverage
+
+```{r}
+
+simulation_coverage_by <- simulation |>
+  filter(pop_m2 == 0) |> # hack for the moment
+  group_by(pop_es = pop_m2, analysis_rounding, reconstruct_rounding, output_rounding) |>
+  summarize(
+    coverage_p_recalc = mean(p_inbounds),
+    coverage_p_tslicer = mean(p_inbounds_tslicer)
+  )
+
+simulation_coverage_by |>
+  filter(!near(coverage_p_recalc, 1) |
+           !near(coverage_p_tslicer, 1)) |>
+  kable() |>
+  kable_classic(full_width = FALSE)
+
+```
+
+By factorial, only cells with imperfect coverage, output_rounding != "trunc"
+
+```{r}
+
+simulation_coverage_by |>
+  filter(output_rounding != "trunc") |>
+  filter(!near(coverage_p_recalc, 1) |
+           !near(coverage_p_tslicer, 1)) |>
+  kable() |>
+  kable_classic(full_width = FALSE)
+
+```
+
+By factorial, only cells with imperfect coverage, output_rounding != "trunc" & reconstruct_rounding == "truncated"
+
+
+Imperfect coverage is expected when the analysis was reported using truncation (offset up to ±.01) but the reconstruction was done using rounding (offset up to ±.005):
+
+## MEPtoolkit t_slicer's coverage
+
+only output_rounding == "half_up"
+
+```{r}
+
+simulation |>
+  filter(pop_m2 == 0) |> # hack for the moment
+  filter(output_rounding == "half_up") |>
+  rowwise() |>
+  mutate(p_min_tslicer = min(c(tslicer_p_min_student, tslicer_p_min_welch)),
+         p_max_tslicer = min(c(tslicer_p_max_student, tslicer_p_max_welch))) |>
+  ungroup() |>
+  #filter(!p_inbounds_tslicer) |>
+  ggplot(aes(x = p, y = tslicer_p_rivits_student, color = p_inbounds_tslicer)) +
+  geom_abline(slope = 1, linetype = "dotted") +
+  geom_linerange(aes(ymin = p_min_tslicer, ymax = p_max_tslicer), alpha = 0.6) +
+  geom_point(alpha = 0.6) +
+  theme_linedraw() +
+  facet_grid(analysis_rounding ~ reconstruct_rounding) +
+  ggtitle("MEPtoolkit's false positives")
+
+simulation |>
+  filter(pop_m2 == 0) |> # hack for the moment
+  filter(output_rounding == "half_up") |>
+  rowwise() |>
+  mutate(p_min_tslicer = min(c(tslicer_p_min_student, tslicer_p_min_welch)),
+         p_max_tslicer = min(c(tslicer_p_max_student, tslicer_p_max_welch))) |>
+  ungroup() |>
+  filter(!p_inbounds_tslicer) |>
+  ggplot(aes(x = p, y = tslicer_p_rivits_student, color = p_inbounds_tslicer)) +
+  geom_abline(slope = 1, linetype = "dotted") +
+  geom_linerange(aes(ymin = p_min_tslicer, ymax = p_max_tslicer), alpha = 0.6) +
+  geom_point(alpha = 0.6) +
+  theme_linedraw() +
+  facet_grid(analysis_rounding ~ reconstruct_rounding) +
+  ggtitle("MEPtoolkit's false positives")
+
+```
+
+### Example of a dataset that generates an incorrect conclusion (false positive inconsistency) 
+
+TODO
+
+```{r}
+
+# reappraised_example <- simulation |>
+#   filter(analysis_rounding == "half_up" & reconstruct_rounding == "rounded") |>
+#   arrange(desc(p_abs_beyond_bounds_bolland)) |>
+#   slice(1:1) |>
+#   unnest(results_original, names_sep = "_") |>
+#   select(m1 = results_original_m1,
+#          m2 = results_original_m2,
+#          sd1 = results_original_sd1,
+#          sd2 = results_original_sd2,
+#          n1 = results_original_n1,
+#          n2 = results_original_n2,
+#          p = results_original_p,
+#          recalc_p_min_rounded = min_p_rounded,
+#          recalc_p_max_rounded = max_p_rounded,
+#          recalc_p_inbounds = p_inbounds,
+#          bolland_p_min = p_min_bolland,
+#          bolland_p_max = p_max_bolland,
+#          bolland_p_inbounds = p_inbounds_tslicer,
+#          analysis_rounding)
+# 
+# reappraised_example |>
+#   kable() |>
+#   kable_classic(full_width = FALSE)
+# 
+# write_csv(reappraised_example, "reappraised_example.csv")
+# 
+# 
+# 
+# reappraised_example_data <- simulation |>
+#   filter(analysis_rounding == "half_up" & reconstruct_rounding == "rounded") |>
+#   arrange(desc(p_abs_beyond_bounds_bolland)) |>
+#   slice(1:1) |>
+#   select(generated_data) |>
+#   unnest(generated_data) 
+# 
+# reappraised_example_data |>
+#   kable() |>
+#   kable_classic(full_width = FALSE)
+# 
+# write_csv(reappraised_example_data, "reappraised_example_data.csv")
+# 
+# reappraised_example_data |>
+#   group_by(condition) |>
+#   summarize(n = n(),
+#             mean = mean(score),
+#             sd = sd(score)) |>
+#   mutate_if(is.numeric, roundwork::round_down, digits = 2) |>
+#   kable() |>
+#   kable_classic(full_width = FALSE)
+
+```
+
+
+
+
