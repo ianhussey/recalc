@@ -4,14 +4,24 @@
 \alias{recalc_mediation_ab}
 \title{Verify a reported indirect effect against the product of path coefficients}
 \usage{
-recalc_mediation_ab(a, b, ab = NULL, a_digits = 3, b_digits = 3, ab_digits = 3)
+recalc_mediation_ab(
+  a,
+  b,
+  ab = NULL,
+  a_digits = NULL,
+  b_digits = NULL,
+  ab_digits = NULL
+)
 }
 \arguments{
 \item{a, b}{Numeric. Path coefficients.}
 
 \item{ab}{Numeric. Reported indirect effect (optional).}
 
-\item{a_digits, b_digits, ab_digits}{Integer.}
+\item{a_digits, b_digits, ab_digits}{Integer. Number of decimal places each
+value was reported to. No defaults: the caller must specify the
+precision of every value they supply. \code{ab_digits} is required only
+when \code{ab} is provided.}
 }
 \value{
 One-row tibble.
@@ -23,5 +33,6 @@ the reported \eqn{ab} overlaps the interval implied by the rounding
 intervals of \eqn{a} and \eqn{b}.
 }
 \examples{
-recalc_mediation_ab(a = 0.268, b = -0.279, ab = -0.075)
+recalc_mediation_ab(a = 0.268, b = -0.279, ab = -0.075,
+                    a_digits = 3, b_digits = 3, ab_digits = 3)
 }

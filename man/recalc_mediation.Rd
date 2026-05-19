@@ -11,18 +11,18 @@ recalc_mediation(
   p_b,
   ab = NULL,
   p = NULL,
-  a_digits = 3,
-  p_a_digits = 3,
-  b_digits = 3,
-  p_b_digits = 3,
-  ab_digits = 3,
-  p_digits = 3,
+  a_digits = NULL,
+  p_a_digits = NULL,
+  b_digits = NULL,
+  p_b_digits = NULL,
+  ab_digits = NULL,
+  p_digits = NULL,
   p_a_op = "eq",
   p_b_op = "eq",
   p_op = "eq",
   two_tailed = TRUE,
   df_t = NULL,
-  method = c("sobel", "aroian", "goodman"),
+  method = NULL,
   label = NULL
 )
 }
@@ -35,7 +35,11 @@ recalc_mediation(
 
 \item{p}{Numeric. Reported indirect-effect p-value (optional).}
 
-\item{a_digits, p_a_digits, b_digits, p_b_digits, ab_digits, p_digits}{Integer.}
+\item{a_digits, p_a_digits, b_digits, p_b_digits, ab_digits, p_digits}{Integer.
+Number of decimal places each value was reported to. No defaults: the
+caller must specify the precision of every value they supply.
+\code{ab_digits} is required only when \code{ab} is provided;
+\code{p_digits} only when \code{p} is provided.}
 
 \item{p_a_op, p_b_op, p_op}{Comparison operator for the corresponding
 reported p-value; see \code{recalc_mediation_p()}.}
@@ -46,25 +50,31 @@ two-tailed (default \code{TRUE}).}
 \item{df_t}{Numeric vector or \code{NULL}. Reference distributions for
 the Sobel rows; see \code{recalc_mediation_p()}.}
 
-\item{method}{One of \code{"sobel"}, \code{"aroian"}, \code{"goodman"}.}
+\item{method}{Character vector of methods to run, any subset of
+\code{c("sobel", "aroian", "goodman")}. \code{NULL} (the default) runs
+all three.}
 
 \item{label}{Optional string included as a \code{label} column.}
 }
 \value{
-Tibble: one M1 row plus one M2 row per reference distribution.
+Tibble: one M1 row plus one M2 row per method \eqn{\times}
+reference distribution.
 }
 \description{
 Convenience wrapper that binds the row from \code{recalc_mediation_ab()}
 (the \eqn{ab = a \cdot b} identity check) with the rows from
 \code{recalc_mediation_p()} (the Sobel p-value check across reference
-distributions). See those functions for the underlying identities and
-caveats.
+distributions and variants). See those functions for the underlying
+identities and caveats.
 }
 \examples{
-# Rutherford et al. 2017, HAM-D outcome
+# Rutherford et al. 2017, HAM-D outcome — all three Sobel variants
 recalc_mediation(a = 0.268, p_a = 0.038,
                  b = -0.279, p_b = 0.005,
                  ab = -0.075, p = 0.046,
                  df_t = c(32, 47),
+                 a_digits = 3, p_a_digits = 3,
+                 b_digits = 3, p_b_digits = 3,
+                 ab_digits = 3, p_digits = 3,
                  label = "HAM-D")
 }

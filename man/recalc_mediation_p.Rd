@@ -10,17 +10,17 @@ recalc_mediation_p(
   b,
   p_b,
   p = NULL,
-  a_digits = 3,
-  p_a_digits = 3,
-  b_digits = 3,
-  p_b_digits = 3,
-  p_digits = 3,
+  a_digits = NULL,
+  p_a_digits = NULL,
+  b_digits = NULL,
+  p_b_digits = NULL,
+  p_digits = NULL,
   p_a_op = "eq",
   p_b_op = "eq",
   p_op = "eq",
   two_tailed = TRUE,
   df_t = NULL,
-  method = c("sobel", "aroian", "goodman"),
+  method = NULL,
   label = NULL
 )
 }
@@ -31,7 +31,10 @@ recalc_mediation_p(
 
 \item{p}{Numeric. Reported indirect-effect p-value (optional).}
 
-\item{a_digits, p_a_digits, b_digits, p_b_digits, p_digits}{Integer.}
+\item{a_digits, p_a_digits, b_digits, p_b_digits, p_digits}{Integer. Number
+of decimal places each value was reported to. No defaults: the caller
+must specify the precision of every value they supply. \code{p_digits}
+is required only when \code{p} is provided.}
 
 \item{p_a_op, p_b_op, p_op}{One of \code{"eq"}, \code{"lt"}, \code{"le"},
 \code{"gt"}, \code{"ge"}. Use \code{"lt"} for reports of the form
@@ -44,12 +47,14 @@ two-tailed (default \code{TRUE}).}
 z-based row is returned. Otherwise the z row plus one t-based row per
 element of \code{df_t}.}
 
-\item{method}{One of \code{"sobel"}, \code{"aroian"}, \code{"goodman"}.}
+\item{method}{Character vector of methods to run, any subset of
+\code{c("sobel", "aroian", "goodman")}. \code{NULL} (the default) runs
+all three.}
 
 \item{label}{Optional string included as a \code{label} column.}
 }
 \value{
-Tibble, one row per reference distribution.
+Tibble, one row per method \eqn{\times} reference distribution.
 }
 \description{
 Identity: \eqn{p = 2(1 - F(|ab| / SE_{ab}))} with
@@ -68,9 +73,11 @@ distribution a separate row is returned; the z-based row is always
 included.
 }
 \examples{
-# Rutherford et al. 2017, HAM-D outcome
+# Rutherford et al. 2017, HAM-D outcome — all three Sobel variants
 recalc_mediation_p(a = 0.268, p_a = 0.038,
                    b = -0.279, p_b = 0.005,
                    p = 0.046, df_t = c(32, 47),
+                   a_digits = 3, p_a_digits = 3,
+                   b_digits = 3, p_b_digits = 3, p_digits = 3,
                    label = "HAM-D")
 }
