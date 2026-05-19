@@ -4,9 +4,10 @@
 \alias{interval_from_digits}
 \title{Rounding interval implied by a value reported to \code{digits} decimal places}
 \usage{
-interval_from_digits(value, digits)
+interval_from_digits(value, digits, lo = -Inf, hi = Inf)
 }
 \description{
-Rounding interval implied by a value reported to \code{digits} decimal places
+Optional \code{lo}/\code{hi} clamping is useful for naturally bounded quantities
+(e.g. \code{p} values reported to 3 dp near 0 or 1).
 }
 \keyword{internal}

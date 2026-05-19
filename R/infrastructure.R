@@ -1,8 +1,11 @@
 #' Rounding interval implied by a value reported to `digits` decimal places
+#'
+#' Optional `lo`/`hi` clamping is useful for naturally bounded quantities
+#' (e.g. `p` values reported to 3 dp near 0 or 1).
 #' @keywords internal
-interval_from_digits <- function(value, digits) {
+interval_from_digits <- function(value, digits, lo = -Inf, hi = Inf) {
   delta <- 0.5 * 10^(-digits)
-  c(value - delta, value + delta)
+  c(max(value - delta, lo), min(value + delta, hi))
 }
 
 #' Propagate input rounding intervals through a function by corner enumeration
