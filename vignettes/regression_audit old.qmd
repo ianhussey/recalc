@@ -1,0 +1,1285 @@
+---
+title: "Recalculation Checks for OLS Regression"
+subtitle: "A catalog of identities for the {recalc} package"
+author: "Ian Hussey"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    toc_float: true
+    code-fold: false
+    code-overflow: wrap
+    code-tools: true
+    warning: false
+    df-print: kable
+    theme:
+      light: cosmo
+      dark: darkly
+    highlight-style:
+      light: breeze
+      dark: dracula
+---
+
+# Purpose
+
+`{statcheck}` recalculates a single relationship: $p$ from a reported test statistic and degrees of freedom. OLS multiple regression admits many more recalculation identities — each one a hard mathematical relationship between quantities a paper typically reports separately. Any inconsistency between reported and recomputed values is either a transcription error, a labeling error (e.g., $b$ mislabeled as $\beta$), or a model-specification problem.
+
+This document catalogs identities testable from quantities **routinely** present in APA psychology manuscripts. Identities that depend on rarely-reported inputs — VIF, full ANOVA SS tables, partial-$r$ columns, fitted Cohen's $f^2$, single-predictor regressions reported as such — are not included here, because in practice the gating input never appears.
+
+**Inputs are rounded.** Every reported number has known precision — typically 2 or 3 decimal places. Under half-up / half-down rounding, a value $x$ to $d$ decimal places came from a true value in $[x - 0.5 \cdot 10^{-d},\, x + 0.5 \cdot 10^{-d}]$. Each function in this document propagates those rounding intervals through the identity and returns the achievable interval for the recomputed quantity. The check passes iff the recomputed and reported intervals overlap. Each numeric input has a paired `*_digits` argument; defaults reflect typical APA reporting (2 d.p. for coefficients, correlations, $R^2$; 3 d.p. for $p$-values; 0 d.p. for $N$, $k$, df).
+
+**Notation.** $Y$ is the outcome, $X_i$ the $i$th predictor, $k$ the number of predictors, $N$ the sample size, $\text{df} = N - k - 1$ the residual degrees of freedom. $b_i$ is unstandardized, $\beta_i$ standardized, $t_i$ its $t$-statistic, $\text{SE}_i$ its standard error. $r_{Yi}$ is the zero-order correlation between $X_i$ and $Y$, $r_{ij}$ inter-predictor correlation. $R^2$ is the model coefficient of determination.
+
+# Types of tests
+
+## A. Single-coefficient identities
+
+### A1. $t$ from $b$ and SE
+
+$$t_i = b_i / \text{SE}_i$$
+
+The definition. Catches transcription errors and sign flips. Composes with A2 to recover $p$.
+
+```{r}
+#' Recalculate t from a coefficient and its standard error
+#' @param b,se Numeric.
+#' @param t Numeric. Reported t (optional).
+#' @param b_digits,se_digits,t_digits Integer.
+#' @return One-row tibble.
+#' @examples
+#' recalc_t_from_b_se(b = -5.34, se = 0.56, t = -9.56)
+#' @export
+recalc_t_from_b_se <- function(b, se, t = NULL,
+                               b_digits = 2, se_digits = 2, t_digits = 2) {
+  recomp <- propagate_intervals(
+    fn = function(b, se) b / se,
+    inputs = list(b = interval_from_digits(b, b_digits),
+                  se = interval_from_digits(se, se_digits))
+  )
+  recalc_result("A1: t = b / SE", t, reported_interval(t, t_digits), recomp)
+}
+```
+
+### A2. $p$ from $t$ and df
+
+$$p_i = 2 \cdot \left[1 - F_t(|t_i|;\,\text{df})\right]$$
+
+Use `p_op = "lt"` for reports of the form `p < .001`. Composes with A1 (recover $t$ first if only $b$ and SE are reported).
+
+```{r}
+#' Recalculate a coefficient p from its t and residual df
+#' @param t,df Numeric.
+#' @param p Numeric.
+#' @param p_op One of `"eq"`, `"lt"`, `"le"`, `"gt"`, `"ge"`.
+#' @param two_tailed Logical.
+#' @param t_digits,df_digits,p_digits Integer.
+#' @return One-row tibble.
+#' @examples
+#' recalc_p_from_t_df(t = -9.56, df = 30, p = 0.001, p_op = "lt")
+#' @export
+recalc_p_from_t_df <- function(t, df, p = NULL, p_op = "eq",
+                               two_tailed = TRUE,
+                               t_digits = 2, df_digits = 0, p_digits = 3) {
+  fn <- function(t, df) {
+    factor <- if (two_tailed) 2 else 1
+    factor * stats::pt(abs(t), df = df, lower.tail = FALSE)
+  }
+  recomp <- propagate_intervals(
+    fn,
+    inputs = list(t = interval_from_digits(t, t_digits),
+                  df = interval_from_digits(df, df_digits))
+  )
+  recalc_result("A2: p = 2(1 - F_t(|t|, df))", p,
+                reported_interval(p, p_digits, op = p_op), recomp)
+}
+```
+
+### A3. CI from $b$, SE, and df
+
+$$\text{CI}_{1-\alpha} = b_i \pm t_{1-\alpha/2,\,\text{df}} \cdot \text{SE}_i$$
+
+Particularly useful in reverse: when SE is missing, $\text{SE} = (\text{CI}_\text{upper} - \text{CI}_\text{lower})/(2 t_\text{crit})$ recovers it (see `recalc_se_from_ci()` in section D), which then feeds into A1 and A2.
+
+```{r}
+#' Recalculate a Wald CI from b, SE, and df
+#' @param b,se,df Numeric.
+#' @param level Numeric. Default 0.95.
+#' @param ci Optional length-2 numeric.
+#' @param b_digits,se_digits,df_digits,ci_digits Integer.
+#' @return Two-row tibble.
+#' @examples
+#' recalc_ci_from_b_se(b = -5.34, se = 0.56, df = 30,
+#'                     ci = c(-6.49, -4.20))
+#' @export
+recalc_ci_from_b_se <- function(b, se, df, level = 0.95, ci = NULL,
+                                b_digits = 2, se_digits = 2,
+                                df_digits = 0, ci_digits = 2) {
+  alpha <- 1 - level
+  fn_lower <- function(b, se, df) b - stats::qt(1 - alpha/2, df) * se
+  fn_upper <- function(b, se, df) b + stats::qt(1 - alpha/2, df) * se
+  inputs <- list(b = interval_from_digits(b, b_digits),
+                 se = interval_from_digits(se, se_digits),
+                 df = interval_from_digits(df, df_digits))
+  rec_lo <- propagate_intervals(fn_lower, inputs)
+  rec_hi <- propagate_intervals(fn_upper, inputs)
+  bind_rows(
+    recalc_result("A3: CI lower = b - t_crit SE",
+                  if (is.null(ci)) NULL else ci[1],
+                  reported_interval(if (is.null(ci)) NULL else ci[1], ci_digits),
+                  rec_lo),
+    recalc_result("A3: CI upper = b + t_crit SE",
+                  if (is.null(ci)) NULL else ci[2],
+                  reported_interval(if (is.null(ci)) NULL else ci[2], ci_digits),
+                  rec_hi)
+  )
+}
+```
+
+### A4. Standardization identity
+
+$$\beta_i = b_i \cdot \text{SD}_{X_i} / \text{SD}_Y$$
+
+The diagnostic for $b$/$\beta$ label confusion (see `diagnose_beta_label()` in section E). With SDs at 1 d.p. (typical), the recomputed-$\beta$ interval can be wide.
+
+```{r}
+#' Recalculate beta from an unstandardized coefficient and SDs
+#' @param b,sd_x,sd_y Numeric.
+#' @param beta Numeric.
+#' @param b_digits,sd_x_digits,sd_y_digits,beta_digits Integer.
+#' @return One-row tibble.
+#' @examples
+#' recalc_beta_from_b(b = -5.34, sd_x = 0.98, sd_y = 6.03, beta = -0.87)
+#' @export
+recalc_beta_from_b <- function(b, sd_x, sd_y, beta = NULL,
+                               b_digits = 2, sd_x_digits = 2,
+                               sd_y_digits = 2, beta_digits = 2) {
+  recomp <- propagate_intervals(
+    fn = function(b, sd_x, sd_y) b * sd_x / sd_y,
+    inputs = list(b = interval_from_digits(b, b_digits),
+                  sd_x = interval_from_digits(sd_x, sd_x_digits),
+                  sd_y = interval_from_digits(sd_y, sd_y_digits))
+  )
+  recalc_result("A4: beta = b * SD_X / SD_Y", beta,
+                reported_interval(beta, beta_digits), recomp)
+}
+```
+
+### A6. Bound on $|t|$ from $\beta$ and $R^2$
+
+VIF is rarely reported in APA psychology manuscripts, so the full identity $t_i = \beta_i \sqrt{(N-k-1)/((1-R^2)\,\text{VIF}_i)}$ is usually not testable. But $\text{VIF}_i \geq 1$ always, so the inequality
+
+$$|t_i| \leq |\beta_i| \cdot \sqrt{(N - k - 1)/(1 - R^2)}$$
+
+is testable from quantities that *are* routinely reported ($\beta$, $R^2$, $N$, $k$). A reported $|t|$ exceeding this bound is impossible.
+
+```{r}
+#' Upper bound on |t| from standardized beta, R^2, N, k
+#'
+#' Identity: \eqn{|t_i| \leq |\beta_i| \sqrt{(N-k-1)/(1-R^2)}}, achieved at
+#' \eqn{\text{VIF}_i = 1}. A reported |t| above this bound is incompatible with
+#' the reported beta, R^2, N, and k.
+#'
+#' @param beta,r2,n,k Numeric.
+#' @param t Numeric. Reported t (compared in absolute value).
+#' @param beta_digits,r2_digits,n_digits,k_digits,t_digits Integer.
+#' @return One-row tibble. `consistent` is TRUE iff |reported t| does not
+#'   exceed the upper bound on |t|.
+#' @examples
+#' recalc_t_bound_from_beta(beta = 0.30, r2 = 0.20, n = 200, k = 3, t = 4.20)
+#' @export
+recalc_t_bound_from_beta <- function(beta, r2, n, k, t = NULL,
+                                     beta_digits = 2, r2_digits = 2,
+                                     n_digits = 0, k_digits = 0,
+                                     t_digits = 2) {
+  recomp <- propagate_intervals(
+    fn = function(beta, r2, n, k) abs(beta) * sqrt((n - k - 1) / (1 - r2)),
+    inputs = list(beta = interval_from_digits(beta, beta_digits),
+                  r2 = interval_from_digits(r2, r2_digits),
+                  n = interval_from_digits(n, n_digits),
+                  k = interval_from_digits(k, k_digits))
+  )
+  out <- recalc_result(
+    "A6 bound: |t| <= |beta| sqrt((N-k-1)/(1-R^2))",
+    if (is.null(t)) NULL else abs(t),
+    reported_interval(if (is.null(t)) NULL else abs(t), t_digits),
+    recomp
+  )
+  if (!is.null(t)) {
+    out$consistent <- (abs(t) - 0.5 * 10^(-t_digits)) <= recomp[["upper"]]
+  }
+  out
+}
+```
+
+### A8. Semipartial $r^2$ (= $\Delta R^2$) from $t$
+
+$$\text{sr}_i^2 = t_i^2 (1 - R^2) / \text{df}$$
+
+The squared semipartial equals $\Delta R^2$ for adding $X_i$ to the model. Useful in hierarchical regressions that report per-step $\Delta R^2$.
+
+```{r}
+#' Recalculate squared semipartial (= Delta R^2) from t, R^2, df
+#' @param t,r2,df Numeric.
+#' @param sr2 Numeric.
+#' @param t_digits,r2_digits,df_digits,sr2_digits Integer.
+#' @return One-row tibble.
+#' @examples
+#' recalc_semipartial_r2_from_t(t = 3.50, r2 = 0.40, df = 200, sr2 = 0.037)
+#' @export
+recalc_semipartial_r2_from_t <- function(t, r2, df, sr2 = NULL,
+                                         t_digits = 2, r2_digits = 2,
+                                         df_digits = 0, sr2_digits = 3) {
+  recomp <- propagate_intervals(
+    fn = function(t, r2, df) t^2 * (1 - r2) / df,
+    inputs = list(t = interval_from_digits(t, t_digits),
+                  r2 = interval_from_digits(r2, r2_digits),
+                  df = interval_from_digits(df, df_digits))
+  )
+  recalc_result("A8: sr_i^2 = t_i^2 (1 - R^2) / df", sr2,
+                reported_interval(sr2, sr2_digits), recomp)
+}
+```
+
+## B. Model-level identities
+
+### B1. $R^2 \leftrightarrow F$
+
+$$F = \frac{R^2 / k}{(1 - R^2)/(N - k - 1)}, \qquad R^2 = \frac{F k}{F k + (N - k - 1)}$$
+
+Composes with B2 in either direction. Most common chain: paper omits $F$ but reports $R^2$, $N$, $k$ — `recalc_f_from_r2()` reconstructs $F$, then `recalc_p_from_f()` gives $p_\text{model}$.
+
+```{r}
+#' Recalculate F from R^2, N, k
+#' @export
+recalc_f_from_r2 <- function(r2, n, k, f = NULL,
+                             r2_digits = 2, n_digits = 0, k_digits = 0,
+                             f_digits = 2) {
+  recomp <- propagate_intervals(
+    fn = function(r2, n, k) (r2 / k) / ((1 - r2) / (n - k - 1)),
+    inputs = list(r2 = interval_from_digits(r2, r2_digits),
+                  n = interval_from_digits(n, n_digits),
+                  k = interval_from_digits(k, k_digits))
+  )
+  recalc_result("B1: F = (R^2/k) / ((1-R^2)/(N-k-1))", f,
+                reported_interval(f, f_digits), recomp)
+}
+
+#' Recalculate R^2 from F, N, k
+#' @export
+recalc_r2_from_f <- function(f, n, k, r2 = NULL,
+                             f_digits = 2, n_digits = 0, k_digits = 0,
+                             r2_digits = 2) {
+  recomp <- propagate_intervals(
+    fn = function(f, n, k) (f * k) / (f * k + (n - k - 1)),
+    inputs = list(f = interval_from_digits(f, f_digits),
+                  n = interval_from_digits(n, n_digits),
+                  k = interval_from_digits(k, k_digits))
+  )
+  recalc_result("B1: R^2 = Fk / (Fk + N-k-1)", r2,
+                reported_interval(r2, r2_digits), recomp)
+}
+```
+
+### B2. Model $p$ from $F$
+
+$$p_\text{model} = 1 - F_F(F;\, k,\, N - k - 1)$$
+
+Composes with B1: when $F$ is not reported, recompute it from $R^2$ first (B1), then call B2 with the resulting $F$. The intervals propagate through the chain — i.e., the resulting $p$ interval reflects rounding on $R^2$, $N$, and $k$.
+
+```{r}
+#' Recalculate omnibus model p from F and df
+#' @export
+recalc_p_from_f <- function(f, df1, df2, p = NULL, p_op = "eq",
+                            f_digits = 2, df1_digits = 0,
+                            df2_digits = 0, p_digits = 3) {
+  recomp <- propagate_intervals(
+    fn = function(f, df1, df2) {
+      stats::pf(f, df1 = df1, df2 = df2, lower.tail = FALSE)
+    },
+    inputs = list(f = interval_from_digits(f, f_digits),
+                  df1 = interval_from_digits(df1, df1_digits),
+                  df2 = interval_from_digits(df2, df2_digits))
+  )
+  recalc_result("B2: p_model = 1 - F_F(F; df1, df2)", p,
+                reported_interval(p, p_digits, op = p_op), recomp)
+}
+```
+
+### B3. Adjusted $R^2$
+
+$$R^2_\text{adj} = 1 - (1 - R^2)\,(N - 1)/(N - k - 1)$$
+
+The check is also the diagnostic for $R^2$/$R^2_\text{adj}$ label confusion: when "$R^2$" doesn't satisfy B4 but does match $R^2_\text{adj}$ derived from a B4-consistent raw $R^2$, the column is mislabeled. See `diagnose_r2_label()` in section E.
+
+```{r}
+#' Recalculate adjusted R^2 from R^2, N, k
+#' @export
+recalc_adj_r2 <- function(r2, n, k, adj_r2 = NULL,
+                          r2_digits = 2, n_digits = 0, k_digits = 0,
+                          adj_r2_digits = 2) {
+  recomp <- propagate_intervals(
+    fn = function(r2, n, k) 1 - (1 - r2) * (n - 1) / (n - k - 1),
+    inputs = list(r2 = interval_from_digits(r2, r2_digits),
+                  n = interval_from_digits(n, n_digits),
+                  k = interval_from_digits(k, k_digits))
+  )
+  recalc_result("B3: R^2_adj = 1 - (1-R^2)(N-1)/(N-k-1)", adj_r2,
+                reported_interval(adj_r2, adj_r2_digits), recomp)
+}
+```
+
+### B4. $R^2 = \sum \beta_i r_{Yi}$
+
+The standardized OLS solution decomposes $R^2$ as $\sum_i \beta_i r_{Yi}$. Inputs are vectors; rounding is propagated by enumerating $2^{2k}$ corner combinations.
+
+```{r}
+#' Recalculate R^2 from standardized betas and zero-order correlations
+#' @export
+recalc_r2_from_betas_corrs <- function(betas, r_y, r2 = NULL,
+                                       betas_digits = 2, r_y_digits = 2,
+                                       r2_digits = 2) {
+  stopifnot(length(betas) == length(r_y))
+  k <- length(betas)
+  inputs <- c(
+    setNames(lapply(betas, interval_from_digits, betas_digits),
+             paste0("b", seq_len(k))),
+    setNames(lapply(r_y, interval_from_digits, r_y_digits),
+             paste0("r", seq_len(k)))
+  )
+  fn <- function(...) {
+    args <- list(...)
+    bs <- unlist(args[paste0("b", seq_len(k))])
+    rs <- unlist(args[paste0("r", seq_len(k))])
+    sum(bs * rs)
+  }
+  recomp <- propagate_intervals(fn, inputs)
+  recalc_result("B4: R^2 = sum_i beta_i * r_Yi", r2,
+                reported_interval(r2, r2_digits), recomp)
+}
+```
+
+### B5. Hierarchical $\Delta R^2$ blocks
+
+$$R^2_\text{full} = \sum_j \Delta R^2_j$$
+
+Holds by construction in any hierarchical regression. Composes with A8: each per-step $\Delta R^2$ should also equal $\text{sr}_i^2$ for the predictor added that step (when the step adds one predictor).
+
+```{r}
+#' Recalculate R^2 from a sequence of hierarchical Delta R^2 blocks
+#' @export
+recalc_r2_from_blocks <- function(delta_r2, r2 = NULL,
+                                  delta_r2_digits = 2, r2_digits = 2) {
+  k <- length(delta_r2)
+  inputs <- setNames(lapply(delta_r2, interval_from_digits, delta_r2_digits),
+                     paste0("d", seq_len(k)))
+  fn <- function(...) sum(unlist(list(...)))
+  recomp <- propagate_intervals(fn, inputs)
+  recalc_result("B5: R^2 = sum_j Delta R^2_j", r2,
+                reported_interval(r2, r2_digits), recomp)
+}
+```
+
+## C. Cross-equation / multi-predictor identities
+
+### C1. Standardized normal equations ($k = 2$)
+
+$$r_{12} = (r_{Y1} - \beta_1)/\beta_2 = (r_{Y2} - \beta_2)/\beta_1$$
+
+For an internally consistent OLS fit the two derivations of $r_{12}$ must agree. Composes with C2: if Table 1 reports $r_{12}$, the same value should also satisfy B4 via C2's closed form.
+
+```{r}
+#' Two derivations of r_12 from k = 2 standardized normal equations
+#' @export
+recalc_r12_from_normal_eqs <- function(beta1, beta2, r_y1, r_y2,
+                                       beta1_digits = 2, beta2_digits = 2,
+                                       r_y1_digits = 2, r_y2_digits = 2) {
+  inputs <- list(beta1 = interval_from_digits(beta1, beta1_digits),
+                 beta2 = interval_from_digits(beta2, beta2_digits),
+                 r_y1 = interval_from_digits(r_y1, r_y1_digits),
+                 r_y2 = interval_from_digits(r_y2, r_y2_digits))
+  recomp1 <- propagate_intervals(
+    fn = function(beta1, beta2, r_y1, r_y2) (r_y1 - beta1) / beta2,
+    inputs = inputs
+  )
+  recomp2 <- propagate_intervals(
+    fn = function(beta1, beta2, r_y1, r_y2) (r_y2 - beta2) / beta1,
+    inputs = inputs
+  )
+  bind_rows(
+    recalc_result("C1: r_12 = (r_Y1 - beta_1)/beta_2",
+                  NULL, c(NA_real_, NA_real_), recomp1),
+    recalc_result("C1: r_12 = (r_Y2 - beta_2)/beta_1",
+                  NA_real_,
+                  c(recomp1[["lower"]], recomp1[["upper"]]),
+                  recomp2)
+  )
+}
+```
+
+### C2. Closed-form $\beta$ from correlations ($k = 2$)
+
+$$\beta_1 = \frac{r_{Y1} - r_{12} r_{Y2}}{1 - r_{12}^2}, \qquad \beta_2 = \frac{r_{Y2} - r_{12} r_{Y1}}{1 - r_{12}^2}$$
+
+Hard cross-check between Table 1 (correlation matrix) and Table 2 (regression) for any $k = 2$ paper. When both Table 1 and Table 2 are reported, this is independent of B4.
+
+```{r}
+#' Recalculate k = 2 standardized betas from the three correlations
+#' @export
+recalc_betas_from_corrs_k2 <- function(r_y1, r_y2, r_12, betas = NULL,
+                                       r_y1_digits = 2, r_y2_digits = 2,
+                                       r_12_digits = 2, betas_digits = 2) {
+  inputs <- list(r_y1 = interval_from_digits(r_y1, r_y1_digits),
+                 r_y2 = interval_from_digits(r_y2, r_y2_digits),
+                 r_12 = interval_from_digits(r_12, r_12_digits))
+  rec1 <- propagate_intervals(
+    fn = function(r_y1, r_y2, r_12) (r_y1 - r_12 * r_y2) / (1 - r_12^2),
+    inputs = inputs
+  )
+  rec2 <- propagate_intervals(
+    fn = function(r_y1, r_y2, r_12) (r_y2 - r_12 * r_y1) / (1 - r_12^2),
+    inputs = inputs
+  )
+  bind_rows(
+    recalc_result("C2: beta_1 = (r_Y1 - r_12 r_Y2)/(1 - r_12^2)",
+                  if (is.null(betas)) NULL else betas[1],
+                  reported_interval(if (is.null(betas)) NULL else betas[1],
+                                    betas_digits),
+                  rec1),
+    recalc_result("C2: beta_2 = (r_Y2 - r_12 r_Y1)/(1 - r_12^2)",
+                  if (is.null(betas)) NULL else betas[2],
+                  reported_interval(if (is.null(betas)) NULL else betas[2],
+                                    betas_digits),
+                  rec2)
+  )
+}
+```
+
+### C4. $R^2$ floor from zero-order correlations
+
+$$R^2_\text{full} \geq \max_i r_{Yi}^2$$
+
+A reported full-model $R^2$ below this floor is impossible. Cheap, one-sided, and applicable whenever Table 1 reports correlations of predictors with $Y$. Often passes; the value is in the rare case it fails.
+
+```{r}
+#' Lower bound on R^2 from zero-order correlations
+#' @export
+recalc_r2_floor_from_correlations <- function(r_y, r2 = NULL,
+                                              r_y_digits = 2, r2_digits = 2) {
+  k <- length(r_y)
+  inputs <- setNames(lapply(r_y, interval_from_digits, r_y_digits),
+                     paste0("r", seq_len(k)))
+  fn <- function(...) max(unlist(list(...))^2)
+  recomp <- propagate_intervals(fn, inputs)
+  out <- recalc_result("C4: R^2 >= max_i r_Yi^2", r2,
+                       reported_interval(r2, r2_digits), recomp)
+  if (!is.null(r2)) {
+    r2_upper <- r2 + 0.5 * 10^(-r2_digits)
+    out$consistent <- r2_upper >= recomp[["lower"]]
+  }
+  out
+}
+```
+
+### C5. Hierarchical $\Delta F$
+
+$$\Delta F = \frac{(R^2_2 - R^2_1)/\Delta k}{(1 - R^2_2)/(N - k_2 - 1)}$$
+
+Composes with B2 (recalc model $p$ from a recomputed $\Delta F$ on $\Delta k$, $N - k_2 - 1$ df).
+
+```{r}
+#' Recalculate Delta F for a hierarchical R^2 increment
+#' @export
+recalc_delta_f <- function(r2_full, r2_reduced, delta_k, n, k_full,
+                           delta_f = NULL,
+                           r2_full_digits = 2, r2_reduced_digits = 2,
+                           delta_k_digits = 0, n_digits = 0,
+                           k_full_digits = 0, delta_f_digits = 2) {
+  recomp <- propagate_intervals(
+    fn = function(r2_full, r2_reduced, delta_k, n, k_full) {
+      ((r2_full - r2_reduced) / delta_k) / ((1 - r2_full) / (n - k_full - 1))
+    },
+    inputs = list(r2_full = interval_from_digits(r2_full, r2_full_digits),
+                  r2_reduced = interval_from_digits(r2_reduced,
+                                                    r2_reduced_digits),
+                  delta_k = interval_from_digits(delta_k, delta_k_digits),
+                  n = interval_from_digits(n, n_digits),
+                  k_full = interval_from_digits(k_full, k_full_digits))
+  )
+  recalc_result("C5: Delta F = ((R^2_2 - R^2_1)/Dk) / ((1 - R^2_2)/(N-k_2-1))",
+                delta_f, reported_interval(delta_f, delta_f_digits), recomp)
+}
+```
+
+### C6. $\sum \beta_i r_{Yi} = F k / (Fk + N - k - 1)$
+
+Combines B1 and B4 into a single check that bypasses a missing $R^2$. When the paper omits $R^2$ but reports $F$ along with $\beta$s and $r_{Yi}$s, this is the most economical check available.
+
+```{r}
+#' Cross-check the beta-r decomposition against F (no R^2 needed)
+#' @export
+recalc_betar_from_f <- function(betas, r_y, f, n, k,
+                                betas_digits = 2, r_y_digits = 2,
+                                f_digits = 2, n_digits = 0, k_digits = 0) {
+  stopifnot(length(betas) == length(r_y))
+  k_pred <- length(betas)
+  rep_int <- propagate_intervals(
+    fn = function(f, n, k) (f * k) / (f * k + (n - k - 1)),
+    inputs = list(f = interval_from_digits(f, f_digits),
+                  n = interval_from_digits(n, n_digits),
+                  k = interval_from_digits(k, k_digits))
+  )
+  inputs <- c(
+    setNames(lapply(betas, interval_from_digits, betas_digits),
+             paste0("b", seq_len(k_pred))),
+    setNames(lapply(r_y, interval_from_digits, r_y_digits),
+             paste0("r", seq_len(k_pred)))
+  )
+  fn <- function(...) {
+    args <- list(...)
+    bs <- unlist(args[paste0("b", seq_len(k_pred))])
+    rs <- unlist(args[paste0("r", seq_len(k_pred))])
+    sum(bs * rs)
+  }
+  recomp <- propagate_intervals(fn, inputs)
+  recalc_result("C6: sum beta_i r_Yi = Fk/(Fk + N-k-1)",
+                NA_real_,
+                c(rep_int[["lower"]], rep_int[["upper"]]),
+                recomp)
+}
+```
+
+# Composing checks: filling in unreported quantities
+
+Many APA papers omit one or two quantities that other quantities pin down. Composing the checks above lets you reconstruct the missing piece and then audit the rest. Common chains:
+
+1. **$F$ not reported, $R^2$ is.** Use B1 (`recalc_f_from_r2`) to compute $F$, then B2 (`recalc_p_from_f`) to compute $p_\text{model}$. Both intervals propagate input rounding, so the resulting $p_\text{model}$ interval correctly reflects rounding on $R^2$, $N$, and $k$.
+
+2. **SE not reported, $b$ and CI are.** Solve A3 backwards: $\text{SE} = (\text{CI}_\text{upper} - \text{CI}_\text{lower})/(2 t_\text{crit})$. The recovered SE then feeds A1 (gives $t$) and A2 (gives $p$). Provided as `recalc_se_from_ci()` below.
+
+3. **$R^2$ not reported, $F$ is.** Use B1 inverse (`recalc_r2_from_f`). Or, when Table 1 is available, skip the intermediate step with C6.
+
+4. **$R^2$ not reported, $F$ also not reported, but $\beta$s and $r_{Yi}$s are.** Use B4 directly to get $R^2$. Then chain into B1 to get $F$, B2 to get $p_\text{model}$.
+
+5. **df implicit only.** A2 needs df. If only $N$ and $k$ are reported, $\text{df} = N - k - 1$. The functions in section A take df directly; the calling code computes df from $N$ and $k$.
+
+6. **Per-predictor $\Delta R^2$ in a hierarchical model, but $t$s only in the final model.** A8 computes $\text{sr}_i^2$ from the final-model $t$ and the full-model $R^2$. That value should equal the reported $\Delta R^2$ when $X_i$ was added in its own block.
+
+7. **Whole-paper audit, typical inputs.** For papers reporting $\beta$, $r_{Yi}$, $R^2$, $F$, $p_\text{model}$, $N$, $k$: run B1 (F vs R²), B2 (p_model from F), B3 (adj R² if reported), B4 (β·r → R²), C4 (R² floor), and — if $k = 2$ and the correlation table includes $r_{12}$ — C1 and C2. Inconsistencies in the model summary are caught by B1–B3; inconsistencies between coefficients and the model summary are caught by B4 and C1.
+
+```{r}
+#' Recover SE from a Wald CI and df
+#'
+#' Inverse of A3: \eqn{\text{SE} = (\text{CI}_U - \text{CI}_L)/(2 t_{\text{crit}})}.
+#' Useful when the paper reports b and CI but not SE; the recovered SE feeds
+#' A1 (to get t) and A2 (to get p).
+#'
+#' @param ci Length-2 numeric `c(lower, upper)`.
+#' @param df Numeric.
+#' @param level Numeric. Default 0.95.
+#' @param ci_digits,df_digits Integer.
+#' @return One-row tibble. `reported` is NA; `recomputed_*` is the SE interval.
+#' @examples
+#' recalc_se_from_ci(ci = c(-6.49, -4.20), df = 30)
+#' @export
+recalc_se_from_ci <- function(ci, df, level = 0.95,
+                              ci_digits = 2, df_digits = 0) {
+  alpha <- 1 - level
+  recomp <- propagate_intervals(
+    fn = function(lo, hi, df) (hi - lo) / (2 * stats::qt(1 - alpha/2, df)),
+    inputs = list(lo = interval_from_digits(ci[1], ci_digits),
+                  hi = interval_from_digits(ci[2], ci_digits),
+                  df = interval_from_digits(df, df_digits))
+  )
+  recalc_result("D: SE = (CI_U - CI_L) / (2 t_crit)",
+                NA_real_, c(NA_real_, NA_real_), recomp)
+}
+```
+
+# E. Misreporting diagnostics
+
+Some inconsistencies are not arithmetic errors but **label confusions**: a column intended as one quantity is reported as another. The checks above will flag them, but framing the diagnostic explicitly tells you *which* labeling resolves the discrepancy. Two label confusions are particularly common in OLS regression reporting.
+
+## E1. $\beta$ mislabeled as $b$ (or vice versa)
+
+The most common label error is unstandardized coefficients in a column titled "$\beta$" (or, less often, standardized coefficients in a column titled "$b$"). Diagnostic: compute $R^2$ under both interpretations and report which (if any) is consistent with the reported $R^2$.
+
+- Interpretation A (column is true $\beta$): apply B4 directly with `betas = coef_reported`.
+- Interpretation B (column is $b$ mislabeled as $\beta$): convert each value via $\beta_\text{implied} = b \cdot \text{SD}_X / \text{SD}_Y$ (A4), then apply B4 with the implied $\beta$s.
+
+If A is consistent and B is not, the labeling is correct (and any remaining inconsistency is arithmetic). If B is consistent and A is not, the column is mislabeled. If neither is consistent, the gap is structural — the model that was fit is not the model described.
+
+```{r}
+#' Diagnose whether a coefficient column is standardized or unstandardized
+#'
+#' Tests two interpretations of a coefficient column reported as "beta":
+#' (A) the values are true betas; (B) the values are unstandardized b's
+#' mislabeled as beta. Returns the recomputed-R^2 interval under each
+#' interpretation so the user can see which (if either) is consistent with
+#' the reported R^2.
+#'
+#' @param coef_reported Numeric vector. Reported values from the column
+#'   labeled "beta" (or "b").
+#' @param r_y Numeric vector. Zero-order correlations of predictors with Y.
+#' @param sd_x Numeric vector. Predictor SDs (one per predictor).
+#' @param sd_y Numeric scalar. Outcome SD.
+#' @param r2 Numeric. Reported model R^2.
+#' @param coef_digits,r_y_digits,sd_x_digits,sd_y_digits,r2_digits Integer.
+#' @return Two-row tibble: one row per interpretation.
+#' @examples
+#' # Baldeo (2025): coef_reported = c(-0.39, 0.47), reported as "beta"
+#' diagnose_beta_label(
+#'   coef_reported = c(-0.39, 0.47),
+#'   r_y = c(-0.53, 0.61),
+#'   sd_x = c(1.2, 0.5),
+#'   sd_y = 1.4,
+#'   r2 = 0.41,
+#'   sd_x_digits = 1, sd_y_digits = 1
+#' )
+#' @export
+diagnose_beta_label <- function(coef_reported, r_y, sd_x, sd_y, r2,
+                                coef_digits = 2, r_y_digits = 2,
+                                sd_x_digits = 1, sd_y_digits = 1,
+                                r2_digits = 2) {
+  stopifnot(length(coef_reported) == length(r_y),
+            length(sd_x) == length(coef_reported))
+  k <- length(coef_reported)
+
+  # Interpretation A: column is true beta — apply B4 directly
+  res_A <- recalc_r2_from_betas_corrs(
+    betas = coef_reported, r_y = r_y, r2 = r2,
+    betas_digits = coef_digits, r_y_digits = r_y_digits, r2_digits = r2_digits
+  )
+  res_A$check <- "E1 (Interp A): column is true beta"
+
+  # Interpretation B: column is b mislabeled as beta — convert and apply B4
+  inputs_B <- c(
+    setNames(lapply(coef_reported, interval_from_digits, coef_digits),
+             paste0("b", seq_len(k))),
+    setNames(lapply(sd_x, interval_from_digits, sd_x_digits),
+             paste0("sx", seq_len(k))),
+    setNames(lapply(r_y, interval_from_digits, r_y_digits),
+             paste0("r", seq_len(k))),
+    list(sy = interval_from_digits(sd_y, sd_y_digits))
+  )
+  fn_B <- function(...) {
+    args <- list(...)
+    bs <- unlist(args[paste0("b", seq_len(k))])
+    sxs <- unlist(args[paste0("sx", seq_len(k))])
+    rs <- unlist(args[paste0("r", seq_len(k))])
+    sy <- args[["sy"]]
+    sum((bs * sxs / sy) * rs)
+  }
+  recomp_B <- propagate_intervals(fn_B, inputs_B)
+  res_B <- recalc_result(
+    "E1 (Interp B): column is b mislabeled as beta",
+    r2, reported_interval(r2, r2_digits), recomp_B
+  )
+
+  bind_rows(res_A, res_B)
+}
+```
+
+## E2. $R^2$ mislabeled as $R^2_\text{adj}$ (or vice versa)
+
+Papers occasionally report a value called "$R^2$" that is actually adjusted $R^2$ (or vice versa). Diagnostic: invert B3 to back out the implied raw $R^2$ from a candidate adjusted-$R^2$ reading, then test against an independent recomputation (B4 from $\beta$ and $r_{Yi}$).
+
+If $R^2_\text{reported}$ matches B4 directly, it is the raw $R^2$ as labeled. If it does not match B4 but the raw $R^2$ implied by $R^2_\text{reported} = R^2_\text{adj}$ does match B4, the value is mislabeled adjusted $R^2$. (At large $N$ the two are nearly identical and the diagnostic has little power — by design.)
+
+```{r}
+#' Diagnose whether a reported "R^2" is actually adjusted R^2
+#'
+#' Tests two interpretations: (A) the value is raw R^2 — apply B4 directly;
+#' (B) the value is adjusted R^2 — back out the implied raw R^2 via
+#' \eqn{R^2_\text{raw} = 1 - (1 - R^2_\text{adj})(N - k - 1)/(N - 1)} and test
+#' that against B4.
+#'
+#' @param r2_reported Numeric.
+#' @param betas Numeric vector.
+#' @param r_y Numeric vector.
+#' @param n,k Numeric.
+#' @param r2_digits,betas_digits,r_y_digits,n_digits,k_digits Integer.
+#' @return Two-row tibble.
+#' @examples
+#' diagnose_r2_label(
+#'   r2_reported = 0.41,
+#'   betas = c(-0.39, 0.47), r_y = c(-0.53, 0.61),
+#'   n = 1923, k = 2
+#' )
+#' @export
+diagnose_r2_label <- function(r2_reported, betas, r_y, n, k,
+                              r2_digits = 2, betas_digits = 2,
+                              r_y_digits = 2, n_digits = 0, k_digits = 0) {
+  stopifnot(length(betas) == length(r_y))
+  k_pred <- length(betas)
+
+  # B4-implied R^2 interval (independent of which label is correct)
+  inputs_br <- c(
+    setNames(lapply(betas, interval_from_digits, betas_digits),
+             paste0("b", seq_len(k_pred))),
+    setNames(lapply(r_y, interval_from_digits, r_y_digits),
+             paste0("r", seq_len(k_pred)))
+  )
+  fn_br <- function(...) {
+    args <- list(...)
+    bs <- unlist(args[paste0("b", seq_len(k_pred))])
+    rs <- unlist(args[paste0("r", seq_len(k_pred))])
+    sum(bs * rs)
+  }
+  recomp_br <- propagate_intervals(fn_br, inputs_br)
+
+  # Interpretation A: reported value is raw R^2
+  res_A <- recalc_result(
+    "E2 (Interp A): reported is raw R^2",
+    r2_reported, reported_interval(r2_reported, r2_digits), recomp_br
+  )
+
+  # Interpretation B: reported value is adjusted R^2 — invert to raw R^2
+  raw_int <- propagate_intervals(
+    fn = function(adj, n, k) 1 - (1 - adj) * (n - k - 1) / (n - 1),
+    inputs = list(adj = interval_from_digits(r2_reported, r2_digits),
+                  n = interval_from_digits(n, n_digits),
+                  k = interval_from_digits(k, k_digits))
+  )
+  res_B <- tibble(
+    check = "E2 (Interp B): reported is adjusted R^2 (back out raw)",
+    reported = NA_real_,
+    reported_lower = raw_int[["lower"]],
+    reported_upper = raw_int[["upper"]],
+    recomputed_lower = recomp_br[["lower"]],
+    recomputed_upper = recomp_br[["upper"]],
+    consistent = (recomp_br[["upper"]] >= raw_int[["lower"]]) &
+                 (recomp_br[["lower"]] <= raw_int[["upper"]])
+  )
+
+  bind_rows(res_A, res_B)
+}
+```
+
+## E3. One-tailed $p$ reported as two-tailed (or vice versa)
+
+A reported $p$ that fails A2 under the default two-tailed assumption may be consistent with a one-tailed test. The diagnostic runs A2 under both tail conventions and reports both intervals; if exactly one is consistent with the reported $p$, the tail convention is the issue.
+
+This matters most for borderline-significant findings. Catches a common error in directional-hypothesis reporting.
+
+```{r}
+#' Compare one-tailed and two-tailed p interpretations for a reported p
+#' @param t,df Numeric.
+#' @param p Numeric. Reported p.
+#' @param p_op,t_digits,df_digits,p_digits As in `recalc_p_from_t_df`.
+#' @return Two-row tibble.
+#' @examples
+#' diagnose_p_tails(t = 1.85, df = 200, p = 0.033)
+#' @export
+diagnose_p_tails <- function(t, df, p, p_op = "eq",
+                             t_digits = 2, df_digits = 0, p_digits = 3) {
+  one <- recalc_p_from_t_df(t, df, p = p, p_op = p_op, two_tailed = FALSE,
+                            t_digits = t_digits, df_digits = df_digits,
+                            p_digits = p_digits)
+  one$check <- "E3 (Interp A): one-tailed p"
+  two <- recalc_p_from_t_df(t, df, p = p, p_op = p_op, two_tailed = TRUE,
+                            t_digits = t_digits, df_digits = df_digits,
+                            p_digits = p_digits)
+  two$check <- "E3 (Interp B): two-tailed p"
+  bind_rows(one, two)
+}
+```
+
+# F. Wrappers: audit and report
+
+`audit_regression()` takes the complete set of quantities a paper might report and dispatches every recalculation check whose inputs are present. Per-predictor checks (A1–A4, A6 bound, A8) run once for each predictor whose inputs are available; model-level (B1–B5) and cross-equation (C1, C2, C4, C6) checks run once when their inputs are available. Missing inputs cause the corresponding checks to be skipped silently. Result rows carry a `predictor` column identifying the row's scope (`"model"` or a predictor name/index).
+
+By default the wrapper *also* runs the section-E label-confusion diagnostics (`diagnostics = TRUE`): E1 ($\beta$ vs $b$), E2 ($R^2$ vs $R^2_\text{adj}$), and E3 (one- vs two-tailed $p$, per predictor). Diagnostic rows are emitted under the same column structure with `check` strings prefixed `E1`, `E2`, `E3`. To disable diagnostics for a coefficient-only audit, pass `diagnostics = FALSE`.
+
+A small chained helper, `recalc_p_model_from_r2()`, handles the most useful composition (B1 → B2): when $F$ is not reported but $R^2$, $N$, $k$ are, model $p$ is computable directly with rounding propagated through both stages. The wrapper calls this helper automatically when the direct B2 inputs are absent.
+
+C5 (hierarchical $\Delta F$) is structurally distinct (requires a nested-model pair with separate $R^2$, $k$, and increment metadata) and is not dispatched by the wrapper — call it directly.
+
+The audit tibble is consumed by `summarise_audit()`, which produces a natural-language report: an overall conclusion (consistent / inconsistent / inconsistent-but-resolved-by-labeling), per-check failure details with reported value, recomputed interval, and minimum interval gap, a list of passed checks and reconstructed quantities, and a verdict for each diagnostic group (whether a labeling alternative reconciles the report).
+
+```{r}
+#' Recover model p from R^2 directly (composition: B1 -> B2)
+#'
+#' When F is not reported but R^2, N, and k are, model p can be computed by
+#' chaining B1 (F from R^2) into B2 (p from F). This helper runs the chain
+#' as a single propagation so rounding intervals are handled correctly across
+#' both stages.
+#'
+#' @param r2,n,k Numeric.
+#' @param p_model Numeric.
+#' @param p_op One of `"eq"`, `"lt"`, `"le"`, `"gt"`, `"ge"`.
+#' @param r2_digits,n_digits,k_digits,p_model_digits Integer.
+#' @return One-row tibble.
+#' @examples
+#' recalc_p_model_from_r2(r2 = 0.41, n = 1923, k = 2,
+#'                        p_model = 0.001, p_op = "lt")
+#' @export
+recalc_p_model_from_r2 <- function(r2, n, k, p_model = NULL, p_op = "eq",
+                                   r2_digits = 2, n_digits = 0,
+                                   k_digits = 0, p_model_digits = 3) {
+  recomp <- propagate_intervals(
+    fn = function(r2, n, k) {
+      f <- (r2 / k) / ((1 - r2) / (n - k - 1))
+      stats::pf(f, df1 = k, df2 = n - k - 1, lower.tail = FALSE)
+    },
+    inputs = list(r2 = interval_from_digits(r2, r2_digits),
+                  n = interval_from_digits(n, n_digits),
+                  k = interval_from_digits(k, k_digits))
+  )
+  recalc_result("F: p_model from R^2 (B1 -> B2)",
+                p_model,
+                reported_interval(p_model, p_model_digits, op = p_op),
+                recomp)
+}
+
+#' Run every applicable recalc check on a regression report
+#'
+#' Takes the full set of quantities a paper might report and dispatches every
+#' check whose inputs are all available. Per-predictor checks run once per
+#' predictor whose inputs are present; model-level and cross-equation checks
+#' run once when their inputs are present. Missing inputs cause the
+#' corresponding checks to be skipped silently. By default also runs the
+#' section-E label-confusion diagnostics (E1 beta vs b, E2 R^2 vs adj R^2,
+#' E3 one- vs two-tailed p) where their inputs are available.
+#'
+#' @param n,k Numeric scalars.
+#' @param r2,adj_r2,f Numeric scalars (optional).
+#' @param p_model Numeric scalar (optional). Reported model p.
+#' @param p_model_op Comparison op for `p_model`.
+#' @param sd_y Numeric scalar (optional).
+#' @param b,se,t,p,beta Numeric vectors of length k (optional).
+#' @param p_op Comparison op for per-predictor p.
+#' @param ci_lower,ci_upper Numeric vectors of length k (optional).
+#' @param r_y,sd_x,sr2 Numeric vectors of length k (optional).
+#' @param predictor_names Character vector of length k (optional).
+#' @param r_12 Numeric scalar (optional, k = 2 only).
+#' @param delta_r2_blocks Numeric vector (optional, B5 only).
+#' @param level Numeric. CI level. Default 0.95.
+#' @param diagnostics Logical. If TRUE (default), run E1, E2, E3 diagnostics
+#'   where their inputs are available.
+#' @param ..._digits Integer arguments controlling reported precision.
+#' @return Tibble of every applicable check, with an extra `predictor` column.
+#' @examples
+#' audit_regression(
+#'   n = 1923, k = 2, r2 = 0.41,
+#'   beta = c(-0.39, 0.47), r_y = c(-0.53, 0.61),
+#'   sd_y = 1.4, sd_x = c(1.2, 0.5),
+#'   sd_y_digits = 1, sd_x_digits = 1,
+#'   predictor_names = c("AI_reliance", "override_freq")
+#' )
+#' @export
+audit_regression <- function(
+    # Model-level
+    n = NULL, k = NULL,
+    r2 = NULL, adj_r2 = NULL, f = NULL,
+    p_model = NULL, p_model_op = "eq",
+    sd_y = NULL,
+    # Per-predictor
+    b = NULL, se = NULL, t = NULL, p = NULL, p_op = "eq",
+    beta = NULL,
+    ci_lower = NULL, ci_upper = NULL,
+    r_y = NULL, sd_x = NULL, sr2 = NULL,
+    predictor_names = NULL,
+    # Cross-equation / hierarchical
+    r_12 = NULL, delta_r2_blocks = NULL,
+    level = 0.95,
+    diagnostics = TRUE,
+    # Digits
+    n_digits = 0, k_digits = 0,
+    r2_digits = 2, adj_r2_digits = 2, f_digits = 2, p_model_digits = 3,
+    sd_y_digits = 2,
+    b_digits = 2, se_digits = 2, t_digits = 2, p_digits = 3,
+    beta_digits = 2, ci_digits = 2,
+    r_y_digits = 2, sd_x_digits = 2, sr2_digits = 3,
+    r_12_digits = 2, delta_r2_blocks_digits = 2) {
+
+  has <- function(x) !is.null(x) && length(x) >= 1L && !any(is.na(x))
+  vget <- function(v, i) if (length(v) >= i) v[i] else NULL
+  results <- list()
+  add <- function(x, predictor = "model") {
+    x$predictor <- predictor
+    results[[length(results) + 1L]] <<- x
+  }
+
+  df <- if (has(n) && has(k)) n - k - 1 else NA_real_
+  k_pred <- max(c(0L,
+    length(b), length(se), length(t), length(p),
+    length(beta), length(r_y), length(sd_x), length(sr2),
+    length(ci_lower), length(ci_upper)
+  ))
+  pred_label <- function(i) {
+    if (!is.null(predictor_names) && length(predictor_names) >= i)
+      predictor_names[i] else as.character(i)
+  }
+
+  # Per-predictor dispatch
+  for (i in seq_len(k_pred)) {
+    pname <- pred_label(i)
+    bi <- vget(b, i); sei <- vget(se, i); ti <- vget(t, i)
+    pi_ <- vget(p, i); betai <- vget(beta, i)
+    cili <- vget(ci_lower, i); ciui <- vget(ci_upper, i)
+    ryi <- vget(r_y, i); sxi <- vget(sd_x, i); sri <- vget(sr2, i)
+
+    if (has(bi) && has(sei)) {
+      add(recalc_t_from_b_se(bi, sei, t = ti,
+            b_digits = b_digits, se_digits = se_digits,
+            t_digits = t_digits), pname)
+    }
+    if (has(ti) && has(df)) {
+      add(recalc_p_from_t_df(ti, df, p = pi_, p_op = p_op,
+            t_digits = t_digits, df_digits = 0,
+            p_digits = p_digits), pname)
+    }
+    if (has(bi) && has(sei) && has(df)) {
+      ci_arg <- if (has(cili) && has(ciui)) c(cili, ciui) else NULL
+      add(recalc_ci_from_b_se(bi, sei, df, level = level, ci = ci_arg,
+            b_digits = b_digits, se_digits = se_digits,
+            df_digits = 0, ci_digits = ci_digits), pname)
+    }
+    if (has(bi) && has(sxi) && has(sd_y)) {
+      add(recalc_beta_from_b(bi, sxi, sd_y, beta = betai,
+            b_digits = b_digits, sd_x_digits = sd_x_digits,
+            sd_y_digits = sd_y_digits, beta_digits = beta_digits), pname)
+    }
+    if (has(betai) && has(r2) && has(n) && has(k)) {
+      add(recalc_t_bound_from_beta(betai, r2, n, k, t = ti,
+            beta_digits = beta_digits, r2_digits = r2_digits,
+            n_digits = n_digits, k_digits = k_digits,
+            t_digits = t_digits), pname)
+    }
+    if (has(ti) && has(r2) && has(df)) {
+      add(recalc_semipartial_r2_from_t(ti, r2, df, sr2 = sri,
+            t_digits = t_digits, r2_digits = r2_digits,
+            df_digits = 0, sr2_digits = sr2_digits), pname)
+    }
+  }
+
+  # Model-level dispatch
+  if (has(r2) && has(n) && has(k)) {
+    add(recalc_f_from_r2(r2, n, k, f = f,
+          r2_digits = r2_digits, n_digits = n_digits,
+          k_digits = k_digits, f_digits = f_digits))
+    add(recalc_adj_r2(r2, n, k, adj_r2 = adj_r2,
+          r2_digits = r2_digits, n_digits = n_digits,
+          k_digits = k_digits, adj_r2_digits = adj_r2_digits))
+  }
+  if (has(f) && has(n) && has(k)) {
+    add(recalc_p_from_f(f, df1 = k, df2 = n - k - 1,
+          p = p_model, p_op = p_model_op,
+          f_digits = f_digits, df1_digits = k_digits,
+          df2_digits = 0, p_digits = p_model_digits))
+  } else if (has(r2) && has(n) && has(k)) {
+    add(recalc_p_model_from_r2(r2, n, k, p_model = p_model,
+          p_op = p_model_op,
+          r2_digits = r2_digits, n_digits = n_digits,
+          k_digits = k_digits, p_model_digits = p_model_digits))
+  }
+  if (!is.null(beta) && !is.null(r_y) && length(beta) == length(r_y)) {
+    add(recalc_r2_from_betas_corrs(beta, r_y, r2 = r2,
+          betas_digits = beta_digits, r_y_digits = r_y_digits,
+          r2_digits = r2_digits))
+  }
+  if (!is.null(delta_r2_blocks)) {
+    add(recalc_r2_from_blocks(delta_r2_blocks, r2 = r2,
+          delta_r2_digits = delta_r2_blocks_digits,
+          r2_digits = r2_digits))
+  }
+
+  # Cross-equation dispatch
+  if (!is.null(beta) && length(beta) == 2 &&
+      !is.null(r_y) && length(r_y) == 2) {
+    add(recalc_r12_from_normal_eqs(beta[1], beta[2], r_y[1], r_y[2],
+          beta1_digits = beta_digits, beta2_digits = beta_digits,
+          r_y1_digits = r_y_digits, r_y2_digits = r_y_digits))
+  }
+  if (!is.null(r_y) && length(r_y) == 2 && has(r_12)) {
+    add(recalc_betas_from_corrs_k2(r_y[1], r_y[2], r_12, betas = beta,
+          r_y1_digits = r_y_digits, r_y2_digits = r_y_digits,
+          r_12_digits = r_12_digits, betas_digits = beta_digits))
+  }
+  if (!is.null(r_y)) {
+    add(recalc_r2_floor_from_correlations(r_y, r2 = r2,
+          r_y_digits = r_y_digits, r2_digits = r2_digits))
+  }
+  if (!is.null(beta) && !is.null(r_y) && has(f) && has(n) && has(k) &&
+      length(beta) == length(r_y)) {
+    add(recalc_betar_from_f(beta, r_y, f, n, k,
+          betas_digits = beta_digits, r_y_digits = r_y_digits,
+          f_digits = f_digits, n_digits = n_digits, k_digits = k_digits))
+  }
+
+  # Misreporting diagnostics
+  if (diagnostics) {
+    # E1: beta vs b labeling
+    if (!is.null(beta) && !is.null(r_y) && length(beta) == length(r_y) &&
+        !is.null(sd_x) && length(sd_x) == length(beta) &&
+        has(sd_y) && has(r2)) {
+      add(diagnose_beta_label(
+        coef_reported = beta, r_y = r_y,
+        sd_x = sd_x, sd_y = sd_y, r2 = r2,
+        coef_digits = beta_digits, r_y_digits = r_y_digits,
+        sd_x_digits = sd_x_digits, sd_y_digits = sd_y_digits,
+        r2_digits = r2_digits))
+    }
+    # E2: R^2 vs adjusted R^2 labeling
+    if (has(r2) && !is.null(beta) && !is.null(r_y) &&
+        length(beta) == length(r_y) && has(n) && has(k)) {
+      add(diagnose_r2_label(
+        r2_reported = r2, betas = beta, r_y = r_y, n = n, k = k,
+        r2_digits = r2_digits, betas_digits = beta_digits,
+        r_y_digits = r_y_digits, n_digits = n_digits, k_digits = k_digits))
+    }
+    # E3: one- vs two-tailed p, per predictor
+    for (i in seq_len(k_pred)) {
+      pname <- pred_label(i)
+      ti <- vget(t, i); pi_ <- vget(p, i)
+      if (has(ti) && has(df) && has(pi_)) {
+        add(diagnose_p_tails(ti, df, p = pi_, p_op = p_op,
+              t_digits = t_digits, df_digits = 0,
+              p_digits = p_digits), pname)
+      }
+    }
+  }
+
+  bind_rows(results)
+}
+```
+
+```{r}
+#' Natural-language summary of an audit_regression() result
+#'
+#' Categorises rows into failed, passed, reconstruction-only, and diagnostic
+#' groups; computes overall consistency verdict; and prints a human-readable
+#' report listing each failure with reported value, recomputed interval, and
+#' minimum interval gap. The overall conclusion accounts for diagnostic
+#' resolutions: if a main check fails but exactly one labeling interpretation
+#' (E1 / E2 / E3) is consistent with the report, the conclusion is
+#' "inconsistent as reported, but resolved by [labeling]".
+#'
+#' @param audit Tibble returned by `audit_regression()`.
+#' @param verbose Logical. If TRUE (default), `cat()`s the report.
+#' @return Invisibly returns the report as a character scalar.
+#' @examples
+#' a <- audit_regression(
+#'   n = 1923, k = 2, r2 = 0.41,
+#'   beta = c(-0.39, 0.47), r_y = c(-0.53, 0.61),
+#'   sd_y = 1.4, sd_x = c(1.2, 0.5),
+#'   sd_y_digits = 1, sd_x_digits = 1
+#' )
+#' summarise_audit(a)
+#' @export
+summarise_audit <- function(audit, verbose = TRUE) {
+  if (!"predictor" %in% names(audit)) audit$predictor <- "model"
+
+  fmt_int <- function(lo, hi) {
+    if (is.na(lo) || is.na(hi)) return("[NA, NA]")
+    sprintf("[%s, %s]",
+            formatC(lo, digits = 4, format = "g"),
+            formatC(hi, digits = 4, format = "g"))
+  }
+  fmt_pred <- function(p) {
+    if (is.na(p) || p == "model" || p == "") "" else sprintf(" [%s]", p)
+  }
+  fmt_num <- function(x) {
+    if (is.na(x)) "NA" else formatC(x, digits = 4, format = "g")
+  }
+  interval_gap <- function(rep_lo, rep_hi, rec_lo, rec_hi) {
+    max(0, rep_lo - rec_hi, rec_lo - rep_hi)
+  }
+
+  is_diag <- grepl("^E[123]", audit$check)
+  diag <- audit[is_diag, , drop = FALSE]
+  main <- audit[!is_diag, , drop = FALSE]
+
+  has_cmp <- !is.na(main$consistent)
+  passes <- main[has_cmp & main$consistent, , drop = FALSE]
+  fails  <- main[has_cmp & !main$consistent, , drop = FALSE]
+  recons <- main[!has_cmp, , drop = FALSE]
+
+  # Group diagnostics by E# code and predictor
+  diag_groups <- list()
+  if (nrow(diag) > 0) {
+    diag$prefix <- substr(diag$check, 1, 2)
+    keys <- paste(diag$prefix, diag$predictor, sep = "::")
+    for (key in unique(keys)) {
+      g <- diag[keys == key, , drop = FALSE]
+      cons <- g$consistent
+      n_consistent <- sum(!is.na(cons) & cons)
+      diag_groups[[length(diag_groups) + 1L]] <- list(
+        prefix = g$prefix[1],
+        predictor = g$predictor[1],
+        resolved_by = if (n_consistent == 1L) g$check[!is.na(cons) & cons][1]
+                      else NA_character_,
+        all_inconsistent = all(!is.na(cons)) && !any(cons),
+        group = g
+      )
+    }
+  }
+  any_resolved <- any(vapply(diag_groups,
+    function(d) !is.na(d$resolved_by), logical(1)))
+
+  L <- character()
+  L <- c(L, "Regression report audit", strrep("=", 25), "")
+
+  n_fail <- nrow(fails)
+  n_cmp  <- n_fail + nrow(passes)
+
+  if (n_fail == 0 && n_cmp > 0) {
+    L <- c(L,
+      "Conclusion: REPORTED QUANTITIES ARE MUTUALLY CONSISTENT within rounding.",
+      sprintf("All %d direct check(s) pass; every recomputed interval overlaps the reported value's rounding interval.",
+              n_cmp))
+  } else if (n_fail == 0 && n_cmp == 0) {
+    L <- c(L,
+      "Conclusion: NO DIRECT CHECKS RUN.",
+      "Insufficient inputs were supplied to compare any reported value against a recomputed quantity. See reconstructed quantities below.")
+  } else if (any_resolved) {
+    resolved_by <- vapply(diag_groups,
+      function(d) if (!is.na(d$resolved_by)) sprintf("%s (%s)", d$prefix, d$resolved_by) else "",
+      character(1))
+    resolved_by <- resolved_by[resolved_by != ""]
+    L <- c(L,
+      sprintf("Conclusion: INCONSISTENT AS REPORTED, but resolved by labeling correction(s)."),
+      sprintf("%d of %d direct checks fail. The following labeling diagnostic(s) are uniquely consistent and would reconcile the report:",
+              n_fail, n_cmp),
+      paste0("  - ", resolved_by))
+  } else {
+    L <- c(L,
+      "Conclusion: REPORTED QUANTITIES ARE NOT MUTUALLY CONSISTENT.",
+      sprintf("%d of %d direct checks fail, and no standard label confusion (beta vs b, R^2 vs adjusted R^2, p tails) resolves the discrepancy.",
+              n_fail, n_cmp))
+  }
+  L <- c(L, "")
+
+  if (nrow(fails) > 0) {
+    L <- c(L, "Failed checks:")
+    for (i in seq_len(nrow(fails))) {
+      r <- fails[i, ]
+      gap <- interval_gap(r$reported_lower, r$reported_upper,
+                          r$recomputed_lower, r$recomputed_upper)
+      ref_line <- if (!is.na(r$reported)) {
+        sprintf("    reported:    %s (rounding interval %s)",
+                fmt_num(r$reported), fmt_int(r$reported_lower, r$reported_upper))
+      } else {
+        sprintf("    reference:   %s",
+                fmt_int(r$reported_lower, r$reported_upper))
+      }
+      L <- c(L,
+        sprintf("  %s%s", r$check, fmt_pred(r$predictor)),
+        ref_line,
+        sprintf("    recomputed:  %s",
+                fmt_int(r$recomputed_lower, r$recomputed_upper)),
+        sprintf("    interval gap: %s", fmt_num(gap)),
+        ""
+      )
+    }
+  }
+
+  if (nrow(passes) > 0) {
+    L <- c(L, "Passed checks:")
+    for (i in seq_len(nrow(passes))) {
+      r <- passes[i, ]
+      rep_disp <- if (!is.na(r$reported)) fmt_num(r$reported)
+                  else fmt_int(r$reported_lower, r$reported_upper)
+      L <- c(L, sprintf(
+        "  %s%s: reported %s, recomputed %s",
+        r$check, fmt_pred(r$predictor),
+        rep_disp,
+        fmt_int(r$recomputed_lower, r$recomputed_upper)))
+    }
+    L <- c(L, "")
+  }
+
+  if (nrow(recons) > 0) {
+    L <- c(L, "Reconstructed quantities (no reported value to compare):")
+    for (i in seq_len(nrow(recons))) {
+      r <- recons[i, ]
+      L <- c(L, sprintf(
+        "  %s%s: %s",
+        r$check, fmt_pred(r$predictor),
+        fmt_int(r$recomputed_lower, r$recomputed_upper)))
+    }
+    L <- c(L, "")
+  }
+
+  if (length(diag_groups) > 0) {
+    L <- c(L, "Misreporting diagnostics:")
+    for (d in diag_groups) {
+      diag_name <- switch(d$prefix,
+        E1 = "E1: standardized beta vs unstandardized b labeling",
+        E2 = "E2: R^2 vs adjusted R^2 labeling",
+        E3 = "E3: one- vs two-tailed p")
+      L <- c(L, sprintf("  %s%s", diag_name, fmt_pred(d$predictor)))
+      for (j in seq_len(nrow(d$group))) {
+        r <- d$group[j, ]
+        verdict <- if (is.na(r$consistent)) "n/a"
+                   else if (r$consistent) "consistent"
+                   else "not consistent"
+        L <- c(L, sprintf(
+          "    - %s: reported %s, recomputed %s -> %s",
+          r$check,
+          fmt_int(r$reported_lower, r$reported_upper),
+          fmt_int(r$recomputed_lower, r$recomputed_upper),
+          verdict))
+      }
+      verdict <- if (!is.na(d$resolved_by)) {
+        sprintf("RESOLVES the discrepancy under '%s'.", d$resolved_by)
+      } else if (d$all_inconsistent) {
+        "does NOT explain the discrepancy (neither interpretation is consistent)."
+      } else {
+        "is uninformative (zero or multiple interpretations consistent)."
+      }
+      L <- c(L, sprintf("    Labeling verdict: %s", verdict), "")
+    }
+  }
+
+  out <- paste(L, collapse = "\n")
+  if (verbose) cat(out, "\n", sep = "")
+  invisible(out)
+}
+```
+
+# G. Worked example: Baldeo (2025)
+
+Baldeo's reported quantities (to the precision printed in the manuscript):
+
+- $\beta_1 = -0.39$, $\beta_2 = 0.47$
+- $r_{Y1} = -0.53$, $r_{Y2} = 0.61$
+- $R^2 = 0.41$
+- $\text{SD}_{X_1} = 1.2$, $\text{SD}_{X_2} = 0.5$, $\text{SD}_Y = 1.4$ (1 d.p.)
+- $N = 1923$, $k = 2$
+
+A complete audit using the wrapper. With `diagnostics = TRUE` (the default), the result tibble contains direct checks (B1, B3, B2-via-chain, B4, C1, C4) *and* the label-confusion diagnostics (E1, E2):
+
+```{r}
+#| label: baldeo-audit
+
+baldeo <- audit_regression(
+  n = 1923, k = 2,
+  r2 = 0.41,
+  beta = c(-0.39, 0.47),
+  r_y = c(-0.53, 0.61),
+  sd_y = 1.4, sd_x = c(1.2, 0.5),
+  sd_y_digits = 1, sd_x_digits = 1,
+  predictor_names = c("AI_reliance", "override_freq")
+)
+
+baldeo
+```
+
+The natural-language report:
+
+```{r}
+#| label: baldeo-summary
+
+summarise_audit(baldeo)
+```
+
+The summary states the overall verdict (inconsistent, with no labeling correction reconciling the gap), enumerates each failed check with reported value, recomputed interval, and minimum interval gap, lists passes and reconstructed quantities, and reports a verdict for each diagnostic group: both E1 and E2 are flagged "does not explain" because neither labeling interpretation is consistent. This matches the conclusion in `trustworthiness_assessment.qmd`: the reported quantities are mutually irreconcilable under any of the standard labeling errors.
+
+# Summary
+
+The catalog covers 16 recalculation identities organised into single-coefficient (A1–A4, A6, A8), model-level (B1–B5), and cross-equation (C1, C2, C4–C6) groups, plus composition helpers (D), label-confusion diagnostics (E), a dispatcher wrapper (F: `audit_regression()`), and a natural-language reporter (F: `summarise_audit()`). Every identity uses inputs that are routinely reported in APA psychology manuscripts.
+
+Each function takes numeric inputs paired with `*_digits` arguments specifying their reported precision; rounding is propagated through the identity by enumerating corners of the input-interval product, and the recomputed quantity is returned as a `[lower, upper]` interval. The check passes iff the reported and recomputed intervals overlap. `audit_regression()` accepts whatever subset of quantities a paper reports and runs every check that has all its inputs available, including label-confusion diagnostics by default; results are returned as a single tibble. `summarise_audit()` consumes that tibble and returns a verdict-oriented report: an overall conclusion (consistent / inconsistent / inconsistent-but-resolved-by-labeling), per-check failures with reported values and recomputed intervals, passed checks, reconstructed quantities, and per-diagnostic labeling verdicts. Composition helpers (D) and chained variants like `recalc_p_model_from_r2()` fill in unreported quantities while keeping rounding propagation correct across the chain.

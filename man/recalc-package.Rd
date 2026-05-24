@@ -11,10 +11,5 @@ Recalculate statistical results from reported summary and test statistics.
 \author{
 \strong{Maintainer}: Ian Hussey \email{Ian.hussey@unibe.ch} (\href{https://orcid.org/0000-0001-8906-7559}{ORCID})
 
-Authors:
-\itemize{
-  \item Wallrich Lukas \email{lukas.wallrich@gmail.com} (\href{https://orcid.org/0000-0003-2121-5177}{ORCID})
-}
-
 }
 \keyword{internal}

@@ -1,0 +1,261 @@
+---
+title: "Descriptive-Statistic Consistency between Whole Sample and Subgroups"
+subtitle: "Subgroup N / M / SD checks in the {recalc} package"
+author: "Ian Hussey"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    toc_float: true
+    code-fold: false
+    code-overflow: wrap
+    code-tools: true
+    warning: false
+    df-print: kable
+    theme:
+      light: cosmo
+      dark: darkly
+    highlight-style:
+      light: breeze
+      dark: dracula
+---
+
+# Purpose
+
+Papers that report a Table 1 (whole sample) and demographic / cell breakdowns (subgroups) leak more information than is usually exploited. The aggregation identities are hard mathematical relationships:
+
+- $N$ across cells must sum to the total $N$.
+- Subgroup means must combine, weighted by cell size, to the overall mean.
+- Subgroup SDs and means together must combine to the overall SD via the total-variance decomposition.
+
+Failures of any one of these are not "rounding noise": they are evidence that a subgroup is missing or misreported, that overall and cell counts were not computed from the same observations, or that the table was hand-assembled.
+
+A further forensic check uses SDs alone. Sample SDs have their own sampling variability. A set of subgroup SDs that cluster *more tightly* than sampling theory predicts is a candidate for interpolated, rounded-then-propagated, or copy-pasted values — the descriptive-statistic analogue of [TIVA](https://datacolada.org/74), Test of Insufficient Variance, applied at the table level.
+
+This vignette catalogs three checks (`E1`–`E3`) for descriptive-statistic consistency between whole sample and subgroups.
+
+**Inputs are rounded.** As with every other identity in `{recalc}`, each numeric input is paired with a `*_digits` argument specifying its reported precision. Rounding is propagated through the identity by corner enumeration; checks pass iff reported and recomputed intervals overlap.
+
+**Notation.** $N = \sum_g n_g$ is the overall sample size, $M$ the overall mean, $\text{SD}$ the overall SD; $n_g$, $M_g$, $s_g$ are subgroup statistics for $g = 1, \ldots, k$.
+
+```{r}
+library(recalc)
+```
+
+# E1. Whole-sample N, M, SD from subgroups
+
+Three identities, all simultaneously testable from a Table 1:
+
+$$N = \sum_g n_g$$
+$$M = \sum_g n_g M_g \,/\, N$$
+$$\text{SD}^2 = \big[\sum_g (n_g - 1) s_g^2 + \sum_g n_g (M_g - M)^2\big] \,/\, (N - 1)$$
+
+The SD identity is the **total-variance decomposition** (within + between sums of squares). The textbook "pooled SD"
+
+$$\text{SD}_\text{pooled} = \sqrt{\sum_g (n_g - 1) s_g^2 / \sum_g (n_g - 1)}$$
+
+is only equal to the total SD when subgroup means coincide; using it as the check would false-flag any paper whose subgroup means differ. `recalc_total_from_subgroups()` uses the correct decomposition.
+
+```{r}
+recalc_total_from_subgroups(
+  subgroup_ns    = c(40, 40),
+  subgroup_means = c(4.71, 5.20),
+  subgroup_sds   = c(2.04, 2.32),
+  overall_n      = 80,
+  overall_mean   = 4.96,
+  overall_sd     = 2.18,
+  n_digits = 0, mean_digits = 2, sd_digits = 2
+)
+```
+
+If the paper reports only $N$ and means by subgroup, omit `subgroup_sds` (and `overall_sd`); the function returns the $N$ and $M$ rows only.
+
+A mismatch is the forensic signal. Below, the reported overall SD has been replaced with an implausible value:
+
+```{r}
+recalc_total_from_subgroups(
+  subgroup_ns    = c(40, 40),
+  subgroup_means = c(4.71, 5.20),
+  subgroup_sds   = c(2.04, 2.32),
+  overall_n      = 80,
+  overall_mean   = 4.96,
+  overall_sd     = 5.00,
+  n_digits = 0, mean_digits = 2, sd_digits = 2
+)
+```
+
+The `SD` row's `consistent` column is `FALSE`: the reported $\text{SD} = 5.00$ lies far outside the recomputed interval.
+
+# E2. Implied N, M, SD of an unreported subgroup
+
+When the paper reports the overall statistics and only $k - 1$ of $k$ subgroups, the missing subgroup is determined by inverting E1:
+
+$$n_\star = N - \sum_g n_g$$
+$$M_\star = (N M - \sum_g n_g M_g) \,/\, n_\star$$
+$$s_\star^2 = \big[(N - 1)\,\text{SD}^2 - \sum_g (n_g - 1) s_g^2 - n_\star (M_\star - M)^2 - \sum_g n_g (M_g - M)^2\big] \,/\, (n_\star - 1)$$
+
+`recalc_missing_subgroup()` returns the implied $n_\star$, $M_\star$, $s_\star$ as rounding-aware intervals. The `reported` column is always `NA` (there is no reported missing-group value); the `consistent` column reports **physical-feasibility** checks on the implied statistics, not the standard reported-vs-recomputed overlap.
+
+```{r}
+recalc_missing_subgroup(
+  reported_ns    = 40,
+  reported_means = 4.71,
+  reported_sds   = 2.04,
+  overall_n      = 80,
+  overall_mean   = 4.96,
+  overall_sd     = 2.18,
+  n_digits = 0, mean_digits = 2, sd_digits = 2
+)
+```
+
+The output says: an unreported second subgroup of about 40 people, with mean around 5.2 and SD around 2.3, would reconcile the reported totals with the reported first group. If the paper later reveals a missing group with statistics far outside these intervals, the table is inconsistent.
+
+## Feasibility on the `consistent` column
+
+With no scale supplied, the `consistent` verdicts are:
+
+- `n_miss` — `TRUE` iff the recomputed interval reaches $\geq 1$ (some rounding makes the missing group non-empty); `FALSE` if the reported subgroups already saturate or exceed `overall_n`.
+- `M_miss` — `NA` (no bound to check against).
+- `SD_miss` — `FALSE` if the propagated interval contains `NaN`, meaning the implied variance is negative somewhere in the rounding box and no real subgroup can reconcile the reported values; `TRUE` otherwise.
+
+For example, shrinking the reported overall SD to an implausible 0.10 makes the implied variance for the missing group strictly negative — the SD row's bounds become `NaN` and `consistent` is `FALSE`:
+
+```{r}
+#| warning: false
+
+recalc_missing_subgroup(
+  reported_ns    = 40,
+  reported_means = 4.71,
+  reported_sds   = 2.04,
+  overall_n      = 80,
+  overall_mean   = 4.96,
+  overall_sd     = 0.10,
+  n_digits = 0, mean_digits = 2, sd_digits = 2
+)
+```
+
+## Supplying scale endpoints sharpens the check
+
+If the measurement scale has known logical endpoints — a Likert response anchored 1–7, a percentage 0–100, an age in years — pass them via `scale_min` and `scale_max`. The function then checks two additional bounds:
+
+1. **Mean must lie within the scale.** $M_\star \in [a, b]$.
+2. **SD cannot exceed the Bhatia-Davis bound.** For a sample of size $n_\star$ drawn from $[a, b]$ with mean $M_\star$, the maximum possible sample SD is
+$$s_\star \,\leq\, \sqrt{\frac{n_\star}{n_\star - 1}\,(M_\star - a)(b - M_\star)}.$$
+The bound is achieved when all observations sit at the endpoints; the $n_\star/(n_\star - 1)$ factor is the Bessel correction. (Bhatia & Davis, 2000.)
+
+When endpoints are supplied, `consistent` for `M_miss` becomes `TRUE`/`FALSE` and the SD-row check additionally enforces the Bhatia-Davis upper bound. Here is a configuration where the implied missing-group SD exceeds what is physically achievable on a tight $[3, 5]$ scale:
+
+```{r}
+recalc_missing_subgroup(
+  reported_ns    = 50,
+  reported_means = 4.00,
+  reported_sds   = 0.50,
+  overall_n      = 100, overall_mean = 4.00, overall_sd = 1.50,
+  scale_min = 3, scale_max = 5,
+  n_digits = 0, mean_digits = 2, sd_digits = 2
+)
+```
+
+The reported overall SD of 1.50 forces the unreported group to carry the missing variance — but the maximum SD achievable for any $n = 50$ sample on $[3, 5]$ with mean 4 is $\sqrt{50/49 \cdot 1 \cdot 1} \approx 1.01$, well below the implied $\approx 2.07$. The SD row is `FALSE`.
+
+And a case where the implied missing mean lands outside the scale:
+
+```{r}
+#| warning: false
+
+recalc_missing_subgroup(
+  reported_ns    = 50,
+  reported_means = 3.00,
+  reported_sds   = 1.40,
+  overall_n      = 100, overall_mean = 6.00, overall_sd = 1.50,
+  scale_min = 1, scale_max = 7,
+  n_digits = 0, mean_digits = 2, sd_digits = 2
+)
+```
+
+The implied missing mean is around 9, outside $[1, 7]$. Both the M and SD rows flag — the SD row because no real bounded subgroup can have a mean outside the scale.
+
+# E3. SD concentration: are subgroup SDs too uniform?
+
+::: {.callout-warning}
+## Status: exploratory
+
+E3 is offered as a candidate forensic signal, **not** as a calibrated hypothesis test. The χ²(k − 1) approximation underlying Bartlett's $K^2$ is documented for the *upper* tail of variance-heterogeneity testing; calibration of the *lower* tail in the regimes psychology actually uses (k = 2–5, n_g = 20–100, mild non-normality) has not been validated. Power against fabrication patterns is also unstudied. Small p here means *worth looking at the table more closely*, not *fabricated*. Unlike E1 and E2 — which are exact mathematical identities — E3 will be flagged in any future `audit_*()` wrapper as a separate "diagnostic" rather than a "check", and will not graduate until simulation work establishes its null calibration and detection power.
+
+Specific caveats: (i) genuinely homoscedastic sampling (stratified designs, capped or floored scales, treatments that homogenize the outcome) can produce small lower-tail p honestly; (ii) the χ² approximation is known to misbehave at small $n_g$ and under non-normality, in a direction not yet quantified for the lower tail; (iii) there is no published evidence on what specific pattern fabricated SDs produce, so the test's sensitivity is unmeasured.
+:::
+
+Sample SDs have their own sampling variability. For normal data, $\text{SE}(s) \approx \sigma / \sqrt{2(n - 1)}$, and similar-order variability holds for non-pathological non-normal cases. A set of subgroup SDs clustering more tightly than this *should* be unusual.
+
+`recalc_sd_concentration()` implements **Bartlett's test of homogeneity of variances** and returns the *lower-tail* p-value. Under a common-population null, Bartlett's $K^2$ follows $\chi^2_{k - 1}$ approximately. Subgroup SDs more similar to each other than sampling theory allows produce a small $K^2$, hence a small lower-tail p — the TIVA logic applied at the descriptive-statistic level.
+
+A genuine sample shows nothing unusual:
+
+```{r}
+set.seed(1)
+sds_real <- replicate(4, sd(rnorm(40, sd = 2.4)))
+
+recalc_sd_concentration(
+  subgroup_ns  = rep(40, 4),
+  subgroup_sds = round(sds_real, 2),
+  n_digits = 0, sd_digits = 2
+)
+```
+
+Four subgroups with *identical* reported SDs are improbably uniform:
+
+```{r}
+recalc_sd_concentration(
+  subgroup_ns  = c(40, 40, 40, 40),
+  subgroup_sds = c(2.40, 2.40, 2.40, 2.40),
+  n_digits = 0, sd_digits = 2
+)
+```
+
+The recomputed lower-tail p-value bracket is essentially zero — the SDs are far flatter than sampling theory allows.
+
+Strongly *heterogeneous* SDs sit at the other end of the distribution and produce a lower-tail p near 1, no forensic concern:
+
+```{r}
+recalc_sd_concentration(
+  subgroup_ns  = c(40, 40, 40, 40),
+  subgroup_sds = c(1.00, 2.00, 3.00, 4.00),
+  n_digits = 0, sd_digits = 2
+)
+```
+
+# Composing the three checks
+
+A typical use is to run all three on the same Table 1:
+
+```{r}
+ns    <- c(40, 40, 40, 40)
+means <- c(4.50, 4.60, 4.55, 4.65)
+sds   <- c(2.40, 2.40, 2.40, 2.40)
+
+dplyr::bind_rows(
+  recalc_total_from_subgroups(
+    subgroup_ns = ns, subgroup_means = means, subgroup_sds = sds,
+    overall_n = 160, overall_mean = 4.58, overall_sd = 2.38,
+    n_digits = 0, mean_digits = 2, sd_digits = 2
+  ),
+  recalc_sd_concentration(
+    subgroup_ns = ns, subgroup_sds = sds,
+    n_digits = 0, sd_digits = 2
+  )
+)
+```
+
+E1 passes — the aggregation identities are satisfied. E3 flags the row: the four reported SDs being identical to two decimal places is, on its own, a forensic concern, even though the overall statistics aggregate correctly. The two signals are independent, and both are worth running.
+
+# Summary
+
+The package's `E` group covers three checks on the relationship between whole-sample and subgroup descriptive statistics. **E1 and E2 are exact mathematical identities**; **E3 is an exploratory diagnostic** whose calibration and power have not yet been validated.
+
+`recalc_total_from_subgroups()` (E1) checks $N$, $M$, and $\text{SD}$ of the overall sample against the corresponding subgroup statistics using the correct total-variance decomposition; mismatch implies the overall row and subgroup rows were not computed from the same observations. `recalc_missing_subgroup()` (E2) inverts the identity to recover what an unreported $k$-th subgroup would have to be, returning rounding-aware intervals and `NaN` bounds when the implied SD is strictly infeasible. Both are deterministic: they pass or fail on arithmetic, and rounding propagation has well-defined semantics.
+
+`recalc_sd_concentration()` (E3) implements Bartlett's test interpreted as a lower-tail check for SDs that cluster more tightly than sampling theory allows — the descriptive-statistic analogue of TIVA. **It is currently exploratory.** The χ²(k − 1) approximation underlying $K^2$ is documented for the upper tail; lower-tail calibration in small-sample, mildly non-normal regimes is unvalidated, and power against fabricated-SD patterns is unstudied. Treat a small lower-tail p as a flag for closer inspection of the table, not as evidence on its own. Pending simulation work, E3 will not be included in any `audit_*()` wrapper.
+
+Each function follows the package convention: every reported value pairs with a `*_digits` argument, rounding is propagated through the identity, and the recomputed interval is returned as `[lower, upper]`. For E1 and E2, checks pass iff the reported and recomputed intervals overlap. For E3 the recomputed interval brackets a forensic signal whose calibration is not yet established.
