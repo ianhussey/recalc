@@ -137,11 +137,20 @@ ui <- fluidPage(
           numericInput("t1_n_digits",    "Digits for N",    value = 0, min = 0, step = 1),
           numericInput("t1_mean_digits", "Digits for Mean", value = 2, min = 0, step = 1),
           numericInput("t1_sd_digits",   "Digits for SD",   value = 2, min = 0, step = 1),
+          selectInput(
+            "t1_rounding",
+            "Rounding mode for reported values",
+            choices = c("Either half-up or bankers (default)" = "either",
+                        "Round half up" = "half_up",
+                        "Bankers (round half to even)" = "bankers",
+                        "Truncated" = "truncate"),
+            selected = "either"
+          ),
 
           hr(),
           h4("Subgroups"),
           numericInput("t1_k", "Number of subgroups", value = 2, min = 2, step = 1),
-          checkboxInput("t1_compare_sds", "Compare SDs?", value = TRUE),
+          checkboxInput("t1_compare_sds", "Include SDs?", value = TRUE),
 
           hr(),
           h4("Overall sample"),
@@ -185,9 +194,18 @@ ui <- fluidPage(
           numericInput("t2_n_digits",    "Digits for N",    value = 0, min = 0, step = 1),
           numericInput("t2_mean_digits", "Digits for Mean", value = 2, min = 0, step = 1),
           numericInput("t2_sd_digits",   "Digits for SD",   value = 2, min = 0, step = 1),
+          selectInput(
+            "t2_rounding",
+            "Rounding mode for reported values",
+            choices = c("Either half-up or bankers (default)" = "either",
+                        "Round half up" = "half_up",
+                        "Bankers (round half to even)" = "bankers",
+                        "Truncated" = "truncate"),
+            selected = "either"
+          ),
 
           hr(),
-          h4("Reported subgroups"),
+          h4("Subgroups"),
           numericInput("t2_k", "Number of reported subgroups",
                        value = 1, min = 1, step = 1),
           checkboxInput("t2_compare_sds", "Include SDs?", value = TRUE),
@@ -222,7 +240,7 @@ ui <- fluidPage(
             "overlap check, since there is no reported missing-group value)."),
           DTOutput("t2_table"),
           br(),
-          h4("Identities and feasibility checks used"),
+          h4("Identities used"),
           uiOutput("t2_identities")
         )
       )
@@ -272,7 +290,8 @@ server <- function(input, output, session) {
       overall_sd     = if (input$t1_compare_sds) input$t1_overall_sd else NULL,
       n_digits       = input$t1_n_digits,
       mean_digits    = input$t1_mean_digits,
-      sd_digits      = if (input$t1_compare_sds) input$t1_sd_digits else NULL
+      sd_digits      = if (input$t1_compare_sds) input$t1_sd_digits else NULL,
+      rounding       = input$t1_rounding
     )
     do.call(recalc::recalc_total_from_subgroups, args)
   })
@@ -330,7 +349,8 @@ server <- function(input, output, session) {
       scale_max      = if (has_scale) input$t2_scale_max else NULL,
       n_digits       = input$t2_n_digits,
       mean_digits    = input$t2_mean_digits,
-      sd_digits      = if (input$t2_compare_sds) input$t2_sd_digits else NULL
+      sd_digits      = if (input$t2_compare_sds) input$t2_sd_digits else NULL,
+      rounding       = input$t2_rounding
     )
     tryCatch(
       suppressWarnings(do.call(recalc::recalc_missing_subgroup, args)),
