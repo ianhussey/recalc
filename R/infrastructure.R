@@ -42,22 +42,22 @@ reported_interval <- function(value, digits, op = "eq") {
   )
 }
 
-#' Standard return shape: tibble with reported and recomputed intervals
+#' Standard return shape: tibble with reported and recalculated intervals
 #' @keywords internal
-recalc_result <- function(check, reported_value, reported_int, recomputed_int) {
+recalc_result <- function(check, reported_value, reported_int, recalculated_int) {
   if (anyNA(reported_int)) {
     consistent <- NA
   } else {
-    consistent <- (recomputed_int[["upper"]] >= reported_int[1]) &
-                  (recomputed_int[["lower"]] <= reported_int[2])
+    consistent <- (recalculated_int[["upper"]] >= reported_int[1]) &
+                  (recalculated_int[["lower"]] <= reported_int[2])
   }
   tibble::tibble(
     check = check,
     reported = if (is.null(reported_value)) NA_real_ else as.numeric(reported_value),
     reported_lower = reported_int[1],
     reported_upper = reported_int[2],
-    recomputed_lower = recomputed_int[["lower"]],
-    recomputed_upper = recomputed_int[["upper"]],
+    recalculated_lower = recalculated_int[["lower"]],
+    recalculated_upper = recalculated_int[["upper"]],
     consistent = consistent
   )
 }

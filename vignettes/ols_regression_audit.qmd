@@ -24,11 +24,11 @@ format:
 
 # Purpose
 
-`{statcheck}` recalculates a single relationship: $p$ from a reported test statistic and degrees of freedom. OLS multiple regression admits many more recalculation identities — each one a hard mathematical relationship between quantities a paper typically reports separately. Any inconsistency between reported and recomputed values is either a transcription error, a labeling error (e.g., $b$ mislabeled as $\beta$), or a model-specification problem.
+`{statcheck}` recalculates a single relationship: $p$ from a reported test statistic and degrees of freedom. OLS multiple regression admits many more recalculation identities — each one a hard mathematical relationship between quantities a paper typically reports separately. Any inconsistency between reported and recalculated values is either a transcription error, a labeling error (e.g., $b$ mislabeled as $\beta$), or a model-specification problem.
 
 This document catalogs identities testable from quantities **routinely** present in APA psychology manuscripts. Identities that depend on rarely-reported inputs — VIF, full ANOVA SS tables, partial-$r$ columns, fitted Cohen's $f^2$, single-predictor regressions reported as such — are not included here, because in practice the gating input never appears.
 
-**Inputs are rounded.** Every reported number has known precision — typically 2 or 3 decimal places. Under half-up / half-down rounding, a value $x$ to $d$ decimal places came from a true value in $[x - 0.5 \cdot 10^{-d},\, x + 0.5 \cdot 10^{-d}]$. Each function in this document propagates those rounding intervals through the identity and returns the achievable interval for the recomputed quantity. The check passes iff the recomputed and reported intervals overlap. Each numeric input has a paired `*_digits` argument; defaults reflect typical APA reporting (2 d.p. for coefficients, correlations, $R^2$; 3 d.p. for $p$-values; 0 d.p. for $N$, $k$, df).
+**Inputs are rounded.** Every reported number has known precision — typically 2 or 3 decimal places. Under half-up / half-down rounding, a value $x$ to $d$ decimal places came from a true value in $[x - 0.5 \cdot 10^{-d},\, x + 0.5 \cdot 10^{-d}]$. Each function in this document propagates those rounding intervals through the identity and returns the achievable interval for the recalculated quantity. The check passes iff the recalculated and reported intervals overlap. Each numeric input has a paired `*_digits` argument; defaults reflect typical APA reporting (2 d.p. for coefficients, correlations, $R^2$; 3 d.p. for $p$-values; 0 d.p. for $N$, $k$, df).
 
 **Notation.** $Y$ is the outcome, $X_i$ the $i$th predictor, $k$ the number of predictors, $N$ the sample size, $\text{df} = N - k - 1$ the residual degrees of freedom. $b_i$ is unstandardized, $\beta_i$ standardized, $t_i$ its $t$-statistic, $\text{SE}_i$ its standard error. $r_{Yi}$ is the zero-order correlation between $X_i$ and $Y$, $r_{ij}$ inter-predictor correlation. $R^2$ is the model coefficient of determination.
 
@@ -74,7 +74,7 @@ recalc_ci_from_b_se(b = -5.34, se = 0.56, df = 30, ci = c(-6.49, -4.20))
 
 $$\beta_i = b_i \cdot \text{SD}_{X_i} / \text{SD}_Y$$
 
-The diagnostic for $b$/$\beta$ label confusion (see `diagnose_beta_label()` in section E). With SDs at 1 d.p. (typical), the recomputed-$\beta$ interval can be wide.
+The diagnostic for $b$/$\beta$ label confusion (see `diagnose_beta_label()` in section E). With SDs at 1 d.p. (typical), the recalculated-$\beta$ interval can be wide.
 
 ```{r}
 recalc_beta_from_b(b = -5.34, sd_x = 0.98, sd_y = 6.03, beta = -0.87)
@@ -192,7 +192,7 @@ recalc_r2_floor_from_correlations(r_y = c(-0.53, 0.61), r2 = 0.41)
 
 $$\Delta F = \frac{(R^2_2 - R^2_1)/\Delta k}{(1 - R^2_2)/(N - k_2 - 1)}$$
 
-Composes with B2 (recalc model $p$ from a recomputed $\Delta F$ on $\Delta k$, $N - k_2 - 1$ df).
+Composes with B2 (recalc model $p$ from a recalculated $\Delta F$ on $\Delta k$, $N - k_2 - 1$ df).
 
 ```{r}
 recalc_delta_f(r2_full = 0.41, r2_reduced = 0.18, delta_k = 1,
@@ -295,7 +295,7 @@ By default the wrapper *also* runs the section-E label-confusion diagnostics (`d
 
 C5 (hierarchical $\Delta F$) is structurally distinct (requires a nested-model pair with separate $R^2$, $k$, and increment metadata) and is not dispatched by the wrapper — call `recalc_delta_f()` directly.
 
-The audit tibble is consumed by `summarise_audit()`, which produces a natural-language report: an overall conclusion (consistent / inconsistent / inconsistent-but-resolved-by-labeling), per-check failure details with reported value, recomputed interval, and minimum interval gap, a list of passed checks and reconstructed quantities, and a verdict for each diagnostic group (whether a labeling alternative reconciles the report).
+The audit tibble is consumed by `summarise_audit()`, which produces a natural-language report: an overall conclusion (consistent / inconsistent / inconsistent-but-resolved-by-labeling), per-check failure details with reported value, recalculated interval, and minimum interval gap, a list of passed checks and reconstructed quantities, and a verdict for each diagnostic group (whether a labeling alternative reconciles the report).
 
 # Worked example: Baldeo (2025)
 
@@ -336,10 +336,10 @@ The natural-language report:
 summarise_audit(baldeo)
 ```
 
-The summary states the overall verdict (inconsistent, with no labeling correction reconciling the gap), enumerates each failed check with reported value, recomputed interval, and minimum interval gap, lists passes and reconstructed quantities, and reports a verdict for each diagnostic group: both E1 and E2 are flagged "does not explain" because neither labeling interpretation is consistent. This matches the conclusion in `trustworthiness_assessment.qmd`: the reported quantities are mutually irreconcilable under any of the standard labeling errors.
+The summary states the overall verdict (inconsistent, with no labeling correction reconciling the gap), enumerates each failed check with reported value, recalculated interval, and minimum interval gap, lists passes and reconstructed quantities, and reports a verdict for each diagnostic group: both E1 and E2 are flagged "does not explain" because neither labeling interpretation is consistent. This matches the conclusion in `trustworthiness_assessment.qmd`: the reported quantities are mutually irreconcilable under any of the standard labeling errors.
 
 # Summary
 
 The catalog covers 16 recalculation identities organised into single-coefficient (A1–A4, A6, A8), model-level (B1–B5), and cross-equation (C1, C2, C4–C6) groups, plus composition helpers (D), label-confusion diagnostics (E), a dispatcher wrapper (F: `audit_regression()`), and a natural-language reporter (F: `summarise_audit()`). Every identity uses inputs that are routinely reported in APA psychology manuscripts.
 
-Each function takes numeric inputs paired with `*_digits` arguments specifying their reported precision; rounding is propagated through the identity by enumerating corners of the input-interval product, and the recomputed quantity is returned as a `[lower, upper]` interval. The check passes iff the reported and recomputed intervals overlap. `audit_regression()` accepts whatever subset of quantities a paper reports and runs every check that has all its inputs available, including label-confusion diagnostics by default; results are returned as a single tibble. `summarise_audit()` consumes that tibble and returns a verdict-oriented report: an overall conclusion (consistent / inconsistent / inconsistent-but-resolved-by-labeling), per-check failures with reported values and recomputed intervals, passed checks, reconstructed quantities, and per-diagnostic labeling verdicts. Composition helpers (D) and chained variants like `recalc_p_model_from_r2()` fill in unreported quantities while keeping rounding propagation correct across the chain.
+Each function takes numeric inputs paired with `*_digits` arguments specifying their reported precision; rounding is propagated through the identity by enumerating corners of the input-interval product, and the recalculated quantity is returned as a `[lower, upper]` interval. The check passes iff the reported and recalculated intervals overlap. `audit_regression()` accepts whatever subset of quantities a paper reports and runs every check that has all its inputs available, including label-confusion diagnostics by default; results are returned as a single tibble. `summarise_audit()` consumes that tibble and returns a verdict-oriented report: an overall conclusion (consistent / inconsistent / inconsistent-but-resolved-by-labeling), per-check failures with reported values and recalculated intervals, passed checks, reconstructed quantities, and per-diagnostic labeling verdicts. Composition helpers (D) and chained variants like `recalc_p_model_from_r2()` fill in unreported quantities while keeping rounding propagation correct across the chain.

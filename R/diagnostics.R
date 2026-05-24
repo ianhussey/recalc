@@ -2,7 +2,7 @@
 #'
 #' Tests two interpretations of a coefficient column reported as "beta":
 #' (A) the values are true betas; (B) the values are unstandardized b's
-#' mislabeled as beta. Returns the recomputed-R^2 interval under each
+#' mislabeled as beta. Returns the recalculated-R^2 interval under each
 #' interpretation so the user can see which (if either) is consistent with
 #' the reported R^2.
 #'
@@ -129,8 +129,8 @@ diagnose_r2_label <- function(r2_reported, betas, r_y, n, k,
     reported = NA_real_,
     reported_lower = raw_int[["lower"]],
     reported_upper = raw_int[["upper"]],
-    recomputed_lower = recomp_br[["lower"]],
-    recomputed_upper = recomp_br[["upper"]],
+    recalculated_lower = recomp_br[["lower"]],
+    recalculated_upper = recomp_br[["upper"]],
     consistent = (recomp_br[["upper"]] >= raw_int[["lower"]]) &
                  (recomp_br[["lower"]] <= raw_int[["upper"]])
   )

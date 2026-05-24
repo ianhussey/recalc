@@ -121,12 +121,12 @@ recalc_total_from_subgroups <- function(subgroup_ns, subgroup_means,
 #' missing-subgroup statistics:
 #'
 #' \describe{
-#'   \item{`n_miss`}{`TRUE` iff the recomputed interval reaches \eqn{\geq 1}
+#'   \item{`n_miss`}{`TRUE` iff the recalculated interval reaches \eqn{\geq 1}
 #'         (i.e. some rounding makes the missing group non-empty); `FALSE`
 #'         if the reported subgroup Ns already saturate or exceed
 #'         `overall_n`.}
 #'   \item{`M_miss`}{When `scale_min` and `scale_max` are supplied, `TRUE`
-#'         iff the recomputed interval intersects `[scale_min, scale_max]`.
+#'         iff the recalculated interval intersects `[scale_min, scale_max]`.
 #'         `NA` when scale endpoints are not supplied (no bound to check).}
 #'   \item{`SD_miss`}{`FALSE` if the propagated interval contains `NaN` —
 #'         i.e. the implied variance is negative at some rounding corner, so
@@ -356,7 +356,7 @@ recalc_missing_subgroup <- function(reported_ns, reported_means,
 #' @param n_digits,sd_digits Integer. Number of decimal places each value was
 #'   reported to. No defaults: the caller must specify the precision of every
 #'   value they supply.
-#' @return One-row tibble. `recomputed_lower` / `recomputed_upper` bracket the
+#' @return One-row tibble. `recalculated_lower` / `recalculated_upper` bracket the
 #'   lower-tail p-value over the rounding box. Small values (e.g. < 0.05) are
 #'   the forensic flag — subject to the caveats in "Limitations".
 #' @examples

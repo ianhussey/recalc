@@ -36,7 +36,7 @@ A further forensic check uses SDs alone. Sample SDs have their own sampling vari
 
 This vignette catalogs three checks (`E1`–`E3`) for descriptive-statistic consistency between whole sample and subgroups.
 
-**Inputs are rounded.** As with every other identity in `{recalc}`, each numeric input is paired with a `*_digits` argument specifying its reported precision. Rounding is propagated through the identity by corner enumeration; checks pass iff reported and recomputed intervals overlap.
+**Inputs are rounded.** As with every other identity in `{recalc}`, each numeric input is paired with a `*_digits` argument specifying its reported precision. Rounding is propagated through the identity by corner enumeration; checks pass iff reported and recalculated intervals overlap.
 
 **Notation.** $N = \sum_g n_g$ is the overall sample size, $M$ the overall mean, $\text{SD}$ the overall SD; $n_g$, $M_g$, $s_g$ are subgroup statistics for $g = 1, \ldots, k$.
 
@@ -86,7 +86,7 @@ recalc_total_from_subgroups(
 )
 ```
 
-The `SD` row's `consistent` column is `FALSE`: the reported $\text{SD} = 5.00$ lies far outside the recomputed interval.
+The `SD` row's `consistent` column is `FALSE`: the reported $\text{SD} = 5.00$ lies far outside the recalculated interval.
 
 # E2. Implied N, M, SD of an unreported subgroup
 
@@ -96,7 +96,7 @@ $$n_\star = N - \sum_g n_g$$
 $$M_\star = (N M - \sum_g n_g M_g) \,/\, n_\star$$
 $$s_\star^2 = \big[(N - 1)\,\text{SD}^2 - \sum_g (n_g - 1) s_g^2 - n_\star (M_\star - M)^2 - \sum_g n_g (M_g - M)^2\big] \,/\, (n_\star - 1)$$
 
-`recalc_missing_subgroup()` returns the implied $n_\star$, $M_\star$, $s_\star$ as rounding-aware intervals. The `reported` column is always `NA` (there is no reported missing-group value); the `consistent` column reports **physical-feasibility** checks on the implied statistics, not the standard reported-vs-recomputed overlap.
+`recalc_missing_subgroup()` returns the implied $n_\star$, $M_\star$, $s_\star$ as rounding-aware intervals. The `reported` column is always `NA` (there is no reported missing-group value); the `consistent` column reports **physical-feasibility** checks on the implied statistics, not the standard reported-vs-recalculated overlap.
 
 ```{r}
 recalc_missing_subgroup(
@@ -116,7 +116,7 @@ The output says: an unreported second subgroup of about 40 people, with mean aro
 
 With no scale supplied, the `consistent` verdicts are:
 
-- `n_miss` — `TRUE` iff the recomputed interval reaches $\geq 1$ (some rounding makes the missing group non-empty); `FALSE` if the reported subgroups already saturate or exceed `overall_n`.
+- `n_miss` — `TRUE` iff the recalculated interval reaches $\geq 1$ (some rounding makes the missing group non-empty); `FALSE` if the reported subgroups already saturate or exceed `overall_n`.
 - `M_miss` — `NA` (no bound to check against).
 - `SD_miss` — `FALSE` if the propagated interval contains `NaN`, meaning the implied variance is negative somewhere in the rounding box and no real subgroup can reconcile the reported values; `TRUE` otherwise.
 
@@ -214,7 +214,7 @@ recalc_sd_concentration(
 )
 ```
 
-The recomputed lower-tail p-value bracket is essentially zero — the SDs are far flatter than sampling theory allows.
+The recalculated lower-tail p-value bracket is essentially zero — the SDs are far flatter than sampling theory allows.
 
 Strongly *heterogeneous* SDs sit at the other end of the distribution and produce a lower-tail p near 1, no forensic concern:
 
@@ -258,4 +258,4 @@ The package's `E` group covers three checks on the relationship between whole-sa
 
 `recalc_sd_concentration()` (E3) implements Bartlett's test interpreted as a lower-tail check for SDs that cluster more tightly than sampling theory allows — the descriptive-statistic analogue of TIVA. **It is currently exploratory.** The χ²(k − 1) approximation underlying $K^2$ is documented for the upper tail; lower-tail calibration in small-sample, mildly non-normal regimes is unvalidated, and power against fabricated-SD patterns is unstudied. Treat a small lower-tail p as a flag for closer inspection of the table, not as evidence on its own. Pending simulation work, E3 will not be included in any `audit_*()` wrapper.
 
-Each function follows the package convention: every reported value pairs with a `*_digits` argument, rounding is propagated through the identity, and the recomputed interval is returned as `[lower, upper]`. For E1 and E2, checks pass iff the reported and recomputed intervals overlap. For E3 the recomputed interval brackets a forensic signal whose calibration is not yet established.
+Each function follows the package convention: every reported value pairs with a `*_digits` argument, rounding is propagated through the identity, and the recalculated interval is returned as `[lower, upper]`. For E1 and E2, checks pass iff the reported and recalculated intervals overlap. For E3 the recalculated interval brackets a forensic signal whose calibration is not yet established.

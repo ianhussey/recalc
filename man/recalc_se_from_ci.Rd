@@ -16,7 +16,7 @@ recalc_se_from_ci(ci, df, level = 0.95, ci_digits = 2, df_digits = 0)
 \item{ci_digits, df_digits}{Integer.}
 }
 \value{
-One-row tibble. \code{reported} is NA; \code{recomputed_*} is the SE
+One-row tibble. \code{reported} is NA; \code{recalculated_*} is the SE
 interval.
 }
 \description{

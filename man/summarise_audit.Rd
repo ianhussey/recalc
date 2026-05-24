@@ -17,7 +17,7 @@ Invisibly returns the report as a character scalar.
 \description{
 Categorises rows into failed, passed, reconstruction-only, and diagnostic
 groups; computes overall consistency verdict; and prints a human-readable
-report listing each failure with reported value, recomputed interval, and
+report listing each failure with reported value, recalculated interval, and
 minimum interval gap. The overall conclusion accounts for diagnostic
 resolutions: if a main check fails but exactly one labeling interpretation
 (E1 / E2 / E3) is consistent with the report, the conclusion is

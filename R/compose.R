@@ -9,7 +9,7 @@
 #' @param df Numeric.
 #' @param level Numeric. Default 0.95.
 #' @param ci_digits,df_digits Integer.
-#' @return One-row tibble. \code{reported} is NA; \code{recomputed_*} is the SE
+#' @return One-row tibble. \code{reported} is NA; \code{recalculated_*} is the SE
 #'   interval.
 #' @examples
 #' recalc_se_from_ci(ci = c(-6.49, -4.20), df = 30)

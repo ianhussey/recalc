@@ -37,7 +37,7 @@ Two-row tibble: one row per interpretation.
 \description{
 Tests two interpretations of a coefficient column reported as "beta":
 (A) the values are true betas; (B) the values are unstandardized b's
-mislabeled as beta. Returns the recomputed-R^2 interval under each
+mislabeled as beta. Returns the recalculated-R^2 interval under each
 interpretation so the user can see which (if either) is consistent with
 the reported R^2.
 }

@@ -66,7 +66,7 @@ over bootstrap or Monte-Carlo CIs, which are now the field standard for
 indirect-effect inference.
 }
 \details{
-Bounds on the recomputed p-value are obtained by corner enumeration of
+Bounds on the recalculated p-value are obtained by corner enumeration of
 the joint rounding intervals of \eqn{a}, \eqn{p_a}, \eqn{b}, \eqn{p_b}
 (via \code{propagate_intervals()}). For each requested reference
 distribution a separate row is returned; the z-based row is always

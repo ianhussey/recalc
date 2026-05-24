@@ -60,12 +60,12 @@ The \code{consistent} column reports physical-feasibility checks on the implied
 missing-subgroup statistics:
 
 \describe{
-\item{\code{n_miss}}{\code{TRUE} iff the recomputed interval reaches \eqn{\geq 1}
+\item{\code{n_miss}}{\code{TRUE} iff the recalculated interval reaches \eqn{\geq 1}
 (i.e. some rounding makes the missing group non-empty); \code{FALSE}
 if the reported subgroup Ns already saturate or exceed
 \code{overall_n}.}
 \item{\code{M_miss}}{When \code{scale_min} and \code{scale_max} are supplied, \code{TRUE}
-iff the recomputed interval intersects \verb{[scale_min, scale_max]}.
+iff the recalculated interval intersects \verb{[scale_min, scale_max]}.
 \code{NA} when scale endpoints are not supplied (no bound to check).}
 \item{\code{SD_miss}}{\code{FALSE} if the propagated interval contains \code{NaN} —
 i.e. the implied variance is negative at some rounding corner, so

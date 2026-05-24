@@ -226,7 +226,7 @@ audit_regression <- function(
 #'
 #' Categorises rows into failed, passed, reconstruction-only, and diagnostic
 #' groups; computes overall consistency verdict; and prints a human-readable
-#' report listing each failure with reported value, recomputed interval, and
+#' report listing each failure with reported value, recalculated interval, and
 #' minimum interval gap. The overall conclusion accounts for diagnostic
 #' resolutions: if a main check fails but exactly one labeling interpretation
 #' (E1 / E2 / E3) is consistent with the report, the conclusion is
@@ -303,12 +303,12 @@ summarise_audit <- function(audit, verbose = TRUE) {
   if (n_fail == 0 && n_cmp > 0) {
     L <- c(L,
       "Conclusion: REPORTED QUANTITIES ARE MUTUALLY CONSISTENT within rounding.",
-      sprintf("All %d direct check(s) pass; every recomputed interval overlaps the reported value's rounding interval.",
+      sprintf("All %d direct check(s) pass; every recalculated interval overlaps the reported value's rounding interval.",
               n_cmp))
   } else if (n_fail == 0 && n_cmp == 0) {
     L <- c(L,
       "Conclusion: NO DIRECT CHECKS RUN.",
-      "Insufficient inputs were supplied to compare any reported value against a recomputed quantity. See reconstructed quantities below.")
+      "Insufficient inputs were supplied to compare any reported value against a recalculated quantity. See reconstructed quantities below.")
   } else if (any_resolved) {
     resolved_by <- vapply(diag_groups,
       function(d) if (!is.na(d$resolved_by)) sprintf("%s (%s)", d$prefix, d$resolved_by) else "",
@@ -332,7 +332,7 @@ summarise_audit <- function(audit, verbose = TRUE) {
     for (i in seq_len(nrow(fails))) {
       r <- fails[i, ]
       gap <- interval_gap(r$reported_lower, r$reported_upper,
-                          r$recomputed_lower, r$recomputed_upper)
+                          r$recalculated_lower, r$recalculated_upper)
       ref_line <- if (!is.na(r$reported)) {
         sprintf("    reported:    %s (rounding interval %s)",
                 fmt_num(r$reported), fmt_int(r$reported_lower, r$reported_upper))
@@ -343,8 +343,8 @@ summarise_audit <- function(audit, verbose = TRUE) {
       L <- c(L,
         sprintf("  %s%s", r$check, fmt_pred(r$predictor)),
         ref_line,
-        sprintf("    recomputed:  %s",
-                fmt_int(r$recomputed_lower, r$recomputed_upper)),
+        sprintf("    recalculated:  %s",
+                fmt_int(r$recalculated_lower, r$recalculated_upper)),
         sprintf("    interval gap: %s", fmt_num(gap)),
         ""
       )
@@ -358,10 +358,10 @@ summarise_audit <- function(audit, verbose = TRUE) {
       rep_disp <- if (!is.na(r$reported)) fmt_num(r$reported)
                   else fmt_int(r$reported_lower, r$reported_upper)
       L <- c(L, sprintf(
-        "  %s%s: reported %s, recomputed %s",
+        "  %s%s: reported %s, recalculated %s",
         r$check, fmt_pred(r$predictor),
         rep_disp,
-        fmt_int(r$recomputed_lower, r$recomputed_upper)))
+        fmt_int(r$recalculated_lower, r$recalculated_upper)))
     }
     L <- c(L, "")
   }
@@ -373,7 +373,7 @@ summarise_audit <- function(audit, verbose = TRUE) {
       L <- c(L, sprintf(
         "  %s%s: %s",
         r$check, fmt_pred(r$predictor),
-        fmt_int(r$recomputed_lower, r$recomputed_upper)))
+        fmt_int(r$recalculated_lower, r$recalculated_upper)))
     }
     L <- c(L, "")
   }
@@ -392,10 +392,10 @@ summarise_audit <- function(audit, verbose = TRUE) {
                    else if (r$consistent) "consistent"
                    else "not consistent"
         L <- c(L, sprintf(
-          "    - %s: reported %s, recomputed %s -> %s",
+          "    - %s: reported %s, recalculated %s -> %s",
           r$check,
           fmt_int(r$reported_lower, r$reported_upper),
-          fmt_int(r$recomputed_lower, r$recomputed_upper),
+          fmt_int(r$recalculated_lower, r$recalculated_upper),
           verdict))
       }
       verdict <- if (!is.na(d$resolved_by)) {

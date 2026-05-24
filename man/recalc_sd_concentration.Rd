@@ -22,7 +22,7 @@ reported to. No defaults: the caller must specify the precision of every
 value they supply.}
 }
 \value{
-One-row tibble. \code{recomputed_lower} / \code{recomputed_upper} bracket the
+One-row tibble. \code{recalculated_lower} / \code{recalculated_upper} bracket the
 lower-tail p-value over the rounding box. Small values (e.g. < 0.05) are
 the forensic flag — subject to the caveats in "Limitations".
 }

@@ -2,11 +2,11 @@
 % Please edit documentation in R/infrastructure.R
 \name{recalc_result}
 \alias{recalc_result}
-\title{Standard return shape: tibble with reported and recomputed intervals}
+\title{Standard return shape: tibble with reported and recalculated intervals}
 \usage{
-recalc_result(check, reported_value, reported_int, recomputed_int)
+recalc_result(check, reported_value, reported_int, recalculated_int)
 }
 \description{
-Standard return shape: tibble with reported and recomputed intervals
+Standard return shape: tibble with reported and recalculated intervals
 }
 \keyword{internal}
