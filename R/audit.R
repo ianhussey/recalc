@@ -69,7 +69,8 @@ audit_regression <- function(
     b_digits = 2, se_digits = 2, t_digits = 2, p_digits = 3,
     beta_digits = 2, ci_digits = 2,
     r_y_digits = 2, sd_x_digits = 2, sr2_digits = 3,
-    r_12_digits = 2, delta_r2_blocks_digits = 2) {
+    r_12_digits = 2, delta_r2_blocks_digits = 2,
+    rounding = "either") {
 
   has <- function(x) !is.null(x) && length(x) >= 1L && !any(is.na(x))
   vget <- function(v, i) if (length(v) >= i) v[i] else NULL
@@ -101,34 +102,34 @@ audit_regression <- function(
     if (has(bi) && has(sei)) {
       add(recalc_t_from_b_se(bi, sei, t = ti,
             b_digits = b_digits, se_digits = se_digits,
-            t_digits = t_digits), pname)
+            t_digits = t_digits, rounding = rounding), pname)
     }
     if (has(ti) && has(df)) {
       add(recalc_p_from_t_df(ti, df, p = pi_, p_op = p_op,
             t_digits = t_digits, df_digits = 0,
-            p_digits = p_digits), pname)
+            p_digits = p_digits, rounding = rounding), pname)
     }
     if (has(bi) && has(sei) && has(df)) {
       ci_arg <- if (has(cili) && has(ciui)) c(cili, ciui) else NULL
       add(recalc_ci_from_b_se(bi, sei, df, level = level, ci = ci_arg,
             b_digits = b_digits, se_digits = se_digits,
-            df_digits = 0, ci_digits = ci_digits), pname)
+            df_digits = 0, ci_digits = ci_digits, rounding = rounding), pname)
     }
     if (has(bi) && has(sxi) && has(sd_y)) {
       add(recalc_beta_from_b(bi, sxi, sd_y, beta = betai,
             b_digits = b_digits, sd_x_digits = sd_x_digits,
-            sd_y_digits = sd_y_digits, beta_digits = beta_digits), pname)
+            sd_y_digits = sd_y_digits, beta_digits = beta_digits, rounding = rounding), pname)
     }
     if (has(betai) && has(r2) && has(n) && has(k)) {
       add(recalc_t_bound_from_beta(betai, r2, n, k, t = ti,
             beta_digits = beta_digits, r2_digits = r2_digits,
             n_digits = n_digits, k_digits = k_digits,
-            t_digits = t_digits), pname)
+            t_digits = t_digits, rounding = rounding), pname)
     }
     if (has(ti) && has(r2) && has(df)) {
       add(recalc_semipartial_r2_from_t(ti, r2, df, sr2 = sri,
             t_digits = t_digits, r2_digits = r2_digits,
-            df_digits = 0, sr2_digits = sr2_digits), pname)
+            df_digits = 0, sr2_digits = sr2_digits, rounding = rounding), pname)
     }
   }
 
@@ -136,31 +137,31 @@ audit_regression <- function(
   if (has(r2) && has(n) && has(k)) {
     add(recalc_f_from_r2(r2, n, k, f = f,
           r2_digits = r2_digits, n_digits = n_digits,
-          k_digits = k_digits, f_digits = f_digits))
+          k_digits = k_digits, f_digits = f_digits, rounding = rounding))
     add(recalc_adj_r2(r2, n, k, adj_r2 = adj_r2,
           r2_digits = r2_digits, n_digits = n_digits,
-          k_digits = k_digits, adj_r2_digits = adj_r2_digits))
+          k_digits = k_digits, adj_r2_digits = adj_r2_digits, rounding = rounding))
   }
   if (has(f) && has(n) && has(k)) {
     add(recalc_p_from_f(f, df1 = k, df2 = n - k - 1,
           p = p_model, p_op = p_model_op,
           f_digits = f_digits, df1_digits = k_digits,
-          df2_digits = 0, p_digits = p_model_digits))
+          df2_digits = 0, p_digits = p_model_digits, rounding = rounding))
   } else if (has(r2) && has(n) && has(k)) {
     add(recalc_p_model_from_r2(r2, n, k, p_model = p_model,
           p_op = p_model_op,
           r2_digits = r2_digits, n_digits = n_digits,
-          k_digits = k_digits, p_model_digits = p_model_digits))
+          k_digits = k_digits, p_model_digits = p_model_digits, rounding = rounding))
   }
   if (!is.null(beta) && !is.null(r_y) && length(beta) == length(r_y)) {
     add(recalc_r2_from_betas_corrs(beta, r_y, r2 = r2,
           betas_digits = beta_digits, r_y_digits = r_y_digits,
-          r2_digits = r2_digits))
+          r2_digits = r2_digits, rounding = rounding))
   }
   if (!is.null(delta_r2_blocks)) {
     add(recalc_r2_from_blocks(delta_r2_blocks, r2 = r2,
           delta_r2_digits = delta_r2_blocks_digits,
-          r2_digits = r2_digits))
+          r2_digits = r2_digits, rounding = rounding))
   }
 
   # Cross-equation dispatch
@@ -168,22 +169,22 @@ audit_regression <- function(
       !is.null(r_y) && length(r_y) == 2) {
     add(recalc_r12_from_normal_eqs(beta[1], beta[2], r_y[1], r_y[2],
           beta1_digits = beta_digits, beta2_digits = beta_digits,
-          r_y1_digits = r_y_digits, r_y2_digits = r_y_digits))
+          r_y1_digits = r_y_digits, r_y2_digits = r_y_digits, rounding = rounding))
   }
   if (!is.null(r_y) && length(r_y) == 2 && has(r_12)) {
     add(recalc_betas_from_corrs_k2(r_y[1], r_y[2], r_12, betas = beta,
           r_y1_digits = r_y_digits, r_y2_digits = r_y_digits,
-          r_12_digits = r_12_digits, betas_digits = beta_digits))
+          r_12_digits = r_12_digits, betas_digits = beta_digits, rounding = rounding))
   }
   if (!is.null(r_y)) {
     add(recalc_r2_floor_from_correlations(r_y, r2 = r2,
-          r_y_digits = r_y_digits, r2_digits = r2_digits))
+          r_y_digits = r_y_digits, r2_digits = r2_digits, rounding = rounding))
   }
   if (!is.null(beta) && !is.null(r_y) && has(f) && has(n) && has(k) &&
       length(beta) == length(r_y)) {
     add(recalc_betar_from_f(beta, r_y, f, n, k,
           betas_digits = beta_digits, r_y_digits = r_y_digits,
-          f_digits = f_digits, n_digits = n_digits, k_digits = k_digits))
+          f_digits = f_digits, n_digits = n_digits, k_digits = k_digits, rounding = rounding))
   }
 
   # Misreporting diagnostics
@@ -197,7 +198,7 @@ audit_regression <- function(
         sd_x = sd_x, sd_y = sd_y, r2 = r2,
         coef_digits = beta_digits, r_y_digits = r_y_digits,
         sd_x_digits = sd_x_digits, sd_y_digits = sd_y_digits,
-        r2_digits = r2_digits))
+        r2_digits = r2_digits, rounding = rounding))
     }
     # E2: R^2 vs adjusted R^2 labeling
     if (has(r2) && !is.null(beta) && !is.null(r_y) &&
@@ -205,7 +206,7 @@ audit_regression <- function(
       add(diagnose_r2_label(
         r2_reported = r2, betas = beta, r_y = r_y, n = n, k = k,
         r2_digits = r2_digits, betas_digits = beta_digits,
-        r_y_digits = r_y_digits, n_digits = n_digits, k_digits = k_digits))
+        r_y_digits = r_y_digits, n_digits = n_digits, k_digits = k_digits, rounding = rounding))
     }
     # E3: one- vs two-tailed p, per predictor
     for (i in seq_len(k_pred)) {
@@ -214,7 +215,7 @@ audit_regression <- function(
       if (has(ti) && has(df) && has(pi_)) {
         add(diagnose_p_tails(ti, df, p = pi_, p_op = p_op,
               t_digits = t_digits, df_digits = 0,
-              p_digits = p_digits), pname)
+              p_digits = p_digits, rounding = rounding), pname)
       }
     }
   }

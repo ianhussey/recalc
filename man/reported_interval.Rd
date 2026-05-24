@@ -4,9 +4,21 @@
 \alias{reported_interval}
 \title{Reported interval implied by a value, its digits, and the comparison op}
 \usage{
-reported_interval(value, digits, op = "eq")
+reported_interval(value, digits, op = "eq", rounding = "either")
+}
+\arguments{
+\item{value}{Numeric. The reported value.}
+
+\item{digits}{Integer. Number of decimal places it was reported to.}
+
+\item{op}{One of \code{"eq"}, \code{"lt"}, \code{"le"}, \code{"gt"}, \code{"ge"}.}
+
+\item{rounding}{One of \code{"either"}, \code{"half_up"}, \code{"bankers"}, \code{"truncate"}.
+See \link{recalc_rounding}.}
 }
 \description{
-Use \code{op = "lt"} for reports of the form \code{p < .001}.
+Use \code{op = "lt"} for reports of the form \code{p < .001}. The \code{rounding}
+argument is honored only when \code{op == "eq"}; for the inequality operators,
+the threshold is taken at face value.
 }
 \keyword{internal}

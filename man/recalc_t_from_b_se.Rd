@@ -4,7 +4,15 @@
 \alias{recalc_t_from_b_se}
 \title{Recalculate t from a coefficient and its standard error}
 \usage{
-recalc_t_from_b_se(b, se, t = NULL, b_digits = 2, se_digits = 2, t_digits = 2)
+recalc_t_from_b_se(
+  b,
+  se,
+  t = NULL,
+  b_digits = 2,
+  se_digits = 2,
+  t_digits = 2,
+  rounding = "either"
+)
 }
 \arguments{
 \item{b, se}{Numeric.}

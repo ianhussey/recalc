@@ -10,7 +10,8 @@ recalc_alpha_from_cor_sd(
   alpha = NULL,
   cor_mat_digits = NULL,
   sd_vector_digits = NULL,
-  alpha_digits = NULL
+  alpha_digits = NULL,
+  rounding = "either"
 )
 }
 \arguments{

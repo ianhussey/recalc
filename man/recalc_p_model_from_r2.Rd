@@ -13,7 +13,8 @@ recalc_p_model_from_r2(
   r2_digits = 2,
   n_digits = 0,
   k_digits = 0,
-  p_model_digits = 3
+  p_model_digits = 3,
+  rounding = "either"
 )
 }
 \arguments{

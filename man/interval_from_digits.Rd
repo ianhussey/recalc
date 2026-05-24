@@ -4,7 +4,17 @@
 \alias{interval_from_digits}
 \title{Rounding interval implied by a value reported to \code{digits} decimal places}
 \usage{
-interval_from_digits(value, digits, lo = -Inf, hi = Inf)
+interval_from_digits(value, digits, lo = -Inf, hi = Inf, rounding = "either")
+}
+\arguments{
+\item{value}{Numeric. The reported value.}
+
+\item{digits}{Integer. Number of decimal places it was reported to.}
+
+\item{lo, hi}{Numeric. Clamping bounds for naturally bounded quantities.}
+
+\item{rounding}{One of \code{"either"}, \code{"half_up"}, \code{"bankers"}, \code{"truncate"}.
+See \link{recalc_rounding}.}
 }
 \description{
 Optional \code{lo}/\code{hi} clamping is useful for naturally bounded quantities

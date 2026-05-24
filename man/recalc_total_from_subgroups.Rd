@@ -13,7 +13,8 @@ recalc_total_from_subgroups(
   overall_sd = NULL,
   n_digits = NULL,
   mean_digits = NULL,
-  sd_digits = NULL
+  sd_digits = NULL,
+  rounding = "either"
 )
 }
 \arguments{

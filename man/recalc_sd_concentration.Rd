@@ -8,7 +8,8 @@ recalc_sd_concentration(
   subgroup_ns,
   subgroup_sds,
   n_digits = NULL,
-  sd_digits = NULL
+  sd_digits = NULL,
+  rounding = "either"
 )
 }
 \arguments{

@@ -12,7 +12,8 @@ recalc_r2_from_f(
   f_digits = 2,
   n_digits = 0,
   k_digits = 0,
-  r2_digits = 2
+  r2_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

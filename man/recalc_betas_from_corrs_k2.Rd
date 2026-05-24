@@ -12,7 +12,8 @@ recalc_betas_from_corrs_k2(
   r_y1_digits = 2,
   r_y2_digits = 2,
   r_12_digits = 2,
-  betas_digits = 2
+  betas_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

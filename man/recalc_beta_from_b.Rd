@@ -12,7 +12,8 @@ recalc_beta_from_b(
   b_digits = 2,
   sd_x_digits = 2,
   sd_y_digits = 2,
-  beta_digits = 2
+  beta_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

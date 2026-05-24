@@ -11,13 +11,13 @@
 #' recalc_t_from_b_se(b = -5.34, se = 0.56, t = -9.56)
 #' @export
 recalc_t_from_b_se <- function(b, se, t = NULL,
-                               b_digits = 2, se_digits = 2, t_digits = 2) {
+                               b_digits = 2, se_digits = 2, t_digits = 2, rounding = "either") {
   recomp <- propagate_intervals(
     fn = function(b, se) b / se,
-    inputs = list(b = interval_from_digits(b, b_digits),
-                  se = interval_from_digits(se, se_digits))
+    inputs = list(b = interval_from_digits(b, b_digits, rounding = rounding),
+                  se = interval_from_digits(se, se_digits, rounding = rounding))
   )
-  recalc_result("A1: t = b / SE", t, reported_interval(t, t_digits), recomp)
+  recalc_result("A1: t = b / SE", t, reported_interval(t, t_digits, rounding = rounding), recomp)
 }
 
 #' Recalculate a coefficient p from its t and residual df
@@ -38,18 +38,18 @@ recalc_t_from_b_se <- function(b, se, t = NULL,
 #' @export
 recalc_p_from_t_df <- function(t, df, p = NULL, p_op = "eq",
                                two_tailed = TRUE,
-                               t_digits = 2, df_digits = 0, p_digits = 3) {
+                               t_digits = 2, df_digits = 0, p_digits = 3, rounding = "either") {
   fn <- function(t, df) {
     factor <- if (two_tailed) 2 else 1
     factor * stats::pt(abs(t), df = df, lower.tail = FALSE)
   }
   recomp <- propagate_intervals(
     fn,
-    inputs = list(t = interval_from_digits(t, t_digits),
-                  df = interval_from_digits(df, df_digits))
+    inputs = list(t = interval_from_digits(t, t_digits, rounding = rounding),
+                  df = interval_from_digits(df, df_digits, rounding = rounding))
   )
   recalc_result("A2: p = 2(1 - F_t(|t|, df))", p,
-                reported_interval(p, p_digits, op = p_op), recomp)
+                reported_interval(p, p_digits, op = p_op, rounding = rounding), recomp)
 }
 
 #' Recalculate a Wald CI from b, SE, and df
@@ -70,23 +70,25 @@ recalc_p_from_t_df <- function(t, df, p = NULL, p_op = "eq",
 #' @export
 recalc_ci_from_b_se <- function(b, se, df, level = 0.95, ci = NULL,
                                 b_digits = 2, se_digits = 2,
-                                df_digits = 0, ci_digits = 2) {
+                                df_digits = 0, ci_digits = 2, rounding = "either") {
   alpha <- 1 - level
   fn_lower <- function(b, se, df) b - stats::qt(1 - alpha/2, df) * se
   fn_upper <- function(b, se, df) b + stats::qt(1 - alpha/2, df) * se
-  inputs <- list(b = interval_from_digits(b, b_digits),
-                 se = interval_from_digits(se, se_digits),
-                 df = interval_from_digits(df, df_digits))
+  inputs <- list(b = interval_from_digits(b, b_digits, rounding = rounding),
+                 se = interval_from_digits(se, se_digits, rounding = rounding),
+                 df = interval_from_digits(df, df_digits, rounding = rounding))
   rec_lo <- propagate_intervals(fn_lower, inputs)
   rec_hi <- propagate_intervals(fn_upper, inputs)
   dplyr::bind_rows(
     recalc_result("A3: CI lower = b - t_crit SE",
                   if (is.null(ci)) NULL else ci[1],
-                  reported_interval(if (is.null(ci)) NULL else ci[1], ci_digits),
+                  reported_interval(if (is.null(ci)) NULL else ci[1], ci_digits,
+                                    rounding = rounding),
                   rec_lo),
     recalc_result("A3: CI upper = b + t_crit SE",
                   if (is.null(ci)) NULL else ci[2],
-                  reported_interval(if (is.null(ci)) NULL else ci[2], ci_digits),
+                  reported_interval(if (is.null(ci)) NULL else ci[2], ci_digits,
+                                    rounding = rounding),
                   rec_hi)
   )
 }
@@ -105,15 +107,15 @@ recalc_ci_from_b_se <- function(b, se, df, level = 0.95, ci = NULL,
 #' @export
 recalc_beta_from_b <- function(b, sd_x, sd_y, beta = NULL,
                                b_digits = 2, sd_x_digits = 2,
-                               sd_y_digits = 2, beta_digits = 2) {
+                               sd_y_digits = 2, beta_digits = 2, rounding = "either") {
   recomp <- propagate_intervals(
     fn = function(b, sd_x, sd_y) b * sd_x / sd_y,
-    inputs = list(b = interval_from_digits(b, b_digits),
-                  sd_x = interval_from_digits(sd_x, sd_x_digits),
-                  sd_y = interval_from_digits(sd_y, sd_y_digits))
+    inputs = list(b = interval_from_digits(b, b_digits, rounding = rounding),
+                  sd_x = interval_from_digits(sd_x, sd_x_digits, rounding = rounding),
+                  sd_y = interval_from_digits(sd_y, sd_y_digits, rounding = rounding))
   )
   recalc_result("A4: beta = b * SD_X / SD_Y", beta,
-                reported_interval(beta, beta_digits), recomp)
+                reported_interval(beta, beta_digits, rounding = rounding), recomp)
 }
 
 #' Upper bound on |t| from standardized beta, R^2, N, k
@@ -133,18 +135,19 @@ recalc_beta_from_b <- function(b, sd_x, sd_y, beta = NULL,
 recalc_t_bound_from_beta <- function(beta, r2, n, k, t = NULL,
                                      beta_digits = 2, r2_digits = 2,
                                      n_digits = 0, k_digits = 0,
-                                     t_digits = 2) {
+                                     t_digits = 2, rounding = "either") {
   recomp <- propagate_intervals(
     fn = function(beta, r2, n, k) abs(beta) * sqrt((n - k - 1) / (1 - r2)),
-    inputs = list(beta = interval_from_digits(beta, beta_digits),
-                  r2 = interval_from_digits(r2, r2_digits),
-                  n = interval_from_digits(n, n_digits),
-                  k = interval_from_digits(k, k_digits))
+    inputs = list(beta = interval_from_digits(beta, beta_digits, rounding = rounding),
+                  r2 = interval_from_digits(r2, r2_digits, rounding = rounding),
+                  n = interval_from_digits(n, n_digits, rounding = rounding),
+                  k = interval_from_digits(k, k_digits, rounding = rounding))
   )
   out <- recalc_result(
     "A6 bound: |t| <= |beta| sqrt((N-k-1)/(1-R^2))",
     if (is.null(t)) NULL else abs(t),
-    reported_interval(if (is.null(t)) NULL else abs(t), t_digits),
+    reported_interval(if (is.null(t)) NULL else abs(t), t_digits,
+                      rounding = rounding),
     recomp
   )
   if (!is.null(t)) {
@@ -168,13 +171,13 @@ recalc_t_bound_from_beta <- function(beta, r2, n, k, t = NULL,
 #' @export
 recalc_semipartial_r2_from_t <- function(t, r2, df, sr2 = NULL,
                                          t_digits = 2, r2_digits = 2,
-                                         df_digits = 0, sr2_digits = 3) {
+                                         df_digits = 0, sr2_digits = 3, rounding = "either") {
   recomp <- propagate_intervals(
     fn = function(t, r2, df) t^2 * (1 - r2) / df,
-    inputs = list(t = interval_from_digits(t, t_digits),
-                  r2 = interval_from_digits(r2, r2_digits),
-                  df = interval_from_digits(df, df_digits))
+    inputs = list(t = interval_from_digits(t, t_digits, rounding = rounding),
+                  r2 = interval_from_digits(r2, r2_digits, rounding = rounding),
+                  df = interval_from_digits(df, df_digits, rounding = rounding))
   )
   recalc_result("A8: sr_i^2 = t_i^2 (1 - R^2) / df", sr2,
-                reported_interval(sr2, sr2_digits), recomp)
+                reported_interval(sr2, sr2_digits, rounding = rounding), recomp)
 }

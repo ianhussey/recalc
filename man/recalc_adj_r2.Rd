@@ -12,7 +12,8 @@ recalc_adj_r2(
   r2_digits = 2,
   n_digits = 0,
   k_digits = 0,
-  adj_r2_digits = 2
+  adj_r2_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

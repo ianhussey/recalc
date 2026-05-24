@@ -11,7 +11,8 @@ diagnose_p_tails(
   p_op = "eq",
   t_digits = 2,
   df_digits = 0,
-  p_digits = 3
+  p_digits = 3,
+  rounding = "either"
 )
 }
 \arguments{

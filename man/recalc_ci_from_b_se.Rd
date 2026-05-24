@@ -13,7 +13,8 @@ recalc_ci_from_b_se(
   b_digits = 2,
   se_digits = 2,
   df_digits = 0,
-  ci_digits = 2
+  ci_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

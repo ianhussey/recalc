@@ -16,7 +16,8 @@ recalc_delta_f(
   delta_k_digits = 0,
   n_digits = 0,
   k_full_digits = 0,
-  delta_f_digits = 2
+  delta_f_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

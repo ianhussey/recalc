@@ -8,7 +8,8 @@ recalc_r2_floor_from_correlations(
   r_y,
   r2 = NULL,
   r_y_digits = 2,
-  r2_digits = 2
+  r2_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

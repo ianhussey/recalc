@@ -14,7 +14,8 @@ recalc_t_bound_from_beta(
   r2_digits = 2,
   n_digits = 0,
   k_digits = 0,
-  t_digits = 2
+  t_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

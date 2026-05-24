@@ -4,7 +4,13 @@
 \alias{recalc_r2_from_blocks}
 \title{Recalculate R^2 from a sequence of hierarchical Delta R^2 blocks}
 \usage{
-recalc_r2_from_blocks(delta_r2, r2 = NULL, delta_r2_digits = 2, r2_digits = 2)
+recalc_r2_from_blocks(
+  delta_r2,
+  r2 = NULL,
+  delta_r2_digits = 2,
+  r2_digits = 2,
+  rounding = "either"
+)
 }
 \arguments{
 \item{delta_r2}{Numeric vector. Delta R^2 for each block.}

@@ -12,7 +12,8 @@ recalc_semipartial_r2_from_t(
   t_digits = 2,
   r2_digits = 2,
   df_digits = 0,
-  sr2_digits = 3
+  sr2_digits = 3,
+  rounding = "either"
 )
 }
 \arguments{

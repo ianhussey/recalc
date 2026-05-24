@@ -4,7 +4,14 @@
 \alias{recalc_se_from_ci}
 \title{Recover SE from a Wald CI and df}
 \usage{
-recalc_se_from_ci(ci, df, level = 0.95, ci_digits = 2, df_digits = 0)
+recalc_se_from_ci(
+  ci,
+  df,
+  level = 0.95,
+  ci_digits = 2,
+  df_digits = 0,
+  rounding = "either"
+)
 }
 \arguments{
 \item{ci}{Length-2 numeric \code{c(lower, upper)}.}

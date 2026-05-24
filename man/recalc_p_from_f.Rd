@@ -13,7 +13,8 @@ recalc_p_from_f(
   f_digits = 2,
   df1_digits = 0,
   df2_digits = 0,
-  p_digits = 3
+  p_digits = 3,
+  rounding = "either"
 )
 }
 \arguments{

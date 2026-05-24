@@ -21,7 +21,8 @@ recalc_mediation_p(
   two_tailed = TRUE,
   df_t = NULL,
   method = NULL,
-  label = NULL
+  label = NULL,
+  rounding = "either"
 )
 }
 \arguments{

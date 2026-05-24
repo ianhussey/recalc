@@ -14,7 +14,8 @@ recalc_betar_from_f(
   r_y_digits = 2,
   f_digits = 2,
   n_digits = 0,
-  k_digits = 0
+  k_digits = 0,
+  rounding = "either"
 )
 }
 \arguments{

@@ -10,7 +10,8 @@ recalc_r2_from_betas_corrs(
   r2 = NULL,
   betas_digits = 2,
   r_y_digits = 2,
-  r2_digits = 2
+  r2_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

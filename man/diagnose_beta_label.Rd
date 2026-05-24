@@ -14,7 +14,8 @@ diagnose_beta_label(
   r_y_digits = 2,
   sd_x_digits = 1,
   sd_y_digits = 1,
-  r2_digits = 2
+  r2_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

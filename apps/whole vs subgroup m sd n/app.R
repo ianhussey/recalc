@@ -81,11 +81,16 @@ prettify_result <- function(res, tab, display_digits) {
                   formatC(x, digits = display_digits, format = "f")))
   }
 
+  fmt_consistent <- function(x) {
+    ifelse(is.na(x), "not checked",
+           ifelse(x, "TRUE", "FALSE"))
+  }
+
   out <- data.frame(
     Check               = unname(labels[res$check]),
     `Recalculated lower`  = fmt(res$recalculated_lower),
     `Recalculated upper`  = fmt(res$recalculated_upper),
-    Consistent          = res$consistent,
+    Consistent          = fmt_consistent(res$consistent),
     check.names = FALSE, stringsAsFactors = FALSE
   )
   if (tab == "t1") {
@@ -109,6 +114,9 @@ ui <- fluidPage(
   titlePanel(
     "ANCHOR: numerical consistency between whole sample and subgroups"
   ),
+  # Load MathJax for the identities sections (renderUI(withMathJax(...))
+  # re-typesets on each render).
+  withMathJax(),
 
   tabsetPanel(
     id = "main_tab",
@@ -155,22 +163,8 @@ ui <- fluidPage(
             " if the reported and recalculated intervals overlap."),
           DTOutput("t1_table"),
           br(),
-          tags$details(
-            tags$summary("Identities used"),
-            withMathJax(HTML(
-              "\\(N = \\sum_g n_g\\)<br>",
-              "\\(M = \\sum_g n_g M_g \\,/\\, N\\)<br>",
-              "\\(\\mathrm{SD}^2 = \\big[\\sum_g (n_g - 1) s_g^2 + ",
-              "\\sum_g n_g (M_g - M)^2\\big] \\,/\\, (N - 1)\\)<br>",
-              "<br>",
-              "The SD identity is the total-variance decomposition ",
-              "(within + between). The textbook \"pooled SD\" formula ",
-              "\\(\\sqrt{\\sum_g (n_g - 1) s_g^2 / \\sum_g (n_g - 1)}\\) ",
-              "equals total SD only when subgroup means coincide; using it ",
-              "as a check would false-flag any paper whose subgroup means ",
-              "differ."
-            ))
-          )
+          h4("Identities used"),
+          uiOutput("t1_identities")
         )
       )
     ),
@@ -228,30 +222,8 @@ ui <- fluidPage(
             "overlap check, since there is no reported missing-group value)."),
           DTOutput("t2_table"),
           br(),
-          tags$details(
-            tags$summary("Identities and feasibility checks used"),
-            withMathJax(HTML(
-              "\\(n_\\star = N - \\sum_g n_g\\)<br>",
-              "\\(M_\\star = (N M - \\sum_g n_g M_g) \\,/\\, n_\\star\\)<br>",
-              "\\(s_\\star^2 = \\big[(N - 1) \\mathrm{SD}^2 - ",
-              "\\sum_g (n_g - 1) s_g^2 - n_\\star (M_\\star - M)^2 - ",
-              "\\sum_g n_g (M_g - M)^2\\big] \\,/\\, (n_\\star - 1)\\)<br>",
-              "<br>",
-              "<b>Feasibility checks.</b><br>",
-              "<i>n</i> row: passes iff the recalculated interval reaches ",
-              "\\(\\geq 1\\) (some rounding makes the missing group ",
-              "non-empty).<br>",
-              "<i>M</i> row: with scale endpoints, passes iff the recalculated ",
-              "interval intersects \\([a, b]\\); otherwise NA.<br>",
-              "<i>SD</i> row: fails if the propagated interval contains ",
-              "NaN (variance negative at some corner). With scale endpoints, ",
-              "additionally fails if the implied SD exceeds the ",
-              "Bhatia-Davis bound ",
-              "\\(\\sqrt{n_\\star/(n_\\star-1)\\,(M_\\star-a)(b-M_\\star)}\\) ",
-              "(the largest SD any \\(n_\\star\\)-sample on \\([a,b]\\) with ",
-              "mean \\(M_\\star\\) can attain; Bhatia & Davis, 2000)."
-            ))
-          )
+          h4("Identities and feasibility checks used"),
+          uiOutput("t2_identities")
         )
       )
     )
@@ -317,6 +289,25 @@ server <- function(input, output, session) {
     datatable(t1_pretty(), options = list(dom = "t"), rownames = FALSE)
   })
 
+  # Identities used in Tab 1. Rendered server-side via withMathJax so the
+  # math is typeset reliably on each (re)render. Display-math delimiters and
+  # \left[...\right] avoid the dashed-vinculum / dashed-bracket rendering
+  # that \big[...\big] in inline math sometimes produces.
+  output$t1_identities <- renderUI({
+    withMathJax(HTML(
+      "$$N = \\sum_g n_g$$",
+      "$$M = \\frac{\\sum_g n_g M_g}{N}$$",
+      "$$\\mathrm{SD}^2 = \\frac{\\sum_g (n_g - 1) s_g^2 + ",
+      "\\sum_g n_g (M_g - M)^2}{N - 1}$$",
+      "<p>The SD identity is the total-variance decomposition ",
+      "(within + between). The textbook \"pooled SD\" formula ",
+      "\\(\\sqrt{\\sum_g (n_g - 1) s_g^2 / \\sum_g (n_g - 1)}\\) ",
+      "equals total SD only when subgroup means coincide; using it ",
+      "as a check would false-flag any paper whose subgroup means ",
+      "differ.</p>"
+    ))
+  })
+
   # --- Tab 2: recalc_missing_subgroup() ------------------------------------
   t2_result <- reactive({
     req(input$t2_k, input$t2_overall_n, input$t2_overall_mean,
@@ -360,6 +351,31 @@ server <- function(input, output, session) {
   })
   output$t2_table <- renderDT({
     datatable(t2_pretty(), options = list(dom = "t"), rownames = FALSE)
+  })
+
+  # Identities and feasibility checks used in Tab 2.
+  output$t2_identities <- renderUI({
+    withMathJax(HTML(
+      "$$n_\\star = N - \\sum_g n_g$$",
+      "$$M_\\star = \\frac{N M - \\sum_g n_g M_g}{n_\\star}$$",
+      "$$s_\\star^2 = \\frac{(N - 1)\\,\\mathrm{SD}^2 - ",
+      "\\sum_g (n_g - 1) s_g^2 - n_\\star (M_\\star - M)^2 - ",
+      "\\sum_g n_g (M_g - M)^2}{n_\\star - 1}$$",
+      "<p><b>Feasibility checks.</b></p>",
+      "<ul>",
+      "<li><i>n</i> row: passes iff the recalculated interval reaches ",
+      "\\(\\geq 1\\) (some rounding makes the missing group non-empty).</li>",
+      "<li><i>M</i> row: with scale endpoints, passes iff the recalculated ",
+      "interval intersects \\([a, b]\\); otherwise reported as ",
+      "\"not checked\".</li>",
+      "<li><i>SD</i> row: fails if the propagated interval contains NaN ",
+      "(variance negative at some corner). With scale endpoints, ",
+      "additionally fails if the implied SD exceeds the Bhatia-Davis ",
+      "bound \\(\\sqrt{n_\\star/(n_\\star-1)\\,(M_\\star-a)(b-M_\\star)}\\) ",
+      "(the largest SD any \\(n_\\star\\)-sample on \\([a,b]\\) with mean ",
+      "\\(M_\\star\\) can attain; Bhatia &amp; Davis, 2000).</li>",
+      "</ul>"
+    ))
   })
 
   # --- Excel I/O (shared format) -------------------------------------------

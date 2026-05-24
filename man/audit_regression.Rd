@@ -46,7 +46,8 @@ audit_regression(
   sd_x_digits = 2,
   sr2_digits = 3,
   r_12_digits = 2,
-  delta_r2_blocks_digits = 2
+  delta_r2_blocks_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

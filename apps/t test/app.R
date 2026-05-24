@@ -61,25 +61,15 @@ ui <- fluidPage(
       h4("Rounding and method options"),
       
       selectInput(
-        "input_rounding",
-        "Method of rounding the reported summary statistics",
-        choices = c("Unknown" = "NULL",
-                    "Rounded (up, down, or bankers)" = "rounded",
-                    "Truncated" = "truncated"),
-        selected = "NULL"
-      ),
-      
-      selectInput(
-        "output_rounding",
-        "Output rounding method",
-        choices = c("All methods" = "NULL",
+        "rounding",
+        "Rounding mode for reported values",
+        choices = c("Either half-up or bankers (default)" = "either",
                     "Round half up" = "half_up",
-                    "Round half down" = "half_down",
-                    "Bankers rounding" = "bankers",
-                    "Truncation" = "trunc"),
-        selected = "NULL"
+                    "Bankers (round half to even)" = "bankers",
+                    "Truncated" = "truncate"),
+        selected = "either"
       ),
-      
+
       numericInput("d_digits", "Number of digits Cohens' d reported to", value = 2, min = 0, step = 1),
       
       selectInput(
@@ -148,14 +138,6 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   
   # Helper: map selectInput strings for optional arguments to real values
-  get_input_rounding <- reactive({
-    if (identical(input$input_rounding, "NULL")) NULL else input$input_rounding
-  })
-  
-  get_output_rounding <- reactive({
-    if (identical(input$output_rounding, "NULL")) NULL else input$output_rounding
-  })
-  
   get_p_methods <- reactive({
     if (identical(input$p_methods, "NULL")) NULL else input$p_methods
   })
@@ -208,8 +190,7 @@ server <- function(input, output, session) {
         d_ci_upper = input$d_ci_upper,
         direction = input$direction,
         
-        input_rounding = get_input_rounding(),
-        output_rounding = get_output_rounding(),
+        rounding = input$rounding,
         d_digits = input$d_digits,
         hedges_correction = get_hedges_correction(),
         ci_methods = get_ci_methods(),
@@ -227,14 +208,14 @@ server <- function(input, output, session) {
       res$reproduced |>
         dplyr::select(
           p_operator,
-          p_reported         = p,
-          p_min_rounded      = min_p_rounded,
-          p_max_rounded      = max_p_rounded,
+          p_reported   = p,
+          p_min        = min_p,
+          p_max        = max_p,
           p_in_bounds_given_operator = p_inbounds,
-          d_reported         = d,
-          d_min_rounded      = min_d_rounded,
-          d_max_rounded      = max_d_rounded,
-          d_in_bounds        = d_inbounds
+          d_reported   = d,
+          d_min        = min_d,
+          d_max        = max_d,
+          d_in_bounds  = d_inbounds
         )
     },
     digits = function(df) {
@@ -301,9 +282,8 @@ server <- function(input, output, session) {
         d_ci_lower = input$d_ci_lower,
         d_ci_upper = input$d_ci_upper,
         direction = input$direction,
-        
-        input_rounding = get_input_rounding(),
-        output_rounding = get_output_rounding(),
+
+        rounding = input$rounding,
         d_digits = input$d_digits,
         hedges_correction = get_hedges_correction(),
         ci_methods = get_ci_methods(),

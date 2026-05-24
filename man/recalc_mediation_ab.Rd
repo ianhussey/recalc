@@ -10,7 +10,8 @@ recalc_mediation_ab(
   ab = NULL,
   a_digits = NULL,
   b_digits = NULL,
-  ab_digits = NULL
+  ab_digits = NULL,
+  rounding = "either"
 )
 }
 \arguments{

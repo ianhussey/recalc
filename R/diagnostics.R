@@ -31,7 +31,7 @@
 diagnose_beta_label <- function(coef_reported, r_y, sd_x, sd_y, r2,
                                 coef_digits = 2, r_y_digits = 2,
                                 sd_x_digits = 1, sd_y_digits = 1,
-                                r2_digits = 2) {
+                                r2_digits = 2, rounding = "either") {
   stopifnot(length(coef_reported) == length(r_y),
             length(sd_x) == length(coef_reported))
   k <- length(coef_reported)
@@ -45,13 +45,13 @@ diagnose_beta_label <- function(coef_reported, r_y, sd_x, sd_y, r2,
 
   # Interpretation B: column is b mislabeled as beta — convert and apply B4
   inputs_B <- c(
-    setNames(lapply(coef_reported, interval_from_digits, coef_digits),
+    setNames(lapply(coef_reported, interval_from_digits, coef_digits, rounding = rounding),
              paste0("b", seq_len(k))),
-    setNames(lapply(sd_x, interval_from_digits, sd_x_digits),
+    setNames(lapply(sd_x, interval_from_digits, sd_x_digits, rounding = rounding),
              paste0("sx", seq_len(k))),
-    setNames(lapply(r_y, interval_from_digits, r_y_digits),
+    setNames(lapply(r_y, interval_from_digits, r_y_digits, rounding = rounding),
              paste0("r", seq_len(k))),
-    list(sy = interval_from_digits(sd_y, sd_y_digits))
+    list(sy = interval_from_digits(sd_y, sd_y_digits, rounding = rounding))
   )
   fn_B <- function(...) {
     args <- list(...)
@@ -64,7 +64,7 @@ diagnose_beta_label <- function(coef_reported, r_y, sd_x, sd_y, r2,
   recomp_B <- propagate_intervals(fn_B, inputs_B)
   res_B <- recalc_result(
     "E1 (Interp B): column is b mislabeled as beta",
-    r2, reported_interval(r2, r2_digits), recomp_B
+    r2, reported_interval(r2, r2_digits, rounding = rounding), recomp_B
   )
 
   dplyr::bind_rows(res_A, res_B)
@@ -92,15 +92,15 @@ diagnose_beta_label <- function(coef_reported, r_y, sd_x, sd_y, r2,
 #' @export
 diagnose_r2_label <- function(r2_reported, betas, r_y, n, k,
                               r2_digits = 2, betas_digits = 2,
-                              r_y_digits = 2, n_digits = 0, k_digits = 0) {
+                              r_y_digits = 2, n_digits = 0, k_digits = 0, rounding = "either") {
   stopifnot(length(betas) == length(r_y))
   k_pred <- length(betas)
 
   # B4-implied R^2 interval (independent of which label is correct)
   inputs_br <- c(
-    setNames(lapply(betas, interval_from_digits, betas_digits),
+    setNames(lapply(betas, interval_from_digits, betas_digits, rounding = rounding),
              paste0("b", seq_len(k_pred))),
-    setNames(lapply(r_y, interval_from_digits, r_y_digits),
+    setNames(lapply(r_y, interval_from_digits, r_y_digits, rounding = rounding),
              paste0("r", seq_len(k_pred)))
   )
   fn_br <- function(...) {
@@ -114,15 +114,15 @@ diagnose_r2_label <- function(r2_reported, betas, r_y, n, k,
   # Interpretation A: reported value is raw R^2
   res_A <- recalc_result(
     "E2 (Interp A): reported is raw R^2",
-    r2_reported, reported_interval(r2_reported, r2_digits), recomp_br
+    r2_reported, reported_interval(r2_reported, r2_digits, rounding = rounding), recomp_br
   )
 
   # Interpretation B: reported value is adjusted R^2 — invert to raw R^2
   raw_int <- propagate_intervals(
     fn = function(adj, n, k) 1 - (1 - adj) * (n - k - 1) / (n - 1),
-    inputs = list(adj = interval_from_digits(r2_reported, r2_digits),
-                  n = interval_from_digits(n, n_digits),
-                  k = interval_from_digits(k, k_digits))
+    inputs = list(adj = interval_from_digits(r2_reported, r2_digits, rounding = rounding),
+                  n = interval_from_digits(n, n_digits, rounding = rounding),
+                  k = interval_from_digits(k, k_digits, rounding = rounding))
   )
   res_B <- tibble::tibble(
     check = "E2 (Interp B): reported is adjusted R^2 (back out raw)",
@@ -153,7 +153,7 @@ diagnose_r2_label <- function(r2_reported, betas, r_y, n, k,
 #' diagnose_p_tails(t = 1.85, df = 200, p = 0.033)
 #' @export
 diagnose_p_tails <- function(t, df, p, p_op = "eq",
-                             t_digits = 2, df_digits = 0, p_digits = 3) {
+                             t_digits = 2, df_digits = 0, p_digits = 3, rounding = "either") {
   one <- recalc_p_from_t_df(t, df, p = p, p_op = p_op, two_tailed = FALSE,
                             t_digits = t_digits, df_digits = df_digits,
                             p_digits = p_digits)

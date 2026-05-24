@@ -59,11 +59,11 @@ sobel_p <- function(a, b, p_a, p_b, df = NULL,
 # Input interval for a reported p-value: rounding interval if reported as
 # equality, one-sided interval if reported as p < x or p > x. Clamped to
 # (.Machine$double.eps, 1) so that inverse-CDF calls remain finite.
-p_input_interval <- function(p, digits, op = "eq") {
+p_input_interval <- function(p, digits, op = "eq", rounding = "either") {
   eps <- .Machine$double.eps
   switch(
     op,
-    eq      = interval_from_digits(p, digits, lo = eps, hi = 1),
+    eq      = interval_from_digits(p, digits, lo = eps, hi = 1, rounding = rounding),
     lt = ,
     le      = c(eps, p),
     gt = ,
@@ -107,16 +107,16 @@ require_digits <- function(...) {
 #' @export
 recalc_mediation_ab <- function(a, b, ab = NULL,
                                 a_digits = NULL, b_digits = NULL,
-                                ab_digits = NULL) {
+                                ab_digits = NULL, rounding = "either") {
   require_digits(a_digits = a_digits, b_digits = b_digits)
   if (!is.null(ab)) require_digits(ab_digits = ab_digits)
   recomp <- propagate_intervals(
     fn = function(a, b) a * b,
-    inputs = list(a = interval_from_digits(a, a_digits),
-                  b = interval_from_digits(b, b_digits))
+    inputs = list(a = interval_from_digits(a, a_digits, rounding = rounding),
+                  b = interval_from_digits(b, b_digits, rounding = rounding))
   )
   recalc_result("M1: ab = a * b", ab,
-                reported_interval(ab, ab_digits), recomp)
+                reported_interval(ab, ab_digits, rounding = rounding), recomp)
 }
 
 #' Recalculate the Sobel-family p-value for an indirect effect
@@ -172,7 +172,8 @@ recalc_mediation_p <- function(a, p_a, b, p_b, p = NULL,
                                two_tailed = TRUE,
                                df_t = NULL,
                                method = NULL,
-                               label = NULL) {
+                               label = NULL,
+                               rounding = "either") {
   require_digits(a_digits = a_digits, p_a_digits = p_a_digits,
                  b_digits = b_digits, p_b_digits = p_b_digits)
   if (!is.null(p)) require_digits(p_digits = p_digits)
@@ -180,12 +181,12 @@ recalc_mediation_p <- function(a, p_a, b, p_b, p = NULL,
   methods <- if (is.null(method)) all_methods else match.arg(method, all_methods,
                                                              several.ok = TRUE)
   inputs <- list(
-    a   = interval_from_digits(a, a_digits),
-    b   = interval_from_digits(b, b_digits),
-    p_a = p_input_interval(p_a, p_a_digits, op = p_a_op),
-    p_b = p_input_interval(p_b, p_b_digits, op = p_b_op)
+    a   = interval_from_digits(a, a_digits, rounding = rounding),
+    b   = interval_from_digits(b, b_digits, rounding = rounding),
+    p_a = p_input_interval(p_a, p_a_digits, op = p_a_op, rounding = rounding),
+    p_b = p_input_interval(p_b, p_b_digits, op = p_b_op, rounding = rounding)
   )
-  rep_int <- reported_interval(p, p_digits, op = p_op)
+  rep_int <- reported_interval(p, p_digits, op = p_op, rounding = rounding)
 
   one_row <- function(df_val, m) {
     fn <- function(a, b, p_a, p_b) {
@@ -261,10 +262,12 @@ recalc_mediation <- function(a, p_a, b, p_b, ab = NULL, p = NULL,
                              two_tailed = TRUE,
                              df_t = NULL,
                              method = NULL,
-                             label = NULL) {
+                             label = NULL,
+                             rounding = "either") {
   row_ab <- recalc_mediation_ab(a, b, ab,
                                 a_digits = a_digits, b_digits = b_digits,
-                                ab_digits = ab_digits)
+                                ab_digits = ab_digits,
+                                rounding = rounding)
   row_ab$method <- NA_character_
   row_ab$reference <- NA_character_
   row_ab$df_t <- NA_real_
@@ -276,7 +279,8 @@ recalc_mediation <- function(a, p_a, b, p_b, ab = NULL, p = NULL,
     p_a_op = p_a_op, p_b_op = p_b_op, p_op = p_op,
     two_tailed = two_tailed,
     df_t = df_t, method = method,
-    label = NULL
+    label = NULL,
+    rounding = rounding
   )
   out <- dplyr::bind_rows(row_ab, rows_p)
   if (!is.null(label)) out$label <- label

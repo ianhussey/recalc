@@ -4,19 +4,15 @@
 \alias{plot_multiverse_d}
 \title{Plot multiverse of Cohen's d results from independent_t_test_summary}
 \usage{
-plot_multiverse_d(res, distinct_and_rounded = TRUE)
+plot_multiverse_d(res)
 }
 \arguments{
 \item{res}{A list returned by independent_t_test_summary(),
 containing an element \code{d_results} with columns:
-\code{d_rounded}, \code{ci_lower_rounded}, and \code{ci_upper_rounded}.}
-
-\item{distinct_and_rounded}{If TRUE, return only distinct values of
-the rounded effect size and its confidence intervals. If FALSE,
-plot all unrounded values.}
+\code{d_unrounded}, \code{ci_lower_unrounded}, and \code{ci_upper_unrounded}.}
 }
 \value{
-A ggplot object visualizing the range of recalculated rounded
+A ggplot object visualizing the range of recalculated
 Cohen's d and its 95\% confidence intervals across all analytic choices.
 }
 \description{

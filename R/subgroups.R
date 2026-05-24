@@ -40,7 +40,7 @@ recalc_total_from_subgroups <- function(subgroup_ns, subgroup_means,
                                         overall_n = NULL, overall_mean = NULL,
                                         overall_sd = NULL,
                                         n_digits = NULL, mean_digits = NULL,
-                                        sd_digits = NULL) {
+                                        sd_digits = NULL, rounding = "either") {
   require_digits(n_digits = n_digits, mean_digits = mean_digits)
   if (!is.null(subgroup_sds)) require_digits(sd_digits = sd_digits)
 
@@ -52,7 +52,7 @@ recalc_total_from_subgroups <- function(subgroup_ns, subgroup_means,
   m_names <- paste0("m", seq_len(k))
   inputs_nm <- c(
     setNames(lapply(subgroup_ns,    interval_from_digits, n_digits),    n_names),
-    setNames(lapply(subgroup_means, interval_from_digits, mean_digits), m_names)
+    setNames(lapply(subgroup_means, interval_from_digits, mean_digits, rounding = rounding), m_names)
   )
 
   recomp_N <- propagate_intervals(
@@ -70,9 +70,9 @@ recalc_total_from_subgroups <- function(subgroup_ns, subgroup_means,
 
   out <- dplyr::bind_rows(
     recalc_result("E1: N = sum n_g",
-                  overall_n, reported_interval(overall_n, n_digits), recomp_N),
+                  overall_n, reported_interval(overall_n, n_digits, rounding = rounding), recomp_N),
     recalc_result("E1: M = (sum n_g M_g) / N",
-                  overall_mean, reported_interval(overall_mean, mean_digits),
+                  overall_mean, reported_interval(overall_mean, mean_digits, rounding = rounding),
                   recomp_M)
   )
 
@@ -80,7 +80,7 @@ recalc_total_from_subgroups <- function(subgroup_ns, subgroup_means,
     s_names <- paste0("s", seq_len(k))
     inputs_all <- c(
       inputs_nm,
-      setNames(lapply(subgroup_sds, interval_from_digits, sd_digits), s_names)
+      setNames(lapply(subgroup_sds, interval_from_digits, sd_digits, rounding = rounding), s_names)
     )
     recomp_SD <- propagate_intervals(
       fn = function(...) {
@@ -98,7 +98,7 @@ recalc_total_from_subgroups <- function(subgroup_ns, subgroup_means,
     )
     out <- dplyr::bind_rows(out, recalc_result(
       "E1: SD = sqrt((sum (n_g-1) s_g^2 + sum n_g (M_g - M)^2) / (N - 1))",
-      overall_sd, reported_interval(overall_sd, sd_digits), recomp_SD
+      overall_sd, reported_interval(overall_sd, sd_digits, rounding = rounding), recomp_SD
     ))
   }
   out
@@ -178,7 +178,7 @@ recalc_missing_subgroup <- function(reported_ns, reported_means,
                                     overall_sd = NULL,
                                     scale_min = NULL, scale_max = NULL,
                                     n_digits = NULL, mean_digits = NULL,
-                                    sd_digits = NULL) {
+                                    sd_digits = NULL, rounding = "either") {
   require_digits(n_digits = n_digits, mean_digits = mean_digits)
   if (!is.null(reported_sds) && !is.null(overall_sd))
     require_digits(sd_digits = sd_digits)
@@ -198,10 +198,10 @@ recalc_missing_subgroup <- function(reported_ns, reported_means,
   n_names <- paste0("n", seq_len(k))
   m_names <- paste0("m", seq_len(k))
   inputs_nm <- c(
-    list(N = interval_from_digits(overall_n,    n_digits),
-         M = interval_from_digits(overall_mean, mean_digits)),
+    list(N = interval_from_digits(overall_n,    n_digits, rounding = rounding),
+         M = interval_from_digits(overall_mean, mean_digits, rounding = rounding)),
     setNames(lapply(reported_ns,    interval_from_digits, n_digits),    n_names),
-    setNames(lapply(reported_means, interval_from_digits, mean_digits), m_names)
+    setNames(lapply(reported_means, interval_from_digits, mean_digits, rounding = rounding), m_names)
   )
 
   recomp_n <- propagate_intervals(
@@ -244,8 +244,8 @@ recalc_missing_subgroup <- function(reported_ns, reported_means,
     s_names <- paste0("s", seq_len(k))
     inputs_all <- c(
       inputs_nm,
-      list(SD = interval_from_digits(overall_sd, sd_digits)),
-      setNames(lapply(reported_sds, interval_from_digits, sd_digits), s_names)
+      list(SD = interval_from_digits(overall_sd, sd_digits, rounding = rounding)),
+      setNames(lapply(reported_sds, interval_from_digits, sd_digits, rounding = rounding), s_names)
     )
     recomp_sd <- propagate_intervals(
       fn = function(...) {
@@ -365,7 +365,7 @@ recalc_missing_subgroup <- function(reported_ns, reported_means,
 #'                         n_digits = 0, sd_digits = 2)
 #' @export
 recalc_sd_concentration <- function(subgroup_ns, subgroup_sds,
-                                    n_digits = NULL, sd_digits = NULL) {
+                                    n_digits = NULL, sd_digits = NULL, rounding = "either") {
   require_digits(n_digits = n_digits, sd_digits = sd_digits)
 
   k <- length(subgroup_ns)
@@ -375,7 +375,7 @@ recalc_sd_concentration <- function(subgroup_ns, subgroup_sds,
   s_names <- paste0("s", seq_len(k))
   inputs <- c(
     setNames(lapply(subgroup_ns,  interval_from_digits, n_digits),  n_names),
-    setNames(lapply(subgroup_sds, interval_from_digits, sd_digits), s_names)
+    setNames(lapply(subgroup_sds, interval_from_digits, sd_digits, rounding = rounding), s_names)
   )
 
   fn <- function(...) {

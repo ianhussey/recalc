@@ -14,7 +14,8 @@ diagnose_r2_label(
   betas_digits = 2,
   r_y_digits = 2,
   n_digits = 0,
-  k_digits = 0
+  k_digits = 0,
+  rounding = "either"
 )
 }
 \arguments{

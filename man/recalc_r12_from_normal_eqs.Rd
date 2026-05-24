@@ -12,7 +12,8 @@ recalc_r12_from_normal_eqs(
   beta1_digits = 2,
   beta2_digits = 2,
   r_y1_digits = 2,
-  r_y2_digits = 2
+  r_y2_digits = 2,
+  rounding = "either"
 )
 }
 \arguments{

@@ -51,10 +51,10 @@ res <- independent_t_test_summary(
   d_ci_upper = 0.90, # currently not used extensively
   # optionally specify direction of effect, M1-M2 or M2-M1
   direction = "m1_minus_m2", # one of c("m1_minus_m2", "m2_minus_m1", "both"),
-  # optionally specify output rounding method
-  input_rounding = NULL, # if NULL, check all. or one of "rounded", "truncated"
-  output_rounding = NULL, # if NULL, check all. or one of "half_up", "half_down", "bankers", "trunc"
-  d_digits = 2, # number of digits to round SMD output to
+  # optionally specify the rounding mode for reported values: one of
+  #   "either" (default; half-up or bankers), "half_up", "bankers", "truncate"
+  rounding = "either",
+  d_digits = 2, # decimal precision of the reported SMD
   hedges_correction = NULL, # if NULL, check both applying and not applying hedges correction
   # optionally specify CI calculation method. 
   ci_methods = NULL, # if NULL, check all or one of "wald_t", "welch_t", "nct".
@@ -77,7 +77,6 @@ res$reproduced |>
 
 ```{r}
 plot_multiverse_p(res)
-plot_multiverse_p(res, distinct_and_rounded = FALSE)
 
 # res$p_results |>
 #   kable() |>
@@ -88,7 +87,6 @@ plot_multiverse_p(res, distinct_and_rounded = FALSE)
 
 ```{r}
 plot_multiverse_d(res)
-plot_multiverse_d(res, distinct_and_rounded = FALSE)
 
 # res$d_results |>
 #   kable() |>
