@@ -1,0 +1,186 @@
+---
+title: "Refitting an OLS Regression from a Reported Correlation Matrix"
+subtitle: "Recalculating coefficients, CIs, and p-values from Table 1 in the {recalc} package"
+author: "Ian Hussey"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    toc_float: true
+    code-fold: false
+    code-overflow: wrap
+    code-tools: true
+    warning: false
+    df-print: kable
+    theme:
+      light: cosmo
+      dark: darkly
+    highlight-style:
+      light: breeze
+      dark: dracula
+---
+
+# Purpose
+
+OLS regression on continuous predictors is fully determined by the covariance (or correlation) matrix of the variables and the sample size. So a paper that reports a correlation matrix and $N$ — typical for psychology Table 1 — implicitly reports *every* coefficient, standard error, CI, and $p$-value of every regression that could be fit on those variables. The regression table the paper actually prints is one such fit; the reader can independently refit it and compare.
+
+This vignette covers `recalc_regression_from_cor_mat()`, which performs that refit directly from a reported correlation matrix and $N$, propagating the rounding precision of every correlation through the refit so that each output is returned as a recalculated $[\text{lower}, \text{upper}]$ interval. A reported regression coefficient (or its CI, or its $p$) that lies outside the recalculated interval is incompatible with the reported Table 1 — a hard forensic signal, not rounding noise.
+
+When the user additionally supplies a vector of SDs for the variables, the function also returns bounds on the *unstandardized* coefficients via $b_i = \beta_i \cdot \text{SD}_Y / \text{SD}_{X_i}$.
+
+**Identities used.** Given the correlation matrix $R$, partitioned as $R_{xx}$ (predictors with themselves) and $r_{xy}$ (predictors with $Y$):
+
+$$\beta = R_{xx}^{-1} r_{xy}, \quad R^2 = \beta^\top r_{xy}, \quad \text{SE}(\beta_i) = \sqrt{\frac{(1-R^2)}{N-k-1} \cdot [R_{xx}^{-1}]_{ii}}.$$
+
+The $t$, $p$, and Wald CI follow from $\beta$, $\text{SE}(\beta)$, and $N - k - 1$ residual degrees of freedom.
+
+**Rounding propagation.** Each reported correlation $r$ to $d$ decimal places implies a true value in $[r - 0.5 \cdot 10^{-d}, r + 0.5 \cdot 10^{-d}]$ (under round-half rules). The function enumerates the $2^{p(p-1)/2 + 1}$ corner combinations of the unique off-diagonal correlations and $N$ (and SDs, when supplied) and returns the achievable min/max for every recalculated output. Cost grows quickly past $p \approx 6$; this is the same combinatorial pattern as `recalc_alpha_from_cor_sd()`.
+
+```{r}
+library(recalc)
+library(dplyr)
+```
+
+# Triangle helper
+
+Correlation matrices in papers are usually reported as a triangle (lower or upper) rather than as the full symmetric matrix. `triangle_to_cor_matrix()` auto-detects which half is populated, mirrors it, and fills the diagonal with ones.
+
+```{r}
+nm <- c("y", "x1", "x2")
+lower <- matrix(NA_real_, 3, 3, dimnames = list(nm, nm))
+lower[lower.tri(lower, diag = TRUE)] <- c(1.00, 0.50, 0.30,
+                                          1.00, 0.20,
+                                          1.00)
+lower
+
+triangle_to_cor_matrix(lower)
+```
+
+The same helper accepts an upper triangle without any flag:
+
+```{r}
+upper <- t(lower)
+upper
+
+triangle_to_cor_matrix(upper)
+```
+
+# Worked example: Haller et al. (2022)
+
+Haller and colleagues' study of prosocial behavior during COVID-19 reports zero-order correlations among six measures in a Table 1 ($N = 9{,}496$, correlations to 2 d.p.), and a multivariable regression of prosocial behavior on perceived stress, positive affect, psychological flexibility, and social support. Independent of the reported regression table, we can refit it from Table 1 alone.
+
+```{r}
+nm <- c("prosocial", "wellbeing", "support",
+        "stress",    "flexibility", "affect")
+
+R <- matrix(c(
+  1.00,  0.32,  0.34, -0.09,  0.21,  0.30,
+  0.32,  1.00,  0.45, -0.54,  0.54,  0.64,
+  0.34,  0.45,  1.00, -0.26,  0.32,  0.34,
+ -0.09, -0.54, -0.26,  1.00, -0.52, -0.49,
+  0.21,  0.54,  0.32, -0.52,  1.00,  0.50,
+  0.30,  0.64,  0.34, -0.49,  0.50,  1.00
+), nrow = 6, dimnames = list(nm, nm))
+```
+
+## Standardized regression
+
+```{r}
+fit <- recalc_regression_from_cor_mat(
+  formula = prosocial ~ stress + affect + flexibility + support,
+  cor_mat = R,
+  n = 9496,
+  cor_mat_digits = 2
+)
+
+fit
+```
+
+The output is in the standard `{recalc}` long format: one row per (predictor × quantity), with `recalculated_lower` and `recalculated_upper` giving the interval implied by the rounding of every Table 1 correlation and the integer $N$. Quantities returned: `Std.Beta`, `Std.Beta CI lower`, `Std.Beta CI upper`, and `p`. `reported` / `consistent` are `NA` here because this function refits rather than checking a separately-reported value; comparison is the reader's responsibility (illustrated below).
+
+For a more readable view, pivot to wide:
+
+```{r}
+fit |>
+  filter(check == "Std.Beta") |>
+  select(predictor, std_beta_lower = recalculated_lower,
+         std_beta_upper = recalculated_upper)
+```
+
+## Comparing the reader's refit to the paper's reported coefficients
+
+Haller et al.'s regression table reports four standardized betas; suppose the printed values are $\beta = (0.14, 0.24, 0.08, 0.27)$ for stress, affect, flexibility, support. Pass them as the `reported_betas` argument (a named vector matching predictor names) and the function fills in `reported`, `reported_lower`, `reported_upper`, and `consistent` for each `Std.Beta` row:
+
+```{r}
+fit_checked <- recalc_regression_from_cor_mat(
+  formula        = prosocial ~ stress + affect + flexibility + support,
+  cor_mat        = R,
+  n              = 9496,
+  reported_betas = c(stress = 0.14, affect = 0.24,
+                     flexibility = 0.08, support = 0.27),
+  cor_mat_digits        = 2,
+  reported_betas_digits = 2
+)
+
+fit_checked |>
+  filter(check == "Std.Beta")
+```
+
+All four `consistent` flags are `TRUE` — the published regression table is reconcilable with the published Table 1.
+
+To see the diagnostic in action when a reported coefficient *is* incompatible with Table 1, inject a deliberately wrong value:
+
+```{r}
+recalc_regression_from_cor_mat(
+  formula        = prosocial ~ stress + affect + flexibility + support,
+  cor_mat        = R,
+  n              = 9496,
+  reported_betas = c(stress = 0.99, affect = 0.24,
+                     flexibility = 0.08, support = 0.27),
+  cor_mat_digits        = 2,
+  reported_betas_digits = 2
+) |>
+  filter(check == "Std.Beta")
+```
+
+The `stress` row now reads `consistent = FALSE`: the reported $\beta_\text{stress} = 0.99$ lies outside the recalculated interval $[0.116, 0.156]$ implied by Table 1 and $N$.
+
+## Unstandardized coefficients via SDs
+
+When the paper also reports SDs for $Y$ and the predictors, the function returns bounds on the unstandardized coefficients $b_i = \beta_i \cdot \text{SD}_Y / \text{SD}_{X_i}$ and their CIs. Pass a *named* SD vector that covers every variable in the formula. If reported unstandardized coefficients are also available, pass them via `reported_b` to populate the `consistent` column for the `b` rows:
+
+```{r}
+sds <- c(prosocial = 0.83, wellbeing = 1.10, support = 0.72,
+         stress    = 0.66, flexibility = 0.90, affect = 0.74)
+
+fit_b <- recalc_regression_from_cor_mat(
+  formula     = prosocial ~ stress + affect + flexibility + support,
+  cor_mat     = R,
+  n           = 9496,
+  sd_vector   = sds,
+  reported_b  = c(stress = 0.18, affect = 0.27,
+                  flexibility = 0.07, support = 0.31),
+  cor_mat_digits    = 2,
+  sd_vector_digits  = 2,
+  reported_b_digits = 2
+)
+
+fit_b |>
+  filter(check %in% c("b", "b CI lower", "b CI upper")) |>
+  select(check, predictor, reported, recalculated_lower,
+         recalculated_upper, consistent)
+```
+
+The SD rounding intervals widen the unstandardized-coefficient intervals beyond what would follow from the correlation matrix alone — a wider SD interval directly scales the recalculated $b$ interval. The `b CI lower` and `b CI upper` rows still have `consistent = NA` because the function only accepts reported point estimates (`reported_betas`, `reported_b`), not reported CIs.
+
+# Notes and caveats
+
+**Scope.** This function targets the most common case: a single OLS regression on continuous predictors with a complete reported correlation matrix and known $N$. Categorical predictors with $>2$ levels would require expanding into dummies; pairwise-deleted correlation matrices (different $N$ per cell) violate the single-$N$ assumption.
+
+**Computational cost.** Corner enumeration is exact for monotone functions of each input, but the corner count is $2^{p(p-1)/2 + 1 + p_{\text{sd}}}$. With $p = 6$ variables and SDs supplied, that is $2^{22} \approx 4.2$ M corners. Practical limits are around $p = 6$; for larger models, drop variables not used in the focal regression before passing `cor_mat` (the function subsets to formula variables automatically).
+
+**Interval width vs. signal.** Wider intervals mean less power to detect inconsistency, not less validity of the check. A reported coefficient inside a wide interval is consistent with Table 1, but the test was weak; a reported coefficient outside even a wide interval is a strong incompatibility signal.
+
+**Sign / labeling errors.** Like the rest of `{recalc}`, the check is sensitive to sign flips and value transcription. Label confusions (e.g. $b$ printed in a column titled $\beta$) are not auto-diagnosed here, but the standardization identity in `recalc_beta_from_b()` and `diagnose_beta_label()` covers that diagnosis when SDs are available.
