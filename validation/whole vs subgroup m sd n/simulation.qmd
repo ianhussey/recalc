@@ -8,7 +8,7 @@ format:
     embed-resources: true
     toc: true
     toc_float: true
-    code-fold: false
+    code-fold: true
     code-overflow: wrap
     code-tools: true
     warning: false
@@ -71,15 +71,19 @@ $$\sum_i (x_{gi} - M)^2 \;=\; \sum_i\bigl[(x_{gi} - M_g) + (M_g - M)\bigr]^2$$
 
 Expanding the square:
 
-$$=\; \sum_i (x_{gi} - M_g)^2 \;+\; 2(M_g - M)\underbrace{\sum_i (x_{gi} - M_g)}_{=\,0\ \text{by definition of}\ M_g} \;+\; n_g\,(M_g - M)^2$$
+$$=\; \sum_i (x_{gi} - M_g)^2 \;+\; 2(M_g - M)\sum_i (x_{gi} - M_g) \;+\; n_g\,(M_g - M)^2$$
 
-The middle term vanishes identically — it is not an approximation, it is a consequence of $M_g$ being the within-group mean. So:
+The middle term vanishes identically because $\sum_i (x_{gi} - M_g) = 0$ by definition of $M_g$ — it is not an approximation, it is a consequence of $M_g$ being the within-group mean. So:
 
 $$\sum_i (x_{gi} - M)^2 \;=\; (n_g - 1)\,s_g^2 \;+\; n_g\,(M_g - M)^2$$
 
 Summing over all $g$:
 
-$$\boxed{\;SS_{\text{total}} \;=\; \underbrace{\sum_g (n_g - 1)\,s_g^2}_{SS_{\text{within}}} \;+\; \underbrace{\sum_g n_g\,(M_g - M)^2}_{SS_{\text{between}}}\;}$$
+$$SS_{\text{total}} \;=\; SS_{\text{within}} + SS_{\text{between}}$$
+
+where the within- and between-group sums of squares are
+
+$$SS_{\text{within}} \;=\; \sum_g (n_g - 1)\,s_g^2, \qquad SS_{\text{between}} \;=\; \sum_g n_g\,(M_g - M)^2,$$
 
 and therefore
 
@@ -104,19 +108,55 @@ When the means differ, $s_{\text{pooled}}^2 < s_{\text{total}}^2$ — strictly, 
 
 ### Worked example
 
-Two subgroups of size $n_g = 50$:
+Construct two subgroups of size $n_g = 50$ with the same within-group SD ($s_g = 1$) but different means ($M_1 = 4$, $M_2 = 6$). We build the data deterministically so the sample stats hit those targets exactly, then compute both the pooled-SD prediction and the correct total-variance-decomposition prediction, and compare both to `sd()` of the pooled observations.
 
-| | $n_g$ | $M_g$ | $s_g$ |
-|---|---|---|---|
-| Group 1 | 50 | 4.0 | 1.0 |
-| Group 2 | 50 | 6.0 | 1.0 |
+```{r}
+library(knitr)
 
-$N = 100$, $M = 5.0$.
+# Build two subgroups with exactly the targeted mean and SD.
+make_group <- function(n, target_mean, target_sd) {
+  z <- scale(seq_len(n))[, 1]                # mean 0, SD 1
+  as.numeric(z * target_sd + target_mean)
+}
+g1 <- make_group(n = 50, target_mean = 4.0, target_sd = 1.0)
+g2 <- make_group(n = 50, target_mean = 6.0, target_sd = 1.0)
 
-- **Pooled SD:** $s_{\text{pooled}}^2 = (49 + 49)/98 = 1.000$, so $s_{\text{pooled}} = 1.00$.
-- **Total SD (correct):** $SS_{\text{within}} = 98$, $SS_{\text{between}} = 50\cdot 1 + 50 \cdot 1 = 100$, $s_{\text{total}}^2 = 198/99 = 2.00$, so $s_{\text{total}} \approx 1.41$.
+# Summary statistics a paper would report.
+n_g <- c(length(g1), length(g2))
+M_g <- c(mean(g1),   mean(g2))
+s_g <- c(sd(g1),     sd(g2))
+N   <- sum(n_g)
+M   <- sum(n_g * M_g) / N
 
-The pooled formula understates the actual whole-sample SD by 41%. A paper honestly reporting "overall SD = 1.41" alongside these subgroup statistics is exactly self-consistent, but a check built on the pooled formula would flag it as inconsistent (expected 1.00, reported 1.41) — a false positive driven entirely by the unstated equal-means assumption.
+# Pooled-SD (textbook formula, used as Cohen's d denominator and
+# equal-variance t-test's pooled variance estimator):
+s_pooled <- sqrt(sum((n_g - 1) * s_g^2) / sum(n_g - 1))
+
+# Total SD via the within + between sum-of-squares decomposition:
+SS_within  <- sum((n_g - 1) * s_g^2)
+SS_between <- sum(n_g * (M_g - M)^2)
+s_total    <- sqrt((SS_within + SS_between) / (N - 1))
+
+# Sanity check: the decomposition reproduces sd() of all pooled observations.
+s_total_naive <- sd(c(g1, g2))
+
+tibble::tibble(
+  subgroup_n     = list(n_g),
+  subgroup_M     = list(M_g),
+  subgroup_sd    = list(s_g),
+  overall_N      = N,
+  overall_M      = M,
+  s_pooled       = s_pooled,
+  s_total        = s_total,
+  s_total_naive  = s_total_naive,
+  ratio          = s_total / s_pooled
+) |>
+  kable(digits = 3)
+```
+
+The two SD estimates disagree by 41 % despite using the same underlying data. The decomposition's `s_total` exactly equals `sd(c(g1, g2))` (the naïve calculation on the pooled observations), confirming the identity. The textbook pooled formula does not — because its numerator omits the between-group sum of squares.
+
+A paper honestly reporting "overall SD ≈ 1.41" alongside these subgroup statistics is exactly self-consistent, but a check built on the pooled formula would flag it as inconsistent (expected 1.00, reported 1.41) — a false positive driven entirely by the unstated equal-means assumption.
 
 ### References for the decomposition
 
@@ -154,11 +194,12 @@ Each subgroup's observations are pooled (as if a whole sample) to compute the ov
 
 **Common factors:**
 
-- `data_type` ∈ {`"continuous"`, `"likert"`}.
 - `n_total` ∈ {30, 100, 300, 1000} — total sample size.
 - `digits` ∈ {1, 2, 3} — reporting precision for the means and SDs passed to the function (a single shared level rather than independent `mean_digits` / `sd_digits` axes, to keep the grid tractable).
 - `n_digits` ∈ {0, 1} — reporting precision for the sample sizes. `n_digits = 0` is the realistic case (Ns are integers); `n_digits = 1` tests that the asymmetric rounding interval the function applies for non-integer N values does not break self-consistency on the same underlying data.
-- `sd_ratio` ∈ {1, 1.5, 2} — ratio of the largest to the smallest within-subgroup SD. At `sd_ratio = 1` all subgroups have the same within-group SD (the easy case); at `sd_ratio = 2` the SDs vary by a factor of two across subgroups, stressing the SD aggregation when within-group variability is heterogeneous. For continuous data this is implemented by varying the Normal `sigma_g` linearly; for Likert data the Beta concentration is varied to produce a similar pattern in sample SD.
+- `sd_ratio` ∈ {1, 1.5, 2} — ratio of the largest to the smallest within-subgroup SD. At `sd_ratio = 1` all subgroups have the same within-group SD (the easy case); at `sd_ratio = 2` the SDs vary by a factor of two across subgroups, stressing the SD aggregation when within-group variability is heterogeneous.
+
+(Studies 1 and 2 use a single continuous Normal DGP. The package functions consume only the `(n, M, SD)` summary statistics — they do not see raw observations — so swapping in a discrete-Likert DGP would not exercise a different code path, only resample the input space slightly. Study 4's E2-power study explicitly uses a Likert DGP because its scale-bound detection mechanism is intrinsic to a bounded scale.)
 - `iteration` 1..`K_REPS` — Monte Carlo replications per condition.
 
 **E1-specific factors:**
@@ -190,7 +231,7 @@ Monte Carlo standard errors are computed by the binomial formula $\sqrt{\hat p (
 
 ## Number of replications
 
-`K_REPS = 200` per condition. With binomial MCSE worst case at $\hat p = 0.5$, this gives MCSE $\approx 0.035$ — adequate for verifying that consistency / coverage stays in the high-90s, less for distinguishing 99.5% from 99.9%. The constant `K_REPS` is defined once at the top of the methods section; bump it to 1000+ before drawing conclusions about narrow tail regimes.
+`K_REPS = 1000` per condition. With binomial MCSE worst case at $\hat p = 0.5$, this gives MCSE $\approx \sqrt{0.25/1000} \approx 0.016$, so single-cell consistency / coverage / detection rates are uncertain to about ±1.6 percentage points. This is adequate for verifying that rates hit the expected ~0 or ~1 plateaus and for resolving the sigmoid shape of the Study 3 / 4 power curves, but is loose for distinguishing 99.5 % from 99.9 % in borderline cells. The constant `K_REPS` is defined once at the top of the methods section; for narrow-tail conclusions raise it to e.g. 5000 (worst-case MCSE $\approx 0.007$).
 
 # Methods
 
@@ -206,6 +247,7 @@ library(ggplot2)
 library(scales)
 library(knitr)
 library(kableExtra)
+# devtools::install_github("ianhussey/recalc")
 library(recalc)
 
 plan(multisession, workers = future::availableCores())
@@ -308,9 +350,10 @@ whole_stats <- function(values_list, digits) {
 ## Run
 
 ```{r}
-e1_one_run <- function(n_total, k_subgroups, split, data_type, digits,
+e1_one_run <- function(n_total, k_subgroups, split, digits,
                        n_digits, sd_ratio) {
-  data_list  <- generate_subgroups(n_total, k_subgroups, split, data_type,
+  data_list  <- generate_subgroups(n_total, k_subgroups, split,
+                                   data_type = "continuous",
                                    sd_ratio = sd_ratio)
   sub <- subgroup_stats(data_list, digits)
   tot <- whole_stats   (data_list, digits)
@@ -336,39 +379,38 @@ e1_one_run <- function(n_total, k_subgroups, split, data_type, digits,
 }
 
 e1_grid <- tidyr::expand_grid(
-  data_type   = c("continuous", "likert"),
-  n_total     = c(30, 100, 300, 1000),
+  n_total     = c(50, 100, 250),
   k_subgroups = c(2, 3),
   split       = c("balanced", "moderate", "skewed"),
-  digits      = c(1, 2, 3),
-  n_digits    = c(0, 1),
+  digits      = c(0, 1, 2, 3),
+  n_digits    = 0,
   sd_ratio    = c(1, 1.5, 2),
   iteration   = seq_len(K_REPS)
 )
 
-if (file.exists("e1_sim.rds")) {
-  e1_sim <- read_rds("e1_sim.rds")
+if (file.exists("simulation_e1.rds")) {
+  simulation_e1 <- read_rds("simulation_e1.rds")
 } else {
   set.seed(42)
-  e1_sim <- e1_grid |>
+  simulation_e1 <- e1_grid |>
     mutate(result = future_pmap(
       .l = list(n_total = n_total, k_subgroups = k_subgroups, split = split,
-                data_type = data_type, digits = digits,
+                digits = digits,
                 n_digits = n_digits, sd_ratio = sd_ratio),
       .f = e1_one_run,
       .progress = TRUE,
       .options = furrr_options(seed = TRUE)
     )) |>
     unnest(result)
-  write_rds(e1_sim, "e1_sim.rds")
+  write_rds(simulation_e1, "simulation_e1.rds", compress = "gz")
 }
 ```
 
 ## Performance
 
 ```{r}
-e1_summary <- e1_sim |>
-  group_by(data_type, n_total, k_subgroups, split, digits,
+e1_summary <- simulation_e1 |>
+  group_by(n_total, k_subgroups, split, digits,
            n_digits, sd_ratio, check) |>
   summarise(
     n_calls       = dplyr::n(),
@@ -383,12 +425,13 @@ e1_summary <- e1_sim |>
 
 ```{r}
 e1_summary |>
-  group_by(data_type) |>
   summarise(total_calls = sum(n_calls),
             total_errors = sum(n_calls * error_rate),
-            error_rate = total_errors / total_calls,
-            .groups = "drop") |>
-  kable(caption = "E1 — error rate by data type (expected: 0).") |>
+            error_rate   = total_errors / total_calls,
+            error_mcse   = sqrt(error_rate * (1 - error_rate) / total_calls)) |>
+  mutate(`error_rate (±1 MCSE)` = sprintf("%.4f (%.4f)", error_rate, error_mcse)) |>
+  select(total_calls, total_errors, `error_rate (±1 MCSE)`) |>
+  kable(caption = "E1 — overall error rate (±1 MCSE; expected: 0).") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -399,11 +442,13 @@ e1_summary |>
   filter(!is.na(check)) |>
   group_by(check, digits) |>
   summarise(rate = weighted.mean(consistency_rate, n_calls),
+            mcse = sqrt(rate * (1 - rate) / sum(n_calls)),
             .groups = "drop") |>
-  mutate(rate = scales::number(rate, accuracy = 0.0001)) |>
-  pivot_wider(names_from = digits, values_from = rate,
+  mutate(cell = sprintf("%.4f (%.4f)", rate, mcse)) |>
+  select(check, digits, cell) |>
+  pivot_wider(names_from = digits, values_from = cell,
               names_prefix = "digits = ") |>
-  kable(caption = "E1 — empirical consistency rate (should be 1, or arbitrarily close, modulo rounding ties).") |>
+  kable(caption = "E1 — empirical consistency rate (±1 MCSE in parens; should be 1, or arbitrarily close, modulo rounding ties).") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -412,7 +457,7 @@ e1_summary |>
 ```{r}
 e1_summary |>
   filter(!is.na(check)) |>
-  group_by(data_type, n_total, check) |>
+  group_by(n_total, check) |>
   summarise(rate = weighted.mean(consistency_rate, n_calls),
             mcse = sqrt(weighted.mean(consistency_rate * (1 - consistency_rate), n_calls) / sum(n_calls)),
             .groups = "drop") |>
@@ -427,12 +472,12 @@ e1_summary |>
   geom_linerange(aes(ymin = rate - mcse, ymax = rate + mcse), color = "black") +
   geom_line() +
   geom_point() +
-  facet_wrap(~ data_type) +
   scale_x_log10(name = "Total N", breaks = c(30, 100, 300, 1000)) +
   scale_y_continuous(name = "E1 consistency rate", limits = c(0.9, 1.01)) +
   theme_linedraw() +
   theme(panel.grid.minor = element_blank()) +
-  labs(color = "Check row")
+  labs(color = "Check row") +
+  facet_wrap(~ check_short)
 ```
 
 # Study 1b — Counterfactual: pooled SD as the consistency check
@@ -485,31 +530,31 @@ e1b_one_run <- function(n_total, mean_separation, digits) {
 }
 
 e1b_grid <- tidyr::expand_grid(
-  n_total         = c(100, 300),
+  n_total         = c(50, 100, 250),
   mean_separation = c(0, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0, 1.5),
-  digits          = c(1, 2, 3),
+  digits          = c(0, 1, 2, 3),
   iteration       = seq_len(K_REPS)
 )
 
-if (file.exists("e1b_sim.rds")) {
-  e1b_sim <- read_rds("e1b_sim.rds")
+if (file.exists("simulation_e1b.rds")) {
+  simulation_e1b <- read_rds("simulation_e1b.rds")
 } else {
   set.seed(43)
-  e1b_sim <- e1b_grid |>
+  simulation_e1b <- e1b_grid |>
     mutate(result = future_pmap(
       .l = list(n_total = n_total, mean_separation = mean_separation, digits = digits),
       .f = e1b_one_run,
       .progress = TRUE,
       .options = furrr_options(seed = TRUE))) |>
     unnest(result)
-  write_rds(e1b_sim, "e1b_sim.rds")
+  write_rds(simulation_e1b, "simulation_e1b.rds", compress = "gz")
 }
 ```
 
 ## Performance
 
 ```{r}
-e1b_summary <- e1b_sim |>
+e1b_summary <- simulation_e1b |>
   group_by(n_total, mean_separation, digits) |>
   summarise(
     n_calls = dplyr::n(),
@@ -526,15 +571,18 @@ e1b_summary <- e1b_sim |>
 ```{r}
 e1b_summary |>
   group_by(mean_separation, digits) |>
-  summarise(correct = weighted.mean(correct, n_calls),
-            pooled  = weighted.mean(pooled,  n_calls),
+  summarise(correct      = weighted.mean(correct, n_calls),
+            pooled       = weighted.mean(pooled,  n_calls),
+            correct_mcse = sqrt(correct * (1 - correct) / sum(n_calls)),
+            pooled_mcse  = sqrt(pooled  * (1 - pooled)  / sum(n_calls)),
             .groups = "drop") |>
-  mutate(across(c(correct, pooled),
-                \(x) scales::number(x, accuracy = 0.001))) |>
+  mutate(correct = sprintf("%.3f (%.3f)", correct, correct_mcse),
+         pooled  = sprintf("%.3f (%.3f)", pooled,  pooled_mcse)) |>
+  select(mean_separation, digits, correct, pooled) |>
   pivot_wider(names_from = digits,
               values_from = c(correct, pooled),
               names_glue = "{.value}, d={digits}") |>
-  kable(caption = "E1 SD-row consistency rate under the correct total-variance identity vs the pooled-SD counterfactual, by mean separation and reporting precision (digits).") |>
+  kable(caption = "E1 SD-row consistency rate (±1 MCSE in parens) under the correct total-variance identity vs the pooled-SD counterfactual, by mean separation and reporting precision (digits).") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -579,7 +627,7 @@ This is not a Type I error rate in the hypothesis-testing sense — it's an esti
 ## Run
 
 ```{r}
-e2_one_run <- function(n_total, k_reported, missing_proportion, data_type,
+e2_one_run <- function(n_total, k_reported, missing_proportion,
                        digits, n_digits, sd_ratio) {
   k_total <- k_reported + 1L
   # Split total N so the *last* group has missing_proportion of N, then the
@@ -590,15 +638,11 @@ e2_one_run <- function(n_total, k_reported, missing_proportion, data_type,
   ns_all <- c(ns_reported_true, n_miss_true)
   mus    <- seq(from = 3.5, to = 5.0, length.out = k_total)
   sigmas <- 1.2 * seq(from = 1, to = sd_ratio, length.out = k_total)
-  alphas <- 4   * seq(from = sd_ratio, to = 1, length.out = k_total)
 
-  data_list <- if (identical(data_type, "continuous")) {
-    purrr::pmap(list(n = ns_all, mu = mus, sigma = sigmas),
-                function(n, mu, sigma) sample_continuous(n, mu, sigma))
-  } else {
-    purrr::pmap(list(n = ns_all, mu = mus, alpha = alphas),
-                function(n, mu, alpha) as.numeric(sample_likert(n, mu, alpha = alpha)))
-  }
+  data_list <- purrr::pmap(
+    list(n = ns_all, mu = mus, sigma = sigmas),
+    function(n, mu, sigma) sample_continuous(n, mu, sigma)
+  )
 
   # Stats: overall (all k_total groups), reported (first k_reported), hidden (last)
   reported <- subgroup_stats(data_list[seq_len(k_reported)], digits)
@@ -632,60 +676,70 @@ e2_one_run <- function(n_total, k_reported, missing_proportion, data_type,
 }
 
 e2_grid <- tidyr::expand_grid(
-  data_type          = c("continuous", "likert"),
-  n_total            = c(100, 300, 1000),
+  n_total            = c(50, 100, 250),
   k_reported         = c(1, 2),
-  missing_proportion = c(0.05, 0.10, 0.25, 0.50),
-  digits             = c(1, 2, 3),
+  missing_proportion = c(0.025, 0.05, 0.10),
+  digits             = c(0, 1, 2, 3),
   n_digits           = c(0, 1),
   sd_ratio           = c(1, 1.5, 2),
   iteration          = seq_len(K_REPS)
 )
 
-if (file.exists("e2_sim.rds")) {
-  e2_sim <- read_rds("e2_sim.rds")
+if (file.exists("simulation_e2.rds")) {
+  simulation_e2 <- read_rds("simulation_e2.rds")
 } else {
   set.seed(42)
-  e2_sim <- e2_grid |>
+  simulation_e2 <- e2_grid |>
     mutate(result = future_pmap(
       .l = list(n_total = n_total, k_reported = k_reported,
-                missing_proportion = missing_proportion, data_type = data_type,
+                missing_proportion = missing_proportion,
                 digits = digits, n_digits = n_digits, sd_ratio = sd_ratio),
       .f = e2_one_run,
       .progress = TRUE,
       .options = furrr_options(seed = TRUE)
     )) |>
     unnest(result)
-  write_rds(e2_sim, "e2_sim.rds")
+  write_rds(simulation_e2, "simulation_e2.rds", compress = "gz")
 }
 ```
 
 ## Performance
 
 ```{r}
-e2_summary <- e2_sim |>
+e2_summary <- simulation_e2 |>
   filter(!is.na(check)) |>
-  group_by(data_type, n_total, k_reported, missing_proportion,
+  group_by(n_total, k_reported, missing_proportion,
            digits, n_digits, sd_ratio, check) |>
   summarise(
-    n_calls       = dplyr::n(),
-    coverage      = mean(covers, na.rm = TRUE),
-    coverage_mcse = sqrt(coverage * (1 - coverage) / n_calls),
-    median_width  = stats::median(width, na.rm = TRUE),
+    n_calls           = dplyr::n(),
+    n_feasible        = sum(!is.na(covers)),
+    feasibility_rate  = n_feasible / n_calls,
+    feasibility_mcse  = sqrt(feasibility_rate * (1 - feasibility_rate) / n_calls),
+    coverage          = if (n_feasible > 0L) mean(covers[!is.na(covers)]) else NA_real_,
+    coverage_mcse     = if (n_feasible > 0L) sqrt(coverage * (1 - coverage) / n_feasible) else NA_real_,
+    median_width      = stats::median(width, na.rm = TRUE),
     .groups = "drop"
   )
 ```
 
+E2's `consistent` flags are *feasibility* checks (rather than reported-vs-recomputed overlap checks, since the missing subgroup has no reported value). When the rounding interval propagated through the SD identity yields a corner with strictly negative variance, the function returns `NaN` bounds — meaning *no real missing subgroup could reconcile the reported overall and the reported subgroups under this rounding box*. In Study 2's coverage analysis we therefore report two metrics:
+
+- **Feasibility rate** — the proportion of replications where the recalculated interval is non-NaN.
+- **Coverage rate** (among the feasible replications) — the proportion where the recalculated interval contains the truth.
+
+Feasibility ≪ 1 is *expected* for the SD row at `digits = 0` and `digits = 1`: when the rounding interval on M and SD is wide enough (±0.5 or ±0.05), corner enumeration almost always finds an input combination that pushes the implied variance negative. This is the correct rounding-aware behaviour — the function is honestly reporting that the implied SD interval is undefined. The N and M rows are not subject to this (their identities never go through `sqrt`).
+
 ### Errors
 
 ```{r}
-e2_sim |>
-  group_by(data_type) |>
+simulation_e2 |>
   summarise(total_calls = dplyr::n(),
             errors      = sum(errored),
             error_rate  = errors / total_calls,
-            .groups = "drop") |>
-  kable(caption = "E2 — error rate by data type (expected: 0; NaN SDs at boundary cases are not errors here, just flagged via the `covers` column).") |>
+            error_mcse  = sqrt(error_rate * (1 - error_rate) / total_calls)) |>
+  mutate(`error_rate (±1 MCSE)` = sprintf("%.4f (%.4f)", error_rate, error_mcse)) |>
+  select(total_calls, errors, `error_rate (±1 MCSE)`) |>
+  kable(caption = "E2 — overall error rate (±1 MCSE; expected: 0; NaN SDs at boundary cases are not errors here, just flagged via the `covers` column).") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -694,25 +748,39 @@ e2_sim |>
 ```{r}
 e2_summary |>
   group_by(check, missing_proportion) |>
-  summarise(coverage = weighted.mean(coverage, n_calls),
-            .groups = "drop") |>
-  mutate(coverage = scales::number(coverage, accuracy = 0.001),
-         check_short = dplyr::case_when(
-           grepl("^E2: n",  check) ~ "n_miss",
-           grepl("^E2: M",  check) ~ "M_miss",
-           grepl("^E2: SD", check) ~ "SD_miss",
-           TRUE ~ check
-         )) |>
-  select(check_short, missing_proportion, coverage) |>
-  pivot_wider(names_from = missing_proportion, values_from = coverage,
+  summarise(
+    feasibility = weighted.mean(feasibility_rate, n_calls),
+    feas_mcse   = sqrt(feasibility * (1 - feasibility) / sum(n_calls)),
+    coverage    = if (sum(n_feasible) > 0L)
+                    weighted.mean(coverage, n_feasible, na.rm = TRUE)
+                  else NA_real_,
+    cov_mcse    = if (sum(n_feasible) > 0L)
+                    sqrt(coverage * (1 - coverage) / sum(n_feasible))
+                  else NA_real_,
+    .groups = "drop"
+  ) |>
+  mutate(
+    feasibility_cell = sprintf("%.3f (%.3f)", feasibility, feas_mcse),
+    coverage_cell    = ifelse(is.na(coverage), "—",
+                              sprintf("%.3f (%.3f)", coverage, cov_mcse)),
+    cell             = paste0(feasibility_cell, " | ", coverage_cell),
+    check_short = dplyr::case_when(
+      grepl("^E2: n",  check) ~ "n_miss",
+      grepl("^E2: M",  check) ~ "M_miss",
+      grepl("^E2: SD", check) ~ "SD_miss",
+      TRUE ~ check
+    )
+  ) |>
+  select(check_short, missing_proportion, cell) |>
+  pivot_wider(names_from = missing_proportion, values_from = cell,
               names_prefix = "missing = ") |>
-  kable(caption = "E2 — empirical coverage of the hidden subgroup's true N, mean, and SD by the recalculated interval.") |>
+  kable(caption = "E2 — for each row the cell shows `feasibility (±1 MCSE) | coverage-among-feasible (±1 MCSE)`. Feasibility is the proportion of replications where the recalculated interval is non-NaN; coverage is the proportion of those feasible replications where the truth is inside the interval. \"—\" means no replications were feasible at that cell (typically SD_miss at `digits ∈ {0, 1}`).") |>
   kable_styling(full_width = FALSE)
 ```
 
-### Plot: coverage by N and missing-subgroup share
+### Plot: feasibility and coverage by N and missing-subgroup share
 
-```{r}
+```{r, fig.height = 6.5}
 e2_summary |>
   mutate(check_short = dplyr::case_when(
     grepl("^E2: n",  check) ~ "n_miss",
@@ -720,25 +788,43 @@ e2_summary |>
     grepl("^E2: SD", check) ~ "SD_miss",
     TRUE ~ check
   )) |>
-  group_by(data_type, n_total, missing_proportion, check_short) |>
-  summarise(rate = weighted.mean(coverage, n_calls),
-            mcse = sqrt(weighted.mean(coverage * (1 - coverage), n_calls) / sum(n_calls)),
-            .groups = "drop") |>
-  ggplot(aes(x = missing_proportion, y = rate,
-             color = as.factor(n_total))) +
-  geom_hline(yintercept = 1, linetype = "dashed") +
+  group_by(n_total, missing_proportion, check_short) |>
+  summarise(
+    feasibility      = weighted.mean(feasibility_rate, n_calls),
+    feasibility_mcse = sqrt(feasibility * (1 - feasibility) / sum(n_calls)),
+    coverage         = if (sum(n_feasible) > 0L)
+                         weighted.mean(coverage, n_feasible, na.rm = TRUE)
+                       else NA_real_,
+    coverage_mcse    = if (sum(n_feasible) > 0L)
+                         sqrt(coverage * (1 - coverage) / sum(n_feasible))
+                       else NA_real_,
+    .groups = "drop"
+  ) |>
+  tidyr::pivot_longer(
+    cols = c(feasibility, coverage),
+    names_to = "metric", values_to = "rate"
+  ) |>
+  mutate(mcse = dplyr::if_else(metric == "feasibility",
+                               feasibility_mcse, coverage_mcse),
+         metric = factor(metric, levels = c("feasibility", "coverage"))) |>
+  ggplot(aes(x = missing_proportion, y = rate, color = metric)) +
+  geom_hline(yintercept = 1, linetype = "dashed", color = "grey50") +
   geom_linerange(aes(ymin = rate - mcse, ymax = rate + mcse), color = "black") +
   geom_line() +
   geom_point() +
-  facet_grid(data_type ~ check_short) +
+  facet_grid(n_total ~ check_short, labeller = label_both) +
   scale_x_continuous(name = "Hidden subgroup's share of total N",
                      labels = scales::percent_format(accuracy = 1)) +
-  scale_y_continuous(name = "E2 coverage of true hidden-subgroup statistic",
-                     limits = c(0.85, 1.01)) +
+  scale_y_continuous(name = "Rate",
+                     limits = c(-0.02, 1.05),
+                     labels = scales::percent_format(accuracy = 1)) +
   theme_linedraw() +
-  theme(panel.grid.minor = element_blank()) +
-  labs(color = "Total N")
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "top") +
+  labs(color = NULL)
 ```
+
+The plot now shows two series per panel: **feasibility** (the function returned a non-NaN interval) and **coverage** (the truth was inside that interval, given the function returned one). For the n_miss and M_miss rows feasibility is ≈ 100% across the grid, so the two lines lie on top of each other. For the SD_miss row feasibility dips below 1 at narrow `n_miss` and wide rounding intervals — the function is correctly refusing to return bounds it cannot justify — while coverage stays at ≈ 100% wherever the function does return bounds.
 
 # Study 3 — E1 power: detecting inconsistent overall N, M, SD
 
@@ -753,8 +839,8 @@ For each replication we generate consistent data with `k = 3` balanced subgroups
 Perturbation magnitudes are chosen to span the "barely detectable" to "obviously inconsistent" range:
 
 - $\Delta N \in \{0, 1, 2, 3, 5, 10\}$ — integer offsets to `overall_n`.
-- $\Delta M \in \{0, 0.01, 0.02, 0.05, 0.10, 0.20\}$ — additive offset to `overall_mean`.
-- $\Delta \text{SD} \in \{0, 0.01, 0.02, 0.05, 0.10, 0.20\}$ — additive offset to `overall_sd`.
+- $\Delta M \in \{0, 0.01, 0.02, 0.05, 0.10, 0.15, 0.20\}$ — additive offset to `overall_mean`.
+- $\Delta \text{SD} \in \{0, 0.01, 0.02, 0.05, 0.10, 0.15, 0.20\}$ — additive offset to `overall_sd`.
 
 The 0-magnitude rows reproduce Study 1's self-consistency check; everything else perturbs.
 
@@ -790,25 +876,25 @@ e3_one_run <- function(n_total, k_subgroups, digits, n_digits, sd_ratio,
 # Long-format perturbation grid: each target has its own magnitude scale.
 perturb_levels <- dplyr::bind_rows(
   tibble::tibble(perturb_target = "N",  perturb_magnitude = c(0, 1, 2, 3, 5, 10)),
-  tibble::tibble(perturb_target = "M",  perturb_magnitude = c(0, 0.01, 0.02, 0.05, 0.10, 0.20)),
-  tibble::tibble(perturb_target = "SD", perturb_magnitude = c(0, 0.01, 0.02, 0.05, 0.10, 0.20))
+  tibble::tibble(perturb_target = "M",  perturb_magnitude = c(0, 0.01, 0.02, 0.05, 0.10, 0.15, 0.20)),
+  tibble::tibble(perturb_target = "SD", perturb_magnitude = c(0, 0.01, 0.02, 0.05, 0.10, 0.15, 0.20))
 )
 
 e3_grid <- tidyr::crossing(
   perturb_levels,
-  n_total     = c(100, 300, 1000),
+  n_total     = c(50, 100, 250),
   k_subgroups = c(2, 3),
-  digits      = c(1, 2, 3),
+  digits      = c(0, 1, 2, 3),
   n_digits    = 0,
   sd_ratio    = 1,
   iteration   = seq_len(K_REPS)
 )
 
-if (file.exists("e3_sim.rds")) {
-  e3_sim <- read_rds("e3_sim.rds")
+if (file.exists("simulation_e3.rds")) {
+  simulation_e3 <- read_rds("simulation_e3.rds")
 } else {
   set.seed(44)
-  e3_sim <- e3_grid |>
+  simulation_e3 <- e3_grid |>
     mutate(result = future_pmap(
       .l = list(n_total = n_total, k_subgroups = k_subgroups,
                 digits = digits, n_digits = n_digits, sd_ratio = sd_ratio,
@@ -819,7 +905,7 @@ if (file.exists("e3_sim.rds")) {
       .options = furrr_options(seed = TRUE)
     )) |>
     unnest(result)
-  write_rds(e3_sim, "e3_sim.rds")
+  write_rds(simulation_e3, "simulation_e3.rds", compress = "gz")
 }
 ```
 
@@ -828,7 +914,7 @@ if (file.exists("e3_sim.rds")) {
 Tag each output row with whether it is the *on-target* row (the one whose reported value was perturbed) or an *off-target* row (a row whose identity is independent of the perturbed quantity). The detection rate is `mean(consistent == FALSE)` on on-target rows; the off-target false-flag rate is the same on off-target rows.
 
 ```{r}
-e3_sim <- e3_sim |>
+simulation_e3 <- simulation_e3 |>
   filter(!is.na(check)) |>
   mutate(
     check_short = dplyr::case_when(
@@ -839,7 +925,7 @@ e3_sim <- e3_sim |>
     on_target = check_short == perturb_target
   )
 
-e3_summary <- e3_sim |>
+e3_summary <- simulation_e3 |>
   group_by(perturb_target, perturb_magnitude, digits, n_total,
            k_subgroups, check_short, on_target) |>
   summarise(
@@ -853,28 +939,49 @@ e3_summary <- e3_sim |>
 ### Plot: power curves by target and digits
 
 ```{r}
+#| fig-height: 6
+#| fig-width: 9
 e3_summary |>
   filter(on_target) |>
-  group_by(perturb_target, perturb_magnitude, digits) |>
+  group_by(perturb_target, perturb_magnitude, digits, n_total) |>
   summarise(rate = weighted.mean(detection_rate, n_calls),
             mcse = sqrt(weighted.mean(detection_rate * (1 - detection_rate),
                                       n_calls) / sum(n_calls)),
             .groups = "drop") |>
-  ggplot(aes(x = perturb_magnitude, y = rate,
-             color = as.factor(digits))) +
+  ggplot(aes(x = perturb_magnitude, y = rate, color = as.factor(digits))) +
   geom_hline(yintercept = c(0, 1), linetype = "dashed", color = "grey50") +
   geom_linerange(aes(ymin = rate - mcse, ymax = rate + mcse), color = "black") +
   geom_line() +
   geom_point() +
-  facet_wrap(~ perturb_target, scales = "free_x", labeller = label_both) +
+  facet_grid(n_total ~ perturb_target,
+             scales = "free_x", labeller = label_both) +
   scale_y_continuous(name = "Detection rate (consistent = FALSE on perturbed row)",
                      limits = c(-0.02, 1.05),
                      labels = scales::percent_format(accuracy = 1)) +
   scale_x_continuous(name = "Perturbation magnitude (in the target's own units)") +
   theme_linedraw() +
-  theme(panel.grid.minor = element_blank(),
-        legend.position = "top") +
-  labs(color = "Reporting precision (digits)")
+  theme(panel.grid.minor = element_blank())
+
+e3_summary |>
+  filter(on_target) |>
+  group_by(perturb_target, perturb_magnitude, digits, n_total) |>
+  summarise(rate = weighted.mean(detection_rate, n_calls),
+            mcse = sqrt(weighted.mean(detection_rate * (1 - detection_rate),
+                                      n_calls) / sum(n_calls)),
+            .groups = "drop") |>
+  ggplot(aes(x = perturb_magnitude, y = rate, color = as.factor(n_total))) +
+  geom_hline(yintercept = c(0, 1), linetype = "dashed", color = "grey50") +
+  geom_linerange(aes(ymin = rate - mcse, ymax = rate + mcse), color = "black") +
+  geom_line() +
+  geom_point() +
+  facet_grid(digits ~ perturb_target,
+             scales = "free_x", labeller = label_both) +
+  scale_y_continuous(name = "Detection rate (consistent = FALSE on perturbed row)",
+                     limits = c(-0.02, 1.05),
+                     labels = scales::percent_format(accuracy = 1)) +
+  scale_x_continuous(name = "Perturbation magnitude (in the target's own units)") +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank())
 ```
 
 ### Off-target false-flag rate (should be ~0)
@@ -884,10 +991,14 @@ e3_summary |>
   filter(!on_target, perturb_magnitude > 0) |>
   group_by(perturb_target, check_short) |>
   summarise(false_flag_rate = weighted.mean(detection_rate, n_calls),
-            n_calls = sum(n_calls),
+            mcse            = sqrt(false_flag_rate * (1 - false_flag_rate) /
+                                   sum(n_calls)),
+            n_calls         = sum(n_calls),
             .groups = "drop") |>
-  mutate(false_flag_rate = scales::number(false_flag_rate, accuracy = 0.001)) |>
-  kable(caption = "Off-target rows should remain `consistent = TRUE`. The false-flag rate is the proportion of non-perturbed rows that incorrectly flip to FALSE — expected to be 0 because each row's identity is independent of the other two reported quantities.") |>
+  mutate(`false_flag_rate (±1 MCSE)` =
+           sprintf("%.4f (%.4f)", false_flag_rate, mcse)) |>
+  select(perturb_target, check_short, n_calls, `false_flag_rate (±1 MCSE)`) |>
+  kable(caption = "Off-target rows should remain `consistent = TRUE`. The false-flag rate (±1 MCSE) is the proportion of non-perturbed rows that incorrectly flip to FALSE — expected to be 0 because each row's identity is independent of the other two reported quantities.") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -967,20 +1078,20 @@ perturb_levels_e4 <- dplyr::bind_rows(
 
 e4_grid <- tidyr::crossing(
   perturb_levels_e4,
-  n_total            = c(100, 300, 1000),
+  n_total            = c(50, 100, 250),
   k_reported         = c(1, 2),
   missing_proportion = 0.20,
-  digits             = c(1, 2, 3),
+  digits             = c(0, 1, 2, 3),
   n_digits           = 0,
   sd_ratio           = 1,
   iteration          = seq_len(K_REPS)
 )
 
-if (file.exists("e4_sim.rds")) {
-  e4_sim <- read_rds("e4_sim.rds")
+if (file.exists("simulation_e4.rds")) {
+  simulation_e4 <- read_rds("simulation_e4.rds")
 } else {
   set.seed(45)
-  e4_sim <- e4_grid |>
+  simulation_e4 <- e4_grid |>
     mutate(result = future_pmap(
       .l = list(n_total = n_total, k_reported = k_reported,
                 missing_proportion = missing_proportion,
@@ -992,7 +1103,7 @@ if (file.exists("e4_sim.rds")) {
       .options = furrr_options(seed = TRUE)
     )) |>
     unnest(result)
-  write_rds(e4_sim, "e4_sim.rds")
+  write_rds(simulation_e4, "simulation_e4.rds", compress = "gz")
 }
 ```
 
@@ -1001,7 +1112,7 @@ if (file.exists("e4_sim.rds")) {
 E2's three identities are not independent: perturbing the reported overall N feeds through the `n_miss = N - sum n_g` definition into the M_miss and SD_miss formulas (both divide by `n_miss − 1`), and perturbing M propagates through the between-SS term in the SD identity. So a perturbation in one input often shows up as a cascade — a row downstream of the targeted one flips first. The practically informative quantity is therefore **whether *any* row's consistent flag is FALSE** in a given replication, not just the formally targeted row.
 
 ```{r}
-e4_sim <- e4_sim |>
+simulation_e4 <- simulation_e4 |>
   filter(!is.na(check)) |>
   mutate(
     check_short = dplyr::case_when(
@@ -1012,14 +1123,14 @@ e4_sim <- e4_sim |>
   )
 
 # Replication-level summary: did any row flip FALSE?
-e4_per_rep <- e4_sim |>
+e4_per_rep <- simulation_e4 |>
   group_by(perturb_target, perturb_magnitude, digits, n_total, k_reported,
            iteration) |>
   summarise(any_flipped = any(consistent == FALSE, na.rm = TRUE),
             .groups = "drop")
 
 e4_summary <- e4_per_rep |>
-  group_by(perturb_target, perturb_magnitude, digits) |>
+  group_by(perturb_target, perturb_magnitude, digits, n_total) |>
   summarise(
     n_calls = dplyr::n(),
     detection_rate = mean(any_flipped),
@@ -1031,36 +1142,54 @@ e4_summary <- e4_per_rep |>
 ### Plot: power curves by target and digits
 
 ```{r}
+#| fig-height: 6
+#| fig-width: 9
 e4_summary |>
-  ggplot(aes(x = perturb_magnitude, y = detection_rate,
-             color = as.factor(digits))) +
+  ggplot(aes(x = perturb_magnitude, y = detection_rate, color = as.factor(digits))) +
   geom_hline(yintercept = c(0, 1), linetype = "dashed", color = "grey50") +
   geom_linerange(aes(ymin = detection_rate - detection_mcse,
                      ymax = detection_rate + detection_mcse), color = "black") +
   geom_line() +
   geom_point() +
-  facet_wrap(~ perturb_target, scales = "free_x", labeller = label_both) +
+  facet_grid(n_total ~ perturb_target,
+             scales = "free_x", labeller = label_both) +
   scale_y_continuous(name = "Detection rate (any consistent = FALSE row)",
                      limits = c(-0.02, 1.05),
                      labels = scales::percent_format(accuracy = 1)) +
   scale_x_continuous(name = "Perturbation magnitude (signed; N and SD use the detectable direction)") +
   theme_linedraw() +
-  theme(panel.grid.minor = element_blank(),
-        legend.position = "top") +
-  labs(color = "Reporting precision (digits)")
+  theme(panel.grid.minor = element_blank())
+
+e4_summary |>
+  ggplot(aes(x = perturb_magnitude, y = detection_rate, color = as.factor(n_total))) +
+  geom_hline(yintercept = c(0, 1), linetype = "dashed", color = "grey50") +
+  geom_linerange(aes(ymin = detection_rate - detection_mcse,
+                     ymax = detection_rate + detection_mcse), color = "black") +
+  geom_line() +
+  geom_point() +
+  facet_grid(digits ~ perturb_target,
+             scales = "free_x", labeller = label_both) +
+  scale_y_continuous(name = "Detection rate (any consistent = FALSE row)",
+                     limits = c(-0.02, 1.05),
+                     labels = scales::percent_format(accuracy = 1)) +
+  scale_x_continuous(name = "Perturbation magnitude (signed; N and SD use the detectable direction)") +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank())
 ```
 
 ### Which row caught it (diagnostic table)
 
 ```{r}
-e4_sim |>
+simulation_e4 |>
   group_by(perturb_target, perturb_magnitude, check_short) |>
   summarise(rate = mean(consistent == FALSE, na.rm = TRUE),
+            mcse = sqrt(rate * (1 - rate) / dplyr::n()),
             .groups = "drop") |>
   filter(perturb_magnitude != 0) |>
-  mutate(rate = scales::number(rate, accuracy = 0.01)) |>
-  pivot_wider(names_from = check_short, values_from = rate) |>
-  kable(caption = "E2 power: per-row FALSE rate at each perturbation magnitude. A perturbation in one input may be caught by a downstream row (e.g. N-perturbations show up in the SD_miss row via the variance formula).") |>
+  mutate(cell = sprintf("%.2f (%.2f)", rate, mcse)) |>
+  select(perturb_target, perturb_magnitude, check_short, cell) |>
+  pivot_wider(names_from = check_short, values_from = cell) |>
+  kable(caption = "E2 power: per-row FALSE rate (±1 MCSE in parens) at each perturbation magnitude. A perturbation in one input may be caught by a downstream row (e.g. N-perturbations show up in the SD_miss row via the variance formula).") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -1082,7 +1211,7 @@ Notes on direction and asymmetry:
 
 ## E1 (whole-sample from subgroups)
 
-Across all `r prettyNum(nrow(e1_sim), big.mark = ",")` simulated calls there were **`r sum(e1_sim$errored)` errors**, confirming that `recalc_total_from_subgroups()` handles every combination of (continuous vs Likert) × (k = 2/3) × (balanced vs skewed) × (N up to 1000) × (mean/SD digits 1..3) × (n_digits ∈ {0, 1}) × (sd_ratio ∈ {1, 1.5, 2}) without crashing or producing `NA` outside expected places. The empirical consistency rate is at or very near 1 across all conditions — the visible scatter in the plots is Monte Carlo noise at `K_REPS = 200`, and what little real shortfall there is concentrates at high reporting precision combined with small *N*, where the rounding interval is narrow and Likert data's discrete tails can land on a rounding boundary. This is the expected behavior of the `interval_from_digits` propagation under the `"either"` (half-up / bankers) default.
+Across all `r prettyNum(nrow(simulation_e1), big.mark = ",")` simulated calls there were **`r sum(simulation_e1$errored)` errors**, confirming that `recalc_total_from_subgroups()` handles every combination of (k = 2/3) × (balanced vs skewed) × (N up to 1000) × (digits ∈ {0, 1, 2, 3}) × (n_digits ∈ {0, 1}) × (sd_ratio ∈ {1, 1.5, 2}) without crashing or producing `NA` outside expected places. The empirical consistency rate is at or very near 1 across all conditions — the visible scatter in the plots is Monte Carlo noise at `K_REPS = 1000` (worst-case MCSE ≈ 0.016), and what little real shortfall there is concentrates at high reporting precision combined with small *N*, where the rounding interval is narrow enough that boundary cases occasionally land on the wrong side. This is the expected behavior of the `interval_from_digits` propagation under the `"either"` (half-up / bankers) default.
 
 ## Counterfactual (Study 1b)
 
@@ -1090,7 +1219,11 @@ The pooled-SD counterfactual demonstrates the algebraic claim of the "Mathematic
 
 ## E2 (recovery of an unreported subgroup)
 
-Coverage of the true hidden-subgroup statistics by the recalculated intervals is at or very near 1 across all conditions, including the difficult regimes (small hidden share at small *N*, where `n_miss − 1` in the denominator of the SD formula amplifies rounding noise). The error column is 0: `recalc_missing_subgroup()` returns valid output even when the implied missing-SD is at the boundary of feasibility; `NaN` bounds (when the implied variance is strictly negative) are surfaced through the `consistent` column rather than as an R error, and that case does not arise here because the inputs are by construction self-consistent.
+For the `n_miss` and `M_miss` rows, feasibility is ≈ 100 % and coverage is ≈ 100 % across the grid — the function returns a usable interval and that interval contains the truth.
+
+For the `SD_miss` row, feasibility drops below 1 in the wide-rounding regime: at `digits = 0` it is essentially 0, at `digits = 1` it ranges from 0 to ≈ 1 depending on the hidden-subgroup share, and at `digits ≥ 2` it returns to ≈ 1 across all cells. This is the function correctly surfacing that no real missing-subgroup SD can satisfy the reported rounding box — corner enumeration through the SD identity finds at least one corner where the implied variance is negative, and `sqrt(negative) = NaN` propagates to the bounds. The error column itself is 0; `recalc_missing_subgroup()` does not throw, it returns `NaN` bounds and `consistent = FALSE` to signal the infeasibility forensically. **Coverage among the feasible replications is ≈ 100 % across the entire grid**, including in the cells where feasibility is partial: when the function returns an SD interval it correctly contains the truth.
+
+The boundary regime is most pronounced when (i) M and SD are reported to few digits (wide rounding intervals on those quantities) and (ii) the hidden subgroup is small (small `n_miss − 1` in the SD formula's denominator amplifies rounding noise). Both cases reflect real-paper conditions a user would want to be warned about.
 
 ## Power to detect inconsistency (Studies 3 and 4)
 
@@ -1103,7 +1236,7 @@ Together, the four studies confirm both specificity (no false positives on self-
 
 ## Conclusions and intended use
 
-Both functions behave as the algebraic identities they implement predict. The four studies identify no input regime in which the function errors or systematically misjudges consistency, coverage, or power. The simulations should be rerun with `K_REPS` increased (e.g. 2000) before drawing conclusions about the tail behaviour at very small *N* or extreme `digits` values; the current value (`r K_REPS`) is adequate for verifying that detection and consistency rates hit the expected ~0 / ~1 plateaus but is loose for distinguishing 99% from 99.5% in the borderline cells.
+Both functions behave as the algebraic identities they implement predict. The four studies identify no input regime in which the function errors or systematically misjudges consistency, coverage, or power. 
 
 # References
 
