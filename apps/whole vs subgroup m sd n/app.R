@@ -12,6 +12,7 @@ suppressPackageStartupMessages({
   library(DT)
   library(openxlsx)
   library(dplyr)
+  # devtools::install_github("ianhussey/recalc")
   library(recalc)
 })
 
@@ -171,9 +172,11 @@ ui <- fluidPage(
             "through the identity; ", code("consistent == TRUE"),
             " if the reported and recalculated intervals overlap."),
           DTOutput("t1_table"),
-          br(),
-          h4("Identities used"),
-          uiOutput("t1_identities")
+          p(tags$small(
+            "See the ", tags$em("Guidance"),
+            " tab for the formulas, notation, and feasibility-check ",
+            "definitions used by both tabs."
+          ))
         )
       )
     ),
@@ -239,9 +242,142 @@ ui <- fluidPage(
             " reports physical-feasibility checks (rather than an ",
             "overlap check, since there is no reported missing-group value)."),
           DTOutput("t2_table"),
-          br(),
-          h4("Identities used"),
-          uiOutput("t2_identities")
+          p(tags$small(
+            "See the ", tags$em("Guidance"),
+            " tab for the formulas, notation, and feasibility-check ",
+            "definitions used by both tabs."
+          ))
+        )
+      )
+    ),
+
+    # ----- Guidance tab ----------------------------------------------------
+    tabPanel(
+      "Guidance",
+      div(
+        style = "max-width: 900px; margin: 0 auto; padding: 1.5em 1em;",
+        h4("Guidance on app usage"),
+        p(
+          "The app has two use cases, partially nested. Most users will ",
+          "want to start with the first, and only proceed to the second if ",
+          "a subgroup appears under-reported or missing."
+        ),
+        tags$ol(
+          tags$li(
+            tags$b("Whole sample vs subgroups (Tab 1)."),
+            " Enter the reported overall ", tags$em("N"), ", ",
+            tags$em("mean"), ", and (optionally) ", tags$em("SD"),
+            " of a sample, plus the per-subgroup ", tags$em("n"), ", ",
+            tags$em("mean"), ", and ", tags$em("SD"), " for each reported ",
+            "subgroup. The app checks whether the reported overall ",
+            "statistics could have been computed from the reported ",
+            "subgroups, propagating the rounding interval of every input ",
+            "through the aggregation identities (see Tab 1's ",
+            tags$em("Identities used"),
+            " for the formulas). A flagged row indicates that no ",
+            "rounding of the inputs is consistent with the reported ",
+            "overall value — i.e., the table is internally incoherent."
+          ),
+          tags$li(
+            tags$b("Implied missing subgroup (Tab 2)."),
+            " If Tab 1 surfaces an inconsistency, or if a paper otherwise ",
+            "suggests that one or more subgroups are missing or under-",
+            "reported (for example, a third gender category like ",
+            "gender-diverse participants who are mentioned in the text but ",
+            "do not appear in the breakdown), enter the overall and the ",
+            "reported subgroups in Tab 2. The app then derives the ",
+            tags$em("implied"), " ", tags$em("n"), ", ", tags$em("mean"),
+            ", and ", tags$em("SD"), " that the missing subgroup would ",
+            "have to have for the reported overall to be self-consistent. ",
+            "Supplying the scale's logical minimum and maximum ",
+            "(e.g., 1 and 7 for a 7-point Likert response) activates ",
+            "additional plausibility checks on the implied mean and SD ",
+            "via the Bhatia-Davis bound."
+          )
+        ),
+        p(
+          tags$b("Rounding mode."),
+          " By default the app assumes reported values were rounded under ",
+          "either round-half-up or bankers (round-half-to-even). For a ",
+          "paper that specifies a different convention, use the ",
+          tags$em("Rounding mode"), " dropdown on the relevant tab. The ",
+          tags$code("Truncated"), " option truncated values toward zero. ",
+          "This produces wider compatability intervals, but is uncommon ",
+          "in the literature."
+        ),
+        p(
+          tags$b("Upload / download."),
+          " Each tab can download a results spreadsheet that records the ",
+          "inputs, the settings (digits and rounding mode), and the ",
+          "consistency table. Uploading that spreadsheet on the same tab ",
+          "restores the full app state, so a results file functions as a ",
+          "shareable template for re-running the check."
+        ),
+        hr(),
+        h4("Math"),
+        uiOutput("math_section")
+      )
+    ),
+
+    # ----- About tab -------------------------------------------------------
+    tabPanel(
+      "About",
+      div(
+        style = "max-width: 900px; margin: 0 auto; padding: 1.5em 1em;",
+        h4("About"),
+        p(
+          "The checks in this app correspond to ",
+          tags$a(
+            href = "https://inspect.sr/chapters/check_4_10.html",
+            target = "_blank",
+            "INSPECT-SR check 4.10"
+          ),
+          " (consistency between whole-sample and subgroup summary ",
+          "statistics). INSPECT-SR (",
+          tags$a(
+            href = "https://www.medrxiv.org/content/10.1101/2025.09.03.25334905v3",
+            target = "_blank",
+            "Wilkinson et al., 2025"
+          ),
+          ") is a framework for assessing the trustworthiness of ",
+          "randomised controlled trials in systematic reviews; the same ",
+          "checks apply equally outside the RCT setting."
+        ),
+        p(
+          "The app is a thin Shiny front-end to the ",
+          tags$code("recalc_total_from_subgroups()"), " and ",
+          tags$code("recalc_missing_subgroup()"),
+          " functions of the ", tags$code("{recalc}"),
+          " R package. Both functions implement the analysis-of-variance ",
+          "sum-of-squares decomposition exactly (with rounding-aware ",
+          "interval propagation through the inputs); Tab 2's ",
+          "Bhatia-Davis bound on the implied missing-subgroup SD is from ",
+          "Bhatia & Davis (2000)."
+        ),
+        p(
+          "Source code is available ",
+          tags$a(
+            href = "https://github.com/ianhussey/recalc",
+            target = "_blank",
+            "on GitHub"
+          ),
+          ". Bug reports, suggestions, and pull requests are welcome."
+        ),
+        h5("References"),
+        tags$ul(
+          tags$li(
+            "Bhatia, R., & Davis, C. (2000). A better bound on the variance. ",
+            tags$em("American Mathematical Monthly"), ", 107(4), 353–357."
+          ),
+          tags$li(
+            "Wilkinson, J., et al. (2025). INSPECT-SR development protocol. ",
+            tags$em("BMJ Open"), ", 14, e084164. ",
+            tags$a(
+              href = "https://inspect.sr",
+              target = "_blank",
+              "inspect.sr"
+            )
+          )
         )
       )
     )
@@ -308,22 +444,75 @@ server <- function(input, output, session) {
     datatable(t1_pretty(), options = list(dom = "t"), rownames = FALSE)
   })
 
-  # Identities used in Tab 1. Rendered server-side via withMathJax so the
-  # math is typeset reliably on each (re)render. Display-math delimiters and
-  # \left[...\right] avoid the dashed-vinculum / dashed-bracket rendering
-  # that \big[...\big] in inline math sometimes produces.
-  output$t1_identities <- renderUI({
+  # Consolidated math section (rendered in the Guidance tab) covering the
+  # notation, the Tab 1 aggregation identities, the pooled-SD counterfactual,
+  # and the Tab 2 missing-subgroup identities + feasibility checks.
+  output$math_section <- renderUI({
     withMathJax(HTML(
-      "$$N = \\sum_g n_g$$",
-      "$$M = \\frac{\\sum_g n_g M_g}{N}$$",
-      "$$\\mathrm{SD}^2 = \\frac{\\sum_g (n_g - 1) s_g^2 + ",
-      "\\sum_g n_g (M_g - M)^2}{N - 1}$$",
+      # ----- Notation -----
+      "<h5>Notation</h5>",
+      "<ul>",
+      "<li>\\(N\\), \\(M\\): whole-sample size and mean. ",
+      "\\(s^2\\): whole-sample variance.</li>",
+      "<li>\\(n_g\\), \\(M_g\\), \\(s_g^2\\): subgroup \\(g\\)'s size, mean, ",
+      "and variance, for \\(g = 1, \\ldots, k\\).</li>",
+      "<li>\\(n_\\star\\), \\(M_\\star\\), \\(s_\\star^2\\): implied size, ",
+      "mean, and variance of the unreported subgroup (Tab 2 only).</li>",
+      "<li>\\([a, b]\\): logical scale endpoints (Tab 2, optional).</li>",
+      "</ul>",
+      "<p>The corresponding SD is the square root of each variance. ",
+      "Formulas are given for variances throughout to keep MathJax ",
+      "rendering robust across browsers.</p>",
+
+      # ----- Tab 1 identities -----
+      "<h5>Tab 1: whole sample reproduces from subgroups</h5>",
+      "$$N = \\sum_g n_g, \\qquad M = \\frac{\\sum_g n_g M_g}{N}$$",
+      "$$s^2 = \\frac{\\sum_g (n_g - 1)\\, s_g^2 + ",
+      "\\sum_g n_g\\, (M_g - M)^2}{N - 1}$$",
       "<p>The SD identity is the total-variance decomposition ",
-      "(within + between). The textbook \"pooled SD\" formula ",
-      "\\(\\sqrt{\\sum_g (n_g - 1) s_g^2 / \\sum_g (n_g - 1)}\\) ",
-      "equals total SD only when subgroup means coincide; using it ",
-      "as a check would false-flag any paper whose subgroup means ",
-      "differ.</p>"
+      "(within-group SS + between-group SS). Each row's ",
+      "<code>consistent</code> flag is <code>TRUE</code> when the rounding ",
+      "interval of the reported overall value overlaps the rounding-aware ",
+      "interval implied by the subgroups.</p>",
+
+      # ----- Pooled-SD counterfactual -----
+      "<h5>Why not the textbook \"pooled SD\" formula?</h5>",
+      "$$s_\\text{pooled}^2 = \\frac{\\sum_g (n_g - 1)\\, s_g^2}",
+      "{\\sum_g (n_g - 1)}$$",
+      "<p>This is the equal-variance \\(t\\)-test's pooled variance ",
+      "estimator and the denominator of Cohen's \\(d\\). It equals the ",
+      "whole-sample variance only when subgroup means coincide ",
+      "(\\(SS_\\text{between} = 0\\)); otherwise it understates by ",
+      "\\(SS_\\text{between} / (N - 1)\\). Using it as a consistency ",
+      "check would false-flag any table whose subgroups have different ",
+      "means.</p>",
+
+      # ----- Tab 2 identities -----
+      "<h5>Tab 2: implied missing subgroup</h5>",
+      "$$n_\\star = N - \\sum_g n_g, \\qquad ",
+      "M_\\star = \\frac{N M - \\sum_g n_g M_g}{n_\\star}$$",
+      "$$s_\\star^2 = \\frac{(N - 1)\\, s^2 - ",
+      "\\sum_g (n_g - 1)\\, s_g^2 - n_\\star\\, (M_\\star - M)^2 - ",
+      "\\sum_g n_g\\, (M_g - M)^2}{n_\\star - 1}$$",
+      "<p>Tab 2's <code>consistent</code> flags are feasibility checks ",
+      "(rather than overlap checks, since the missing subgroup is not ",
+      "reported):</p>",
+      "<ul>",
+      "<li><i>n</i> row: passes iff the recalculated interval reaches ",
+      "\\(\\geq 1\\).</li>",
+      "<li><i>M</i> row: with scale endpoints, passes iff the recalculated ",
+      "interval intersects \\([a, b]\\); otherwise shown as \"not ",
+      "checked\".</li>",
+      "<li><i>SD</i> row: fails if the propagated interval contains NaN ",
+      "(variance strictly negative at some corner). With scale endpoints, ",
+      "additionally fails if the implied SD exceeds the Bhatia-Davis ",
+      "upper bound:</li>",
+      "</ul>",
+      "$$s_\\star^2 \\;\\le\\; \\frac{n_\\star}{n_\\star - 1}\\,",
+      "(M_\\star - a)(b - M_\\star)$$",
+      "<p>i.e. the largest variance any \\(n_\\star\\)-sample on ",
+      "\\([a, b]\\) with mean \\(M_\\star\\) can attain ",
+      "(Bhatia &amp; Davis, 2000).</p>"
     ))
   })
 
@@ -373,30 +562,8 @@ server <- function(input, output, session) {
     datatable(t2_pretty(), options = list(dom = "t"), rownames = FALSE)
   })
 
-  # Identities and feasibility checks used in Tab 2.
-  output$t2_identities <- renderUI({
-    withMathJax(HTML(
-      "$$n_\\star = N - \\sum_g n_g$$",
-      "$$M_\\star = \\frac{N M - \\sum_g n_g M_g}{n_\\star}$$",
-      "$$s_\\star^2 = \\frac{(N - 1)\\,\\mathrm{SD}^2 - ",
-      "\\sum_g (n_g - 1) s_g^2 - n_\\star (M_\\star - M)^2 - ",
-      "\\sum_g n_g (M_g - M)^2}{n_\\star - 1}$$",
-      "<p><b>Feasibility checks.</b></p>",
-      "<ul>",
-      "<li><i>n</i> row: passes iff the recalculated interval reaches ",
-      "\\(\\geq 1\\) (some rounding makes the missing group non-empty).</li>",
-      "<li><i>M</i> row: with scale endpoints, passes iff the recalculated ",
-      "interval intersects \\([a, b]\\); otherwise reported as ",
-      "\"not checked\".</li>",
-      "<li><i>SD</i> row: fails if the propagated interval contains NaN ",
-      "(variance negative at some corner). With scale endpoints, ",
-      "additionally fails if the implied SD exceeds the Bhatia-Davis ",
-      "bound \\(\\sqrt{n_\\star/(n_\\star-1)\\,(M_\\star-a)(b-M_\\star)}\\) ",
-      "(the largest SD any \\(n_\\star\\)-sample on \\([a,b]\\) with mean ",
-      "\\(M_\\star\\) can attain; Bhatia &amp; Davis, 2000).</li>",
-      "</ul>"
-    ))
-  })
+  # (Tab 1 and Tab 2 identities are rendered in the Guidance tab via
+  # output$math_section above.)
 
   # --- Excel I/O (shared format) -------------------------------------------
   # Sheets: "Overall" (Statistic/Value), "Subgroups" (one row per group),
@@ -437,13 +604,29 @@ server <- function(input, output, session) {
     df
   }
 
-  build_settings_df_t2 <- function() {
-    data.frame(
-      Statistic = c("Digits N", "Digits Mean", "Digits SD",
-                    "Scale min", "Scale max"),
-      Value = c(input$t2_n_digits, input$t2_mean_digits, input$t2_sd_digits,
-                input$t2_scale_min, input$t2_scale_max)
-    )
+  # Build the Settings sheet. Shared across tabs; Tab 2 additionally writes
+  # the scale-bound entries. Character type so "either"/"half_up"/etc. survive
+  # alongside the numeric digit values when openxlsx writes the column.
+  build_settings_df <- function(tab) {
+    stats_common <- c("Digits N", "Digits Mean", "Digits SD", "Rounding")
+    vals_common <- if (tab == "t1") {
+      c(input$t1_n_digits, input$t1_mean_digits, input$t1_sd_digits,
+        input$t1_rounding)
+    } else {
+      c(input$t2_n_digits, input$t2_mean_digits, input$t2_sd_digits,
+        input$t2_rounding)
+    }
+    df <- data.frame(Statistic = stats_common,
+                     Value     = as.character(vals_common),
+                     stringsAsFactors = FALSE)
+    if (tab == "t2") {
+      df <- rbind(df, data.frame(
+        Statistic = c("Scale min", "Scale max"),
+        Value     = as.character(c(input$t2_scale_min, input$t2_scale_max)),
+        stringsAsFactors = FALSE
+      ))
+    }
+    df
   }
 
   download_handler <- function(tab) {
@@ -456,9 +639,7 @@ server <- function(input, output, session) {
         wb <- createWorkbook()
         addWorksheet(wb, "Overall");   writeData(wb, "Overall",   build_overall_df(tab))
         addWorksheet(wb, "Subgroups"); writeData(wb, "Subgroups", build_subgroup_df(tab))
-        if (tab == "t2") {
-          addWorksheet(wb, "Settings"); writeData(wb, "Settings", build_settings_df_t2())
-        }
+        addWorksheet(wb, "Settings"); writeData(wb, "Settings", build_settings_df(tab))
         res_pretty <- if (tab == "t1") t1_pretty() else t2_pretty()
         if (!is.null(res_pretty)) {
           addWorksheet(wb, "Results")
@@ -491,12 +672,27 @@ server <- function(input, output, session) {
       updateNumericInput(session, paste0(tab, "_overall_sd"),
                          value = get_overall("Overall SD"))
 
-    if (tab == "t2" && "Settings" %in% getSheetNames(path)) {
+    # Restore Settings (digits + rounding, and on Tab 2 also scale bounds).
+    # Old downloads that predate the Settings sheet are still accepted: any
+    # missing entries are simply left at their current input values.
+    if ("Settings" %in% getSheetNames(path)) {
       settings <- read.xlsx(path, sheet = "Settings")
-      get_setting <- function(s)
-        as.numeric(settings$Value[settings$Statistic == s])
-      updateNumericInput(session, "t2_scale_min", value = get_setting("Scale min"))
-      updateNumericInput(session, "t2_scale_max", value = get_setting("Scale max"))
+      get_setting <- function(s, parse = c("numeric", "character")) {
+        parse <- match.arg(parse)
+        v <- settings$Value[settings$Statistic == s]
+        if (length(v) == 0L) return(NULL)
+        if (parse == "numeric") as.numeric(v) else as.character(v)
+      }
+      n_d  <- get_setting("Digits N");    if (!is.null(n_d))  updateNumericInput(session, paste0(tab, "_n_digits"),    value = n_d)
+      m_d  <- get_setting("Digits Mean"); if (!is.null(m_d))  updateNumericInput(session, paste0(tab, "_mean_digits"), value = m_d)
+      s_d  <- get_setting("Digits SD");   if (!is.null(s_d))  updateNumericInput(session, paste0(tab, "_sd_digits"),   value = s_d)
+      rnd  <- get_setting("Rounding", "character")
+      if (!is.null(rnd) && !is.na(rnd) && nzchar(rnd))
+        updateSelectInput(session, paste0(tab, "_rounding"), selected = rnd)
+      if (tab == "t2") {
+        smin <- get_setting("Scale min"); if (!is.null(smin)) updateNumericInput(session, "t2_scale_min", value = smin)
+        smax <- get_setting("Scale max"); if (!is.null(smax)) updateNumericInput(session, "t2_scale_max", value = smax)
+      }
     }
 
     session$onFlushed(function() {

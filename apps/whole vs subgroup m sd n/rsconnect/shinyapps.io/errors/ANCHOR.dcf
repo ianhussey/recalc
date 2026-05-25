@@ -1,12 +1,13 @@
 name: ANCHOR
-title: ANCHOR
+title: anchor
 username: errors
 account: errors
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 12713490
-bundleId: 9102293
+bundleId:
 url: https://errors.shinyapps.io/ANCHOR/
 version: 1
 asMultiple: FALSE
 asStatic: FALSE
+ignoredFiles: README.md
