@@ -90,6 +90,12 @@ recalc_independent_t_p <- function(
     }
     .validate_digits(p_digits, "p_digits", min_val = 1L)
   }
+  if (is.null(p_digits)) {
+    # No reported p: still need a precision for rounded-bound output.
+    p_digits <- 3L
+  } else {
+    p_digits <- as.integer(p_digits)
+  }
   p_num <- if (!is.null(p)) as.numeric(p) else NA_real_
 
   p_results <- .multiverse_p_results(
@@ -99,7 +105,8 @@ recalc_independent_t_p <- function(
     include_se_sd_confusion
   )
 
-  reproduced_out <- .reproduced_p_summary(p_results, p_num, p_operator)
+  reproduced_out <- .reproduced_p_summary(p_results, p_num, p_operator,
+                                          p_digits = p_digits, rounding = rounding)
 
   list(
     reproduced = reproduced_out,
@@ -228,7 +235,13 @@ recalc_independent_t_d <- function(
   if (!is.null(d) && is.null(d_digits)) {
     stop("You supplied 'd' but not 'd_digits'.")
   }
-  if (!is.null(d_digits)) .validate_digits(d_digits, "d_digits", min_val = 0L)
+  if (!is.null(d_digits)) {
+    .validate_digits(d_digits, "d_digits", min_val = 0L)
+    d_digits <- as.integer(d_digits)
+  } else {
+    # No reported d: still need a precision for rounded-bound output.
+    d_digits <- 2L
+  }
 
   d_formulas <- .validate_methods(
     d_formulas, c("pooled_df", "pooled_n", "simple_avg"), "d_formulas"
@@ -253,7 +266,8 @@ recalc_independent_t_d <- function(
   )
 
   reproduced_out <- .reproduced_d_summary(
-    d_results, d_num, d_ci_lower_num, d_ci_upper_num
+    d_results, d_num, d_ci_lower_num, d_ci_upper_num,
+    d_digits = d_digits, rounding = rounding
   )
 
   list(
@@ -325,8 +339,11 @@ recalc_independent_t <- function(
   )
 
   reproduced_out <- dplyr::bind_cols(
-    res_d$reproduced |> dplyr::select(d, min_d, max_d, d_inbounds),
-    res_p$reproduced |> dplyr::select(p_operator, p, min_p, max_p, p_inbounds)
+    res_d$reproduced |>
+      dplyr::select(d, min_d, max_d, min_d_rounded, max_d_rounded, d_inbounds),
+    res_p$reproduced |>
+      dplyr::select(p_operator, p, min_p, max_p,
+                    min_p_rounded, max_p_rounded, p_inbounds)
   )
 
   list(
@@ -943,8 +960,37 @@ plot_multiverse_p <- function(res) {
 
 # === Internal: reproduced-summary builders ===================================
 
+#' Round a multiverse bound to the reporting precision.
+#'
+#' The reported value (p or d) has already been rounded by the original
+#' analyst to `digits` decimal places under some rounding convention. For
+#' the `inbounds` comparison to be apples-to-apples, the multiverse's
+#' [min, max] must be rounded to the same precision under the same
+#' convention; otherwise reported values just outside the unrounded
+#' multiverse but within rounding tolerance produce spurious `FALSE`s
+#' (most visible when the analytic value is within half a ULP of a
+#' representational boundary such as p ≈ 0 or p ≈ 1).
+#'
+#' For `"either"`, `"half_up"`, and `"bankers"` the closed preimage
+#' interval is the symmetric ±½-ULP, so half-up is used as the canonical
+#' rounding for the bound. For `"truncate"` the preimage is asymmetric
+#' and we use `round_trunc` (toward zero) to match.
 #' @keywords internal
-.reproduced_p_summary <- function(p_results, p_num, p_operator) {
+.round_for_report <- function(x, digits, rounding) {
+  fn <- switch(
+    rounding,
+    truncate = function(z) roundwork::round_trunc(z, digits),
+    bankers  = function(z) round(z, digits),
+    half_up  = function(z) roundwork::round_up(z, digits),
+    either   = function(z) roundwork::round_up(z, digits),
+    stop("Unknown rounding: ", rounding)
+  )
+  ifelse(is.na(x) | !is.finite(x), x, fn(x))
+}
+
+#' @keywords internal
+.reproduced_p_summary <- function(p_results, p_num, p_operator,
+                                  p_digits, rounding) {
   if (!is.null(p_results) && nrow(p_results) > 0 && "p_unrounded" %in% names(p_results)) {
     summ <- dplyr::summarise(p_results,
                              min_p = min(.data$p_unrounded, na.rm = TRUE),
@@ -952,22 +998,32 @@ plot_multiverse_p <- function(res) {
   } else {
     summ <- tibble::tibble(min_p = NA_real_, max_p = NA_real_)
   }
+
+  summ$min_p_rounded <- .round_for_report(summ$min_p, p_digits, rounding)
+  summ$max_p_rounded <- .round_for_report(summ$max_p, p_digits, rounding)
+
   out <- dplyr::bind_cols(summ, tibble::tibble(p = p_num))
   out |>
     dplyr::mutate(
       p_operator = p_operator,
       p_inbounds = dplyr::case_when(
         is.na(.data$p) ~ NA,
-        p_operator == "equals" ~ dplyr::between(.data$p, .data$min_p, .data$max_p),
-        p_operator %in% c("less_than", "less_than_or_equal_to") ~ .data$min_p <= .data$p,
-        p_operator %in% c("greater_than", "greater_than_or_equal_to") ~ .data$max_p >= .data$p
+        p_operator == "equals" ~ dplyr::between(.data$p,
+                                                .data$min_p_rounded,
+                                                .data$max_p_rounded),
+        p_operator %in% c("less_than", "less_than_or_equal_to") ~ .data$min_p_rounded <= .data$p,
+        p_operator %in% c("greater_than", "greater_than_or_equal_to") ~ .data$max_p_rounded >= .data$p
       )
     ) |>
-    dplyr::select("p_operator", "p", "min_p", "max_p", "p_inbounds")
+    dplyr::select("p_operator", "p",
+                  "min_p", "max_p",
+                  "min_p_rounded", "max_p_rounded",
+                  "p_inbounds")
 }
 
 #' @keywords internal
-.reproduced_d_summary <- function(d_results, d_num, d_ci_lower_num, d_ci_upper_num) {
+.reproduced_d_summary <- function(d_results, d_num, d_ci_lower_num, d_ci_upper_num,
+                                  d_digits, rounding) {
   if (!is.null(d_results) && nrow(d_results) > 0 && "d_unrounded" %in% names(d_results)) {
     summ <- dplyr::summarise(d_results,
                              min_d = min(.data$d_unrounded, na.rm = TRUE),
@@ -975,13 +1031,20 @@ plot_multiverse_p <- function(res) {
   } else {
     summ <- tibble::tibble(min_d = NA_real_, max_d = NA_real_)
   }
+
+  summ$min_d_rounded <- .round_for_report(summ$min_d, d_digits, rounding)
+  summ$max_d_rounded <- .round_for_report(summ$max_d, d_digits, rounding)
+
   out <- dplyr::bind_cols(summ, tibble::tibble(d = d_num))
   out |>
     dplyr::mutate(
       d_inbounds = dplyr::case_when(
         is.na(.data$d) ~ NA,
-        TRUE ~ dplyr::between(.data$d, .data$min_d, .data$max_d)
+        TRUE ~ dplyr::between(.data$d, .data$min_d_rounded, .data$max_d_rounded)
       )
     ) |>
-    dplyr::select("d", "min_d", "max_d", "d_inbounds")
+    dplyr::select("d",
+                  "min_d", "max_d",
+                  "min_d_rounded", "max_d_rounded",
+                  "d_inbounds")
 }

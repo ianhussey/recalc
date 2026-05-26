@@ -297,6 +297,88 @@ test_that("invalid method / alternative names error", {
   )
 })
 
+# ----------------------------------------------------------------------
+# Rounded-bound comparison: the package's inbounds check must compare the
+# reported value against bounds rounded to the same precision and convention.
+# ----------------------------------------------------------------------
+
+test_that("reproduced_p_summary exposes rounded bounds and uses them in p_inbounds", {
+  s <- .scn()
+  res <- recalc_independent_t_p(
+    m1 = s$m1, m2 = s$m2, sd1 = s$sd1, sd2 = s$sd2, n1 = s$n1, n2 = s$n2,
+    m_digits = s$m_digits, sd_digits = s$sd_digits,
+    p = 0.01, p_digits = 2, p_operator = "equals",
+    rounding = "half_up"
+  )
+  expect_true(all(c("min_p", "max_p", "min_p_rounded", "max_p_rounded",
+                    "p_inbounds") %in% names(res$reproduced)))
+  expect_equal(res$reproduced$min_p_rounded,
+               roundwork::round_up(res$reproduced$min_p, 2),
+               tolerance = 1e-12)
+  expect_equal(res$reproduced$max_p_rounded,
+               roundwork::round_up(res$reproduced$max_p, 2),
+               tolerance = 1e-12)
+})
+
+test_that("p ≈ 1 boundary report is in bounds after rounded comparison", {
+  # Pick a scenario where the analytic p is just below 1 and the multiverse
+  # max_p is < 1.000 unrounded but rounds to 1.000.
+  res <- recalc_independent_t_p(
+    m1 = -0.29, m2 = 0.66, sd1 = 0.77, sd2 = 0.96,
+    n1 = 25, n2 = 25, m_digits = 2, sd_digits = 2,
+    p = 1, p_digits = 3, p_operator = "equals",
+    rounding = "half_up",
+    alternative = c("two.sided", "less", "greater")
+  )
+  expect_true(res$reproduced$max_p < 1)              # unrounded < 1
+  expect_equal(res$reproduced$max_p_rounded, 1)       # rounds to 1
+  expect_true(isTRUE(res$reproduced$p_inbounds))      # so p=1 is in bounds
+})
+
+test_that("a reported d equal to the rounded max bound is in bounds", {
+  s <- .scn()
+  res_full <- recalc_independent_t_d(
+    m1 = s$m1, m2 = s$m2, sd1 = s$sd1, sd2 = s$sd2, n1 = s$n1, n2 = s$n2,
+    m_digits = s$m_digits, sd_digits = s$sd_digits,
+    rounding = "half_up",
+    d_formulas = "pooled_df", hedges_correction = "none",
+    ci_methods = "wald_t"
+  )
+  max_rd <- res_full$reproduced$max_d_rounded
+  min_rd <- res_full$reproduced$min_d_rounded
+
+  # The smallest and largest *reportable* values from the multiverse,
+  # rounded to d_digits = 2 under half_up, must themselves be in bounds.
+  for (d_rep in c(min_rd, max_rd)) {
+    res <- recalc_independent_t_d(
+      m1 = s$m1, m2 = s$m2, sd1 = s$sd1, sd2 = s$sd2, n1 = s$n1, n2 = s$n2,
+      m_digits = s$m_digits, sd_digits = s$sd_digits,
+      rounding = "half_up",
+      d = d_rep, d_digits = 2,
+      d_formulas = "pooled_df", hedges_correction = "none",
+      ci_methods = "wald_t"
+    )
+    expect_true(isTRUE(res$reproduced$d_inbounds),
+                info = paste("d_rep =", d_rep))
+  }
+})
+
+test_that("truncate rounding of bounds uses round_trunc", {
+  s <- .scn()
+  res <- recalc_independent_t_p(
+    m1 = s$m1, m2 = s$m2, sd1 = s$sd1, sd2 = s$sd2, n1 = s$n1, n2 = s$n2,
+    m_digits = s$m_digits, sd_digits = s$sd_digits,
+    p = 0.01, p_digits = 3, p_operator = "equals",
+    rounding = "truncate"
+  )
+  expect_equal(res$reproduced$min_p_rounded,
+               roundwork::round_trunc(res$reproduced$min_p, 3),
+               tolerance = 1e-12)
+  expect_equal(res$reproduced$max_p_rounded,
+               roundwork::round_trunc(res$reproduced$max_p, 3),
+               tolerance = 1e-12)
+})
+
 test_that("hedges_correction accepts logical (back-compat)", {
   s <- .scn()
   res_T <- recalc_independent_t_d(
