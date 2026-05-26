@@ -26,6 +26,7 @@ params:
   p: !r NULL
   p_digits: !r NULL
   p_methods: !r NULL
+  alternative: !r NULL
   alpha: !r NULL
 
   d: !r NULL
@@ -33,8 +34,7 @@ params:
   d_ci_upper: !r NULL
   direction: !r NULL
 
-  input_rounding: !r NULL
-  output_rounding: !r NULL
+  rounding: !r NULL
   d_digits: !r NULL
   hedges_correction: !r NULL
   ci_methods: !r NULL
@@ -64,21 +64,22 @@ inputs <- data.frame(
   Parameter = c(
     "M1", "M2", "SD1", "SD2", "N1", "N2",
     "m_digits", "sd_digits",
-    "p_operator", "Reported p", "p_digits", "p_methods", "alpha",
+    "p_operator", "Reported p", "p_digits", "p_methods", "alternative", "alpha",
     "Reported d", "Reported d CI lower", "Reported d CI upper",
     "Direction",
-    "Input rounding", "Output rounding", "d_digits",
+    "Rounding", "d_digits",
     "Hedges' correction", "CI method",
     "Include SE/SD confusion"
   ),
   Value = c(
     params$m1, params$m2, params$sd1, params$sd2, params$n1, params$n2,
     params$m_digits, params$sd_digits,
-    params$p_operator, params$p, params$p_digits, params$p_methods, params$alpha,
+    params$p_operator, params$p, params$p_digits, params$p_methods,
+    if (is.null(params$alternative)) "two.sided" else as.character(params$alternative),
+    params$alpha,
     params$d, params$d_ci_lower, params$d_ci_upper,
     params$direction,
-    if (is.null(params$input_rounding)) "NULL" else as.character(params$input_rounding),
-    if (is.null(params$output_rounding)) "NULL" else as.character(params$output_rounding),
+    if (is.null(params$rounding)) "either" else as.character(params$rounding),
     params$d_digits,
     if (is.null(params$hedges_correction)) "NULL" else as.character(params$hedges_correction),
     if (is.null(params$ci_methods)) "NULL" else as.character(params$ci_methods),
@@ -94,7 +95,7 @@ kbl(inputs, caption = "Inputs used in this analysis") |>
 ## Recalculation and multiverse
 
 ```{r}
-res <- recalc::independent_t_test_summary(
+res <- recalc::recalc_independent_t(
   m1 = params$m1,
   m2 = params$m2,
   sd1 = params$sd1,
@@ -108,6 +109,7 @@ res <- recalc::independent_t_test_summary(
   p = params$p,
   p_digits = params$p_digits,
   p_methods = if (identical(params$p_methods, "NULL")) NULL else params$p_methods,
+  alternative = if (is.null(params$alternative)) "two.sided" else params$alternative,
   alpha = params$alpha,
 
   d = params$d,
@@ -115,8 +117,7 @@ res <- recalc::independent_t_test_summary(
   d_ci_upper = params$d_ci_upper,
   direction = params$direction,
 
-  input_rounding = params$input_rounding,
-  output_rounding = params$output_rounding,
+  rounding = if (is.null(params$rounding)) "either" else params$rounding,
   d_digits = params$d_digits,
   hedges_correction = params$hedges_correction,
   ci_methods = if (identical(params$ci_methods, "NULL")) NULL else params$ci_methods,

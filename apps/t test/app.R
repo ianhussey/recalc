@@ -1,5 +1,5 @@
 # app.R
-# Shiny app for recalc::independent_t_test_summary()
+# Shiny app for recalc::recalc_independent_t()
 # - Shows res$reproduced, plot_multiverse_p(res), plot_multiverse_d(res)
 # - Provides a downloadable HTML report via report.Rmd
 
@@ -29,7 +29,8 @@ ui <- fluidPage(
       selectInput(
         "p_operator",
         "p operator",
-        choices = c("less_than", "more_than", "equals"),
+        choices = c("equals", "less_than", "greater_than",
+                    "less_than_or_equal_to", "greater_than_or_equal_to"),
         selected = "equals"
       ),
       numericInput("p", "Reported p", value = NA, min = 0, max = 1, step = 0.01),
@@ -37,10 +38,18 @@ ui <- fluidPage(
       selectInput(
         "p_methods",
         "P-value method",
-        choices = c("Both Student's t and Welch's t" = "NULL", 
-                    "Student's t" = "student_t", 
+        choices = c("Both Student's t and Welch's t" = "NULL",
+                    "Student's t" = "student_t",
                     "Welch's t" = "welch_t"),
         selected = "NULL"
+      ),
+      selectInput(
+        "alternative",
+        "Alternative hypothesis",
+        choices = c("Two-sided" = "two.sided",
+                    "One-sided (less)" = "less",
+                    "One-sided (greater)" = "greater"),
+        selected = "two.sided"
       ),
       numericInput("alpha", "alpha", value = 0.05, min = 0, max = 1, step = 0.01),
       
@@ -85,8 +94,9 @@ ui <- fluidPage(
         "ci_methods",
         "CI method",
         choices = c("All methods" = "NULL",
-                    "Wald" = "wald_t",
-                    "Welch" = "welch_t",
+                    "Wald (pooled-df t)" = "wald_t",
+                    "Wald (z)" = "wald_z",
+                    "Welch (t)" = "welch_t",
                     "Non-central t" = "nct"),
         selected = "NULL"
       ),
@@ -169,7 +179,7 @@ server <- function(input, output, session) {
         !is.na(input$n2)
       )
       
-      recalc::independent_t_test_summary(
+      recalc::recalc_independent_t(
         m1 = input$m1,
         m2 = input$m2,
         sd1 = input$sd1,
@@ -178,18 +188,19 @@ server <- function(input, output, session) {
         n2 = input$n2,
         m_digits = input$m_digits,
         sd_digits = input$sd_digits,
-        
+
         p_operator = input$p_operator,
         p = input$p,
         p_digits = input$p_digits,
         p_methods = get_p_methods(),
+        alternative = input$alternative,
         alpha = input$alpha,
-        
+
         d = input$d,
         d_ci_lower = input$d_ci_lower,
         d_ci_upper = input$d_ci_upper,
         direction = input$direction,
-        
+
         rounding = input$rounding,
         d_digits = input$d_digits,
         hedges_correction = get_hedges_correction(),
@@ -276,6 +287,7 @@ server <- function(input, output, session) {
         p = input$p,
         p_digits = input$p_digits,
         p_methods = input$p_methods,
+        alternative = input$alternative,
         alpha = input$alpha,
         
         d = input$d,
