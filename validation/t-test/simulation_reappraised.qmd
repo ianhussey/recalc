@@ -1,0 +1,1439 @@
+---
+title: "Head-to-head comparison of `recalc` and `reappraised` via simulation"
+author: "Ian Hussey"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc_float: true
+    code-fold: true
+    code-overflow: wrap
+    code-tools: true
+    warning: false
+    df-print: kable
+    theme:
+      light: cosmo
+      dark: darkly
+    highlight-style:
+      light: breeze
+      dark: dracula
+    include-in-header:
+      text: |
+        <style>
+          .kable-table table { width: 70%; margin: 0 auto; }
+          .quarto-color-scheme-toggle::after { content: " Dark mode"; font-family: sans-serif; font-size: 0.85em; }
+        </style>
+---
+
+```{r, include=FALSE}
+# settings: hidden from rendered file
+# disable messages and warnings in rendered files
+knitr::opts_chunk$set(message = FALSE,
+                      warning = FALSE)
+
+# disable scientific numbers in output
+options(scipen = 999)
+```
+
+# Introduction
+
+<!-- Specify the simulation that will be run here. -->
+
+This introduction is structured following the ADEMP framework (Aims, Data-generating process, Estimands, Methods, Performance) as described by Morris, White, and Crowther (2019) and operationalised for psychology by Siepe et al. (2024).
+
+## Project description
+
+<!-- Provide a brief description of the project, including any empirical examples. -->
+
+This file runs **three** reconstruction methods on identical simulated data and reports coverage and interval width side by side:
+
+- **`recalc::recalc_independent_t_p()`** — current version of `recalc`.
+- **`reappraised` (current)** — `chk_pvals()` from `R/helper_fns.R` and `R/common_fns.R` of the CRAN GitHub mirror (v0.2, commit `9edf826`, 2026-03-05).
+- **`reappraised` (older)** — an earlier release of `reappraised`'s machinery preserved in `validation/t-test/reappraised - older version/simulation.Rmd`. This version is **not** on the CRAN mirror and the file under that path is the only copy available to us. It is reproduced verbatim below and used here for a fair head-to-head against the current version.
+
+The aim is a fair comparison: same DGP, same analytic recipes, same per-replication summary statistics, only the reconstruction step differs.
+
+`reappraised`'s machinery is the `rng_p_fn()` / `ms()` / `chk_pvals()` chain from `R/helper_fns.R` and `R/common_fns.R` of the package, which:
+
+- enumerates the 2^k × 2^k corners of the (M, SD) preimage grid implied by the *decimal-place + significant-figure* count of each reported number;
+- computes, at each corner, **two** ANOVA *p*-values for the group-difference contrast — one assuming equal variance (Fisher F), one assuming unequal variance (Welch's correction to the F);
+- returns `p_eq_min`, `p_eq_max`, `p_uneq_min`, `p_uneq_max`, and the union `p_any_min`, `p_any_max`;
+- rounds each bound to the reported `p_dec.place` using base R `round()` (which is bankers rounding) before comparing against the reported value.
+
+For each simulated dataset and analytic recipe, both packages return a `[p_min, p_max]` interval and an inbounds flag against the reported *p*. We compute both and report:
+
+- **Coverage** of each interval (the inbounds flag from each package);
+- **Interval width** (mean, min, max) for each package;
+- **Cells where the two packages disagree.**
+
+Three structural differences between `reappraised` and `recalc` drive the results:
+
+1. **`reappraised` computes two-sided *p*-values only.** The F-test against the group-difference contrast equals the *t*-test two-sided *p* (for the equal-variance branch) and the Welch two-sided *p* (for the unequal-variance branch). There is no `"less"` or `"greater"` branch. A report that was generated with a one-sided alternative cannot be reproduced — the reported *p* will fall in `[1 − p_any_max, 1 − p_any_min]` rather than `[p_any_min, p_any_max]`. `recalc` exposes `alternative` as an argument and the user can supply the matched value.
+2. **`reappraised` assumes half-up symmetric input rounding** (its `max_round()` helper expands the preimage by ±½ ULP around each reported value). It has no branch for asymmetric truncation. `recalc` has an explicit `rounding` argument with `"truncate"` as one of the supported modes.
+3. **`reappraised` infers significant figures from the stored value** (via its `sigfigs()` helper, which counts cleaned digits in `sprintf("%g", x)`). `recalc` takes `m_digits` and `sd_digits` as explicit user arguments. When trailing zeros are dropped by R's numeric storage (e.g. an SD reported as "2.00" stored as `2`), `reappraised` undercounts the significant figures and inflates the preimage; `recalc` is unaffected because the precision is supplied.
+
+The simulation will quantify all three. The DGP and analytic-recipe grid are unchanged from `simulation.qmd` so its outputs can be read in parallel.
+
+## Prior related work
+
+<!-- Did any contributors already conduct related simulation studies on this specific question, including any preliminary simulations? -->
+
+An earlier R Markdown version (`simulation.Rmd`, now removed) compared `recalc` and `reappraised` head-to-head against ground truth in a single document. This file is the `reappraised` half of that comparison, refactored against the ADEMP template and the v0.5 internals of `reappraised`. The companion file `simulation.qmd` provides the `recalc` half over the identical conditions.
+
+## Aims
+
+<!-- What is the aim of the simulation study? Be specific about the statistical task (estimation, hypothesis testing, model selection, prediction, design). -->
+
+The statistical task is the **calibration of two interval estimators** — `recalc_independent_t_p()` and `reappraised`'s `chk_pvals()` — evaluated on identical simulated data under identical analytic recipes.
+
+The aims are:
+
+1. **Map and compare coverage** of both packages across the DGP × analytic-recipe grid, identifying the cells where one or both packages produce inconsistency flags that don't correspond to genuine inconsistencies.
+2. **Map and compare interval widths** of both packages, identifying the cells where one package's interval is markedly wider — a marker of less diagnostic power.
+3. **Attribute any differences** to the structural design choices listed above (alternative axis, rounding mode, precision-from-arg vs precision-from-string).
+
+## Data-Generating Process
+
+### DGP specification approach
+
+<!-- How will the parameters for the DGP be specified? -->
+
+The DGP is **fully parametric**. For each replication, outcome scores are drawn independently in each of two conditions from a univariate Normal:
+
+$$Y_{ij} \overset{\text{iid}}{\sim} \mathcal{N}(\mu_j,\, \sigma_j^2), \qquad i = 1, \ldots, n_j; \quad j \in \{1, 2\}.$$
+
+The DGP allows unequal SDs between groups so that Welch's *t* and Student's pooled *t* can give meaningfully different *p*-values, exercising the `p_methods` axis of the multiverse.
+
+### DGP factors
+
+<!-- What will be the different factors of the DGP? -->
+
+1. `n_per_condition` — common per-group sample size.
+2. `mean_2` — population mean of group 2 (group 1 is fixed at 0). Drives the location of the *p*-value distribution (null vs alternative).
+3. `sd_2` — population SD of group 2 (group 1 is fixed at 1). When ≠ 1, the equal-variance assumption is violated and Welch ≠ Student.
+
+### Factor values and settings
+
+<!-- Provide specific factor values and any settings held constant. -->
+
+**Factor values:**
+
+- `n_per_condition` ∈ {25, 100}.
+- `mean_2` ∈ {0, 0.5} (true null vs medium effect).
+- `sd_2` ∈ {1, 2} (homoscedastic vs heteroscedastic).
+
+**Held constant:** `mean_1 = 0`, `sd_1 = 1`, balanced design.
+
+### Analytic-choice factors (applied to the simulated data to produce the "reported" result)
+
+The same fully-crossed set of *reporting* choices used in `simulation.qmd` is replayed here so the two simulations can be compared row-for-row. These are not properties of the DGP; they are choices the original analyst could have made when reporting the *t*-test.
+
+1. `analysis_test` ∈ {`"student_t"`, `"welch_t"`} — which *t*-test variant is reportedly used. `reappraised` covers both branches internally via the equal-variance and unequal-variance ANOVA `p`'s, then unions them into `p_any_min` / `p_any_max`.
+2. `analysis_alternative` ∈ {`"two.sided"`, `"less"`, `"greater"`} — which alternative is reportedly tested. **`reappraised` covers only the two-sided case**; the one-sided cells are expected to fail.
+3. `analysis_rounding` ∈ {`"half_up"`, `"bankers"`, `"truncate"`} — how the reported summary statistics and *p*-value were rounded for the report. **`reappraised` assumes half-up symmetric input rounding only**; the `"truncate"` cell is expected to degrade.
+
+### Factor combination and number of conditions
+
+Fully factorial: 2 × 2 × 2 × 2 × 3 × 3 = **144 unique conditions**, each replicated K = 500 times, for 72,000 simulated datasets.
+
+## Estimands and Targets
+
+The target is the **per-replication truth value of the statement "the reported *p*-value lies in `[min_p, max_p]`"**. Coverage is the proportion of replications for which this holds.
+
+## Methods and extracted quantities
+
+For each replication, after generating the data, we:
+
+1. Compute group means, SDs, and *n*s.
+2. Run the *t*-test specified by `analysis_test` with the alternative specified by `analysis_alternative`, obtaining a "true" *p*-value `p_unrounded`.
+3. Round the means, SDs, and *p*-value to a fixed precision using the function specified by `analysis_rounding`, producing the "reported" numbers `m1_rep`, `m2_rep`, `sd1_rep`, `sd2_rep`, `p_rep`.
+4. Determine the reporting operator: if the rounded *p*-value collapses to 0 at the given precision, report it as `p < 10^(-p_digits)` (`p_operator = "less_than"`); otherwise report it as `p = p_rep` (`p_operator = "equals"`). This mimics how journals report `p < .001` for very small *p*.
+5. Format these into the wide data frame layout `reappraised` expects (`study, var, m1, s1, n1, m2, s2, n2, p, p_num, p_dec.place, dpm*, dps*`) and call `chk_pvals()`, which internally calls `rng_p_fn()` → `ms()` to evaluate all 2^4 = 16 (M, SD)-corner combinations and returns `p_any_min`, `p_any_max`, and a `p_flag_any` indicator.
+6. Record `p_inbounds := (p_flag_any != "flag")`. This matches `reappraised`'s own consistency-check semantics: empty flag → reported p is consistent with the multiverse, `"flag"` → reported p falls outside it.
+
+Unlike `recalc_independent_t_p()`, `reappraised` has no `alternative` or `rounding`-mode argument. It always computes a two-sided ANOVA *p*-value (union of equal- and unequal-variance) and always uses a symmetric ±½-ULP preimage. So the analytic-recipe loop is identical to `simulation.qmd` but the reconstruction step takes no analytic-choice arguments — the variation across the recipe grid only enters through the *reported* numbers themselves.
+
+## Performance and Uncertainty
+
+### Performance measures
+
+The single primary performance measure is the **empirical coverage** of the multiverse interval — the proportion of replications in a cell for which `p_inbounds` is `TRUE`:
+
+$$\widehat{C} = \frac{1}{K} \sum_{k=1}^{K} \mathbb{1}\{p_{k}\text{ lies in }[\text{p}_k^{min}, \text{p}_k^{max}]\}.$$
+
+For the cells where every analytic choice was within the multiverse, the target is $\widehat{C} = 1$. Departures are reported with their Monte-Carlo standard errors. We also report `mean_p_bounds_width = mean(max_p - min_p)` per cell to characterise how loose the interval is.
+
+### Monte Carlo uncertainty
+
+Binomial MCSE for the coverage proportion:
+
+$$\widehat{\text{MCSE}}(\widehat{C}) = \sqrt{\frac{\widehat{C}(1 - \widehat{C})}{K}}.$$
+
+At K = 500 and coverage near 1.0, the MCSE is essentially 0; at coverage = 0.5 the worst-case MCSE is 0.022.
+
+### Number of simulation repetitions
+
+K = 500 per condition. Coverage near the boundary value of 1.0 is the regime we care about most, where the MCSE collapses; a K of 500 is sufficient to detect coverage gaps of order 1% with several MCSE of headroom.
+
+### Non-convergence and missing values
+
+Both `t.test()` and `reappraised`'s `chk_pvals()` are closed-form. None are expected to produce missing values; if any do they are recorded and excluded case-wise per cell.
+
+### Interpretation of performance measures
+
+Per cell:
+
+- `analysis_alternative == "two.sided"` AND `analysis_rounding ∈ {"half_up", "bankers"}` — expected coverage = 1 (these are the cells `reappraised` is designed to cover).
+- `analysis_alternative ∈ {"less", "greater"}` — expected coverage near 0 (no one-sided branch).
+- `analysis_rounding == "truncate"` — expected coverage degraded relative to half-up/bankers (asymmetric preimage not covered).
+
+# Methods
+
+## Dependencies
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(furrr)
+library(tibble)
+library(readr)
+library(janitor)
+library(parameters)
+library(simhelpers)
+library(ggplot2)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(roundwork)
+library(data.table)   # used by reappraised's ms() helper
+
+# devtools::install_github("ianhussey/recalc")
+library(recalc)       # for the head-to-head comparison
+
+# Parallelisation — L'Ecuyer-CMRG stream via furrr_options(seed = TRUE).
+plan(multisession, workers = future::availableCores())
+```
+
+### `reappraised` internals (inlined)
+
+The functions below are copied verbatim from
+<https://github.com/cran/reappraised/blob/main/R/helper_fns.R> and
+<https://github.com/cran/reappraised/blob/main/R/common_fns.R>
+(MIT-licensed, Bolland et al.). They are inlined here rather than imported
+from the package namespace because most of them are not exported.
+
+**Source version pinned for this simulation:**
+
+- Package: `reappraised` v0.2 (as listed in [`DESCRIPTION`](https://github.com/cran/reappraised/blob/main/DESCRIPTION))
+- GitHub mirror: <https://github.com/cran/reappraised>, branch `main`
+- Commit retrieved: `9edf826240afb0dfe4619c8982cf1aee7cca6cfe` (2026-03-05)
+
+The inlined functions are unmodified relative to that version, except for:
+
+- `dplyr::select(., ...)` rewritten as `dplyr::pick(...)` so the calls work under the native `|>` pipe used in this qmd (semantically identical).
+- `library(data.table)` added to the dependencies (required by `ms()`).
+
+```{r}
+# --- common_fns.R --------------------------------------------------------
+
+# Long format
+lng_f <- function(dat, remvars, regex = "[a-z]+", fn = "") {
+  b <- dat |>
+    tidyr::gather(v, value, -dplyr::all_of(remvars)) |>
+    tidyr::separate_wider_regex(v, c(var1 = regex, group = "\\d+")) |>
+    tidyr::spread(var1, value)
+  if (fn == "") {
+    b <- b |> dplyr::filter(!is.na(m) & !is.na(s) & !is.na(n))
+  }
+  b
+}
+
+# Decimal-place maximum across paired columns
+dec_places <- function(a, nm, nm.m, nm.s) {
+  row_max <- function(df, cols) {
+    res <- do.call(pmax, c(df[cols], na.rm = TRUE))
+    res[is.infinite(res)] <- NA
+    res
+  }
+  a[nm.m] <- row_max(a, nm.m)
+  a[nm.s] <- row_max(a, nm.s)
+  a
+}
+
+# Decimal-place count of a numeric (string-based)
+dp <- function(x) {
+  x <- as.character(x); sci <- grepl("[eE]", x)
+  if (any(sci, na.rm = TRUE)) {
+    x[sci] <- format(as.numeric(x[sci]), scientific = FALSE, trim = TRUE)
+  }
+  has_dec <- grepl("\\.", x)
+  dec <- ifelse(is.na(x), NA, ifelse(has_dec, sub("^[^.]*\\.", "", x), ""))
+  ifelse(is.na(dec), NA, as.numeric(nchar(dec)))
+}
+
+# Significant figures
+sigfigs <- function(j, dat) {
+  x <- dat[, j]
+  sapply(x, function(val) {
+    if (is.na(val) || !is.finite(val)) return(NA)
+    if (val == 0) return(1L)
+    str_val <- sprintf("%g", abs(val))
+    cleaned <- gsub("0+$", "", gsub("^0+", "", gsub("\\.", "", str_val)))
+    if (cleaned == "") return(1L)
+    nchar(cleaned)
+  })
+}
+
+# --- helper_fns.R --------------------------------------------------------
+
+# Per-row "how much to widen this value's preimage by"
+max_round <- function(x, dpm, sig_figs) {
+  d <- data.frame(x = x, dpm = dpm, sig_figs = sig_figs) |>
+    dplyr::mutate(z = dplyr::case_when(
+      is.na(x)        ~ NA_real_,
+      abs(x) >= 1     ~ {
+        magnitude <- floor(log10(abs(x)))
+        least_sig_position <- magnitude - sig_figs + 1
+        max_val <- abs(x) + 0.5 * 10^least_sig_position
+        max_val - abs(x)
+      },
+      abs(x) < 1      ~ 0.5 * 10^(-dpm),
+      .default = x
+    ))
+  d$z
+}
+
+# Min / max p over the 2^k × 2^k corner grid (using data.table for speed)
+ms <- function(data) {
+  dt <- data.table::as.data.table(data)
+  max_k <- dt[, max(length(m)), by = .(study, var)][, max(V1)]
+
+  result <- dt[, {
+    k <- length(m)
+    tot_n <- sum(n)
+    df1 <- k - 1
+    df2eq <- tot_n - k
+
+    m_corners <- expand.grid(lapply(seq_along(m), function(i) c(m[i] + dfm[i], m[i] - dfm[i])))
+    s_corners <- expand.grid(lapply(seq_along(s), function(i) c(s[i] - dfs[i], s[i] + dfs[i])))
+    m_corners <- as.matrix(m_corners)
+    s_corners <- as.matrix(s_corners)
+
+    n_m_comb <- nrow(m_corners)
+    n_s_comb <- nrow(s_corners)
+    n_total_comb <- n_m_comb * n_s_comb
+    m_expanded <- m_corners[rep(seq_len(n_m_comb), each  = n_s_comb), ]
+    s_expanded <- s_corners[rep(seq_len(n_s_comb), times = n_m_comb), ]
+
+    n_mat <- matrix(n, nrow = n_total_comb, ncol = k, byrow = TRUE)
+    ov_m  <- rowSums(m_expanded * n_mat) / tot_n
+    msb   <- rowSums(n_mat * (m_expanded - ov_m)^2)
+    msw   <- rowSums((n_mat - 1) * s_expanded^2)
+    F_eq  <- (msb / df1) / (msw / df2eq)
+    p_eq  <- pf(F_eq, df1, df2eq, lower.tail = FALSE)
+
+    w <- n_mat / s_expanded^2
+    W <- rowSums(w)
+    m_w <- rowSums(w * m_expanded) / W
+    num <- rowSums(w * (m_expanded - m_w)^2) / df1
+    n_minus_1 <- matrix(n - 1, nrow = n_total_comb, ncol = k, byrow = TRUE)
+    den <- 1 + (2 * (k - 2) / (k^2 - 1)) * rowSums((1 - w / W)^2 / n_minus_1)
+    df2_uneq <- (k^2 - 1) / (3 * rowSums((1 - w / W)^2 / n_minus_1))
+    F_uneq <- num / den
+    p_uneq <- pf(F_uneq, df1, df2_uneq, lower.tail = FALSE)
+
+    eq_min_idx   <- which.min(p_eq);   eq_max_idx   <- which.max(p_eq)
+    uneq_min_idx <- which.min(p_uneq); uneq_max_idx <- which.max(p_uneq)
+
+    build_result <- function(idx, m_exp, s_exp, p_val, suffix) {
+      m_vals <- setNames(as.list(c(m_exp[idx, ], rep(NA_real_, max_k - k))),
+                         paste0("m", seq_len(max_k), suffix))
+      s_vals <- setNames(as.list(c(s_exp[idx, ], rep(NA_real_, max_k - k))),
+                         paste0("s", seq_len(max_k), suffix))
+      p_val_list <- setNames(list(p_val[idx]), paste0("p", suffix))
+      c(m_vals, s_vals, p_val_list)
+    }
+
+    c(
+      build_result(eq_min_idx,   m_expanded, s_expanded, p_eq,   "_eq_min"),
+      build_result(eq_max_idx,   m_expanded, s_expanded, p_eq,   "_eq_max"),
+      build_result(uneq_min_idx, m_expanded, s_expanded, p_uneq, "_uneq_min"),
+      build_result(uneq_max_idx, m_expanded, s_expanded, p_uneq, "_uneq_max"),
+      p_any_min = min(p_eq[eq_min_idx], p_uneq[uneq_min_idx]),
+      p_any_max = max(p_eq[eq_max_idx], p_uneq[uneq_max_idx])
+    )
+  }, by = .(study, var)]
+
+  data.table::setDF(result)
+  result
+}
+
+# Multiverse driver: returns p_eq_min/max, p_uneq_min/max, p_any_min/max
+rng_p_fn <- function(dat, nm, nm_m, nm_s, nm_n, nm.m, nm.s, nm.sf) {
+  am <- dat
+  rng <- dec_places(am, nm, nm.m, nm.s)
+  rng[, nm.sf] <- lapply(nm, function(x) sigfigs(x, rng))
+
+  nm.dtm <- paste0(nm_m, "dt")
+  nm.dts <- paste0(nm_s, "dt")
+  rng[, c(nm.dtm, nm.dts)] <- rng[, c(nm_m, nm_s)]
+
+  rng <- rng |>
+    dplyr::mutate(
+      dpm = do.call(pmax, c(dplyr::pick(dplyr::all_of(nm.m)), na.rm = TRUE)),
+      dps = do.call(pmax, c(dplyr::pick(dplyr::all_of(nm.s)), na.rm = TRUE)),
+      sfm = do.call(pmax, c(dplyr::pick(dplyr::all_of(paste0(nm_m, "_sf"))), na.rm = TRUE)),
+      sfs = do.call(pmax, c(dplyr::pick(dplyr::all_of(paste0(nm_s, "_sf"))), na.rm = TRUE))
+    ) |>
+    dplyr::select(-dplyr::all_of(nm.m), -dplyr::all_of(nm.s), -dplyr::all_of(nm.sf))
+
+  rng <- rng |>
+    dplyr::mutate(
+      across(dplyr::all_of(nm.dtm), ~ max_round(.x, dpm, sfm)),
+      across(dplyr::all_of(nm.dts), ~ max_round(.x, dps, sfs))
+    ) |>
+    dplyr::mutate(
+      dfm = do.call(pmax, c(dplyr::pick(dplyr::all_of(nm.dtm)), na.rm = TRUE)),
+      dfs = do.call(pmax, c(dplyr::pick(dplyr::all_of(nm.dts)), na.rm = TRUE))
+    )
+
+  b <- lng_f(am |> dplyr::select(-p, -dpp), remvars = c("study", "var"))
+  b <- b |> dplyr::left_join(rng |> dplyr::select(study, var, dfm, dfs),
+                             by = c("study", "var"))
+  ms(b)
+}
+
+# chk_pvals: rounds bounds to p_dec.place and flags whether reported p sits
+# inside [p_*_min, p_*_max] for each of equal-var / unequal-var / either.
+chk_pvals <- function(dat, am, nm, nm_m, nm_s, nm_n, nm.m, nm.s, nm.sf) {
+  rng_p_data <- rng_p_fn(dat = am, nm, nm_m, nm_s, nm_n, nm.m, nm.s, nm.sf)
+
+  a1 <- dat |>
+    dplyr::left_join(rng_p_data, by = c("study", "var")) |>
+    dplyr::mutate(
+      p_dec.place = dplyr::coalesce(p_dec.place, 3),
+      across(starts_with("p_") & (ends_with("_min") | ends_with("_max")),
+             ~ round(.x, p_dec.place)),
+      across(ends_with("min"),
+             ~ dplyr::case_when(
+               grepl(">",  .data$p)            ~ suppressWarnings(as.numeric(sub(".*>", "", .data$p))),
+               grepl("ns", tolower(.data$p))   ~ 0.05,
+               is.na(.data$p_num)              ~ NA_real_,
+               .default = .x),
+             .names = "{.col}_adj"),
+      across(ends_with("max"),
+             ~ dplyr::case_when(
+               grepl("<", .data$p)             ~ suppressWarnings(as.numeric(sub(".*<", "", .data$p))),
+               is.na(.data$p_num)              ~ NA_real_,
+               .default = .x),
+             .names = "{.col}_adj")
+    )
+
+  flag <- function(p_num, p_min, p_max, p_min_adj, p_max_adj) {
+    dplyr::case_when(
+      is.na(p_num) & is.na(p_min) & is.na(p_max)             ~ NA_character_,
+      p_num >= p_min & p_num <= p_max                        ~ "",
+      p_num < p_min | p_num > p_max                          ~ "flag",
+      p_max_adj < p_min | p_min_adj > p_max                  ~ "flag",
+      .default = ""
+    )
+  }
+
+  a1 |>
+    dplyr::mutate(
+      p_flag_eq   = flag(p_num, p_eq_min,   p_eq_max,   p_eq_min_adj,   p_eq_max_adj),
+      p_flag_uneq = flag(p_num, p_uneq_min, p_uneq_max, p_uneq_min_adj, p_uneq_max_adj),
+      p_flag_any  = flag(p_num, p_any_min,  p_any_max,  p_any_min_adj,  p_any_max_adj)
+    ) |>
+    dplyr::select(-dplyr::ends_with("_adj"))
+}
+```
+
+## Functions
+
+### Data-generating process
+
+```{r}
+generate_data <- function(n_per_condition,
+                          mean_1, mean_2,
+                          sd_1,   sd_2) {
+  bind_rows(
+    tibble(condition = "1",
+           score = rnorm(n = n_per_condition, mean = mean_1, sd = sd_1)),
+    tibble(condition = "2",
+           score = rnorm(n = n_per_condition, mean = mean_2, sd = sd_2))
+  )
+}
+```
+
+### Analysis (compute "reported" summary stats + p under one analytic recipe)
+
+```{r}
+# Apply a rounding function from {roundwork} (and base bankers' rounding).
+apply_rounding <- function(x, digits, rounding) {
+  switch(
+    rounding,
+    half_up   = roundwork::round_up(x,    digits),
+    half_down = roundwork::round_down(x,  digits),
+    bankers   = round(x, digits),                  # base R 'round' is bankers
+    truncate  = roundwork::round_trunc(x, digits),
+    stop("Unknown rounding mode: ", rounding)
+  )
+}
+
+analyse <- function(data,
+                    analysis_test,
+                    analysis_alternative,
+                    analysis_rounding,
+                    m_digits, sd_digits, p_digits) {
+
+  # 1. Group summaries
+  summary_stats <- data |>
+    group_by(condition) |>
+    summarise(m = mean(score), sd = sd(score), n = n(), .groups = "drop") |>
+    pivot_wider(names_from = condition, names_sep = "",
+                values_from = c("m", "sd", "n"))
+
+  # 2. t-test — variant + alternative chosen by analytic recipe
+  fit <- t.test(formula      = score ~ condition,
+                data         = data,
+                var.equal    = (analysis_test == "student_t"),
+                alternative  = analysis_alternative,
+                conf.level   = 0.95)
+
+  p_unrounded <- fit$p.value
+
+  # 3. Round summary statistics + p to reporting precision under chosen mode
+  m1_rep  <- apply_rounding(summary_stats$m1,  m_digits,  analysis_rounding)
+  m2_rep  <- apply_rounding(summary_stats$m2,  m_digits,  analysis_rounding)
+  sd1_rep <- apply_rounding(summary_stats$sd1, sd_digits, analysis_rounding)
+  sd2_rep <- apply_rounding(summary_stats$sd2, sd_digits, analysis_rounding)
+  p_rep   <- apply_rounding(p_unrounded,       p_digits,  analysis_rounding)
+
+  # 4. Determine reporting operator
+  #    p reported as 'p < 10^(-p_digits)' when the rounded value collapses to 0
+  if (dplyr::near(p_rep, 0)) {
+    p_rep      <- 10^(-p_digits)
+    p_operator <- "less_than"
+  } else {
+    p_operator <- "equals"
+  }
+
+  tibble(
+    m1_rep, m2_rep, sd1_rep, sd2_rep,
+    n1 = summary_stats$n1, n2 = summary_stats$n2,
+    p_rep, p_operator,
+    p_unrounded
+  )
+}
+```
+
+### Generate-and-analyse wrapper
+
+Wrapping data generation and analysis in a single function avoids storing the
+per-replication `data` tibble (~50–200 rows each, times 72 000 replications)
+in the simulation table. With the wrapper, only the small summary tibble
+returned by `analyse()` is kept, which substantially reduces both memory
+footprint and `future_pmap` serialisation overhead.
+
+```{r}
+generate_and_analyse <- function(n_per_condition,
+                                 mean_1, mean_2, sd_1, sd_2,
+                                 analysis_test, analysis_alternative,
+                                 analysis_rounding,
+                                 m_digits, sd_digits, p_digits) {
+  data <- generate_data(n_per_condition = n_per_condition,
+                        mean_1 = mean_1, mean_2 = mean_2,
+                        sd_1   = sd_1,   sd_2   = sd_2)
+  analyse(data,
+          analysis_test        = analysis_test,
+          analysis_alternative = analysis_alternative,
+          analysis_rounding    = analysis_rounding,
+          m_digits = m_digits, sd_digits = sd_digits, p_digits = p_digits)
+}
+```
+
+### `reappraised` internals (OLDER version, inlined)
+
+The functions below are copied verbatim from an earlier release of `reappraised`'s baseline-p-value machinery, preserved in
+`validation/t-test/reappraised - older version/simulation.Rmd`.
+The older code is **not** on the CRAN GitHub mirror; this is the only copy available to us, and is reproduced here unmodified other than:
+
+- `dplyr::select(., ...)` → `dplyr::pick(...)` for native-pipe compatibility (semantically identical);
+- a `_old` suffix on every function name to avoid collision with the current-version helpers above.
+
+The older version differs from the current CRAN version (above) in four ways, each of which is expected to affect the simulation results:
+
+1. **Equal-variance F only.** `pval_old()` returns the equal-variance ANOVA *p* and nothing else. The current version returns both equal- and unequal-variance *p* and unions them into `p_any_min` / `p_any_max`. The older version therefore cannot bracket the Welch *p* under heteroscedastic data.
+2. **Heuristic 2-step corner search.** `ms_old()` enumerates only the 2^k M-corners (4 corners for k = 2) and picks the extremal one; the SD adjustment is then applied as a shared ±`dfs` shift to all SDs simultaneously. The current version exhaustively enumerates 2^4 = 16 (M, SD) corners.
+3. **`dp` and `sf` are both inferred from the stored value.** `dec_places_old()` calls `dp_old()` on the raw numeric — there is no user-supplied `dpm`/`dps` column. So when R has dropped trailing zeros (e.g., a reported SD of "2.00" stored as `2`), *both* the decimal-place count and the sig-figs count are wrong, not just the sig-figs count.
+4. **No censored-report handling.** The 2024 simulation that uses this code compares the reported *p* directly against `[p_min, p_max]` with a simple `between()`, regardless of whether the report was `"<.001"`-style. So `p_operator == "less_than"` reports always misfire when their numeric floor exceeds `p_max`.
+
+```{r}
+# --- common_fns.R (older) ---
+
+# Long-format pivot. Regex `var1 = "."` matches a single character — works for
+# columns like m1/s1/n1/m2/s2/n2 but fails on multi-letter prefixes such as
+# "dpm1" (the older code only ever calls lng_f on a select(-any_of("p"))
+# of the raw input, so this never arises in practice).
+lng_f_old <- function(dat, remvars) {
+  dat |>
+    tidyr::gather(v, value, -dplyr::all_of(remvars)) |>
+    tidyr::separate_wider_regex(v, c(var1 = ".", group = "\\d+")) |>
+    tidyr::spread(var1, value) |>
+    dplyr::filter(!is.na(m) & !is.na(s) & !is.na(n))
+}
+
+# Equal-variance ANOVA F-test p only.
+pval_old <- function(df, simulate = "n") {
+  if (simulate == "n") df <- df |> dplyr::group_by(study, var)
+  else                 df <- df |> dplyr::group_by(sim, study, var)
+  df <- df |>
+    dplyr::summarise(
+      k = dplyr::n(), tot_n = sum(n),
+      ov_m = sum(n * m) / tot_n,
+      msb = sum(n * (m - ov_m)^2),
+      msw = sum((n - 1) * s^2),
+      .groups = "drop"
+    ) |>
+    dplyr::filter(k >= 2, tot_n > k) |>
+    dplyr::mutate(
+      dfb = k - 1, dfw = tot_n - k,
+      f_value = ifelse(msw > 0, msb/dfb / (msw/dfw), NA),
+      p.value = ifelse(!is.na(f_value), pf(f_value, dfb, dfw, lower.tail = FALSE), NA)
+    )
+  if (simulate == "n") df <- df |> dplyr::select(study, var, p.value)
+  else                 df <- df |> dplyr::select(study, var, sim, p.value)
+  df
+}
+
+# Per-row dp computation from stored values (no user column).
+dec_places_old <- function(a, nm, nm.m, nm.s) {
+  a1 <- cbind(a, setNames(lapply(a[nm], dp_old), paste0("dp", nm)))
+  row_max <- function(df, cols) t(apply(df[cols], 1, function(x) {
+    if (all(is.na(x))) NA else max(x, na.rm = TRUE)
+  }))
+  a1[nm.m] <- row_max(a1, nm.m)
+  a1[nm.s] <- row_max(a1, nm.s)
+  a1
+}
+
+# Older dp helper: 0 if integer-valued, else count chars after the decimal
+# (with trailing zeros stripped).
+dp_old <- function(x) {
+  ifelse(abs(x - round(x)) > .Machine$double.eps^0.5,
+         nchar(sub('^\\d+\\.', '', sub('0+$', '', as.character(abs(x))))),
+         0)
+}
+
+# Significant figures (identical to the new version's sigfigs).
+sigfigs_old <- function(j, dat) {
+  x <- dat[, j]
+  sapply(x, function(val) {
+    if (is.na(val) || !is.finite(val)) return(NA)
+    if (val == 0) return(1L)
+    str_val <- sprintf("%g", abs(val))
+    cleaned <- gsub("0+$", "", gsub("^0+", "", gsub("\\.", "", str_val)))
+    if (cleaned == "") return(1L)
+    nchar(cleaned)
+  })
+}
+
+# Older preimage half-width. Note the `x == 0 ~ 0.5` branch — for an exactly-
+# zero reported mean, this would give a half-width of 0.5 (vs. NA in the new
+# version), but the case never fires in our simulated DGP.
+max_round_old <- function(x, dpm, sig_figs) {
+  dat <- data.frame(x = x, dpm = dpm, sig_figs = sig_figs) |>
+    dplyr::mutate(z = dplyr::case_when(
+      is.na(x)    ~ NA_real_,
+      x == 0      ~ 0.5,
+      abs(x) >= 1 ~ {magnitude <- floor(log10(abs(x)))
+                    least_sig_position <- magnitude - sig_figs + 1
+                    max_val <- abs(x) + 0.5 * 10^least_sig_position
+                    max_val - abs(x)},
+      abs(x) < 1  ~ 0.5 * 10^(-dpm),
+      .default = x))
+  dat$z
+}
+
+# Heuristic 2-step search: enumerate only M-corners.
+ms_old <- function(data) {
+  data |>
+    dplyr::group_by(study, var) |>
+    dplyr::group_modify(~ {
+      m_vals  <- .x$m
+      n_vals  <- .x$n
+      df_vals <- .x$dfm
+
+      combs <- expand.grid(lapply(seq_along(m_vals), function(i) {
+        c(m_vals[i] + df_vals[i], m_vals[i] - df_vals[i])
+      }))
+
+      mss <- apply(combs, 1, function(m_comb) {
+        tot_n <- sum(n_vals)
+        ov_m  <- sum(n_vals * m_comb) / tot_n
+        sum(n_vals * (m_comb - ov_m)^2)
+      })
+
+      m_cols <- combs
+      colnames(m_cols) <- paste0("m", seq_len(ncol(combs)))
+
+      data.frame(ms = mss, m_cols) |>
+        dplyr::mutate(stat = dplyr::case_when(
+          ms == max(ms) ~ "max",
+          ms == min(ms) ~ "min",
+          .default = "")) |>
+        dplyr::filter(stat %in% c("max", "min")) |>
+        dplyr::distinct(ms, stat, .keep_all = TRUE)
+    })
+}
+
+# Two-step driver. Equal-variance F only; SDs uniformly shifted by shared dfs.
+rng_p_fn_old <- function(dat, nm, nm_m, nm_s, nm_n, nm.m, nm.s, nm.sf) {
+  am <- dat
+  rng <- dec_places_old(am, nm, nm.m, nm.s)
+  rng[, nm.sf] <- lapply(nm, function(x) sigfigs_old(x, rng))
+
+  nm.dtm <- paste0(nm_m, "dt"); nm.dts <- paste0(nm_s, "dt")
+  rng[, c(nm.dtm, nm.dts)] <- rng[, c(nm_m, nm_s)]
+
+  rng <- rng |>
+    dplyr::mutate(
+      dpm = do.call(pmax, c(dplyr::pick(dplyr::all_of(nm.m)), na.rm = TRUE)),
+      dps = do.call(pmax, c(dplyr::pick(dplyr::all_of(nm.s)), na.rm = TRUE)),
+      sfm = do.call(pmax, c(dplyr::pick(dplyr::all_of(paste0(nm_m, "_sf"))), na.rm = TRUE)),
+      sfs = do.call(pmax, c(dplyr::pick(dplyr::all_of(paste0(nm_s, "_sf"))), na.rm = TRUE))
+    ) |>
+    dplyr::select(-dplyr::all_of(nm.m), -dplyr::all_of(nm.s), -dplyr::all_of(nm.sf))
+
+  rng <- rng |>
+    dplyr::mutate(
+      across(dplyr::all_of(nm.dtm), ~ max_round_old(.x, dpm, sfm)),
+      across(dplyr::all_of(nm.dts), ~ max_round_old(.x, dps, sfs))
+    ) |>
+    dplyr::mutate(
+      dfm = do.call(pmax, c(dplyr::pick(dplyr::all_of(nm.dtm)), na.rm = TRUE)),
+      dfs = do.call(pmax, c(dplyr::pick(dplyr::all_of(nm.dts)), na.rm = TRUE))
+    )
+
+  b <- lng_f_old(am |> dplyr::select(-dplyr::any_of("p")), remvars = c("study", "var"))
+  b <- b |> dplyr::left_join(rng |> dplyr::select(study, var, dfm), by = c("study", "var"))
+  b2 <- ms_old(b)
+
+  b_max <- dplyr::left_join(
+      rng |> dplyr::select(-dplyr::all_of(nm_m)),
+      b2  |> dplyr::filter(stat == "max") |> dplyr::select(study, var, dplyr::all_of(nm_m)),
+      by = c("study", "var")) |>
+    dplyr::select(-c(dplyr::any_of("p"), dplyr::all_of(nm.dtm), dplyr::all_of(nm.dts), dpm:sfs)) |>
+    dplyr::mutate(across(dplyr::all_of(nm_s), ~ .x - dfs))
+
+  b_min <- dplyr::left_join(
+      rng |> dplyr::select(-dplyr::all_of(nm_m)),
+      b2  |> dplyr::filter(stat == "min") |> dplyr::select(study, var, dplyr::all_of(nm_m)),
+      by = c("study", "var")) |>
+    dplyr::select(-c(dplyr::any_of("p"), dplyr::all_of(nm.dtm), dplyr::all_of(nm.dts), dpm:sfs)) |>
+    dplyr::mutate(across(dplyr::all_of(nm_s), ~ .x + dfs))
+
+  b_max1 <- lng_f_old(b_max, remvars = c("study", "var", "dfs", "dfm")) |> pval_old()
+  b_min1 <- lng_f_old(b_min, remvars = c("study", "var", "dfs", "dfm")) |> pval_old()
+
+  dplyr::bind_rows(
+    dplyr::left_join(
+      b_max,
+      b_max1 |> dplyr::rename(p_min = p.value) |> dplyr::mutate(stat = "min_p-value"),
+      by = c("study", "var")),
+    dplyr::left_join(
+      b_min,
+      b_min1 |> dplyr::rename(p_max = p.value) |> dplyr::mutate(stat = "max_p-value"),
+      by = c("study", "var"))
+  ) |>
+    dplyr::mutate(p_range = dplyr::coalesce(p_min, p_max))
+}
+```
+
+### Reconstruction A: `reappraised`'s `chk_pvals()`
+
+```{r}
+# Build the wide dataframe layout reappraised's chk_pvals() expects, then
+# call it and extract the union "any" multiverse range and flag.
+#
+# Reappraised uses two character columns for the reported p:
+#   * `p`     — a string (may contain "<" or ">" prefixes for censored reports)
+#   * `p_num` — numeric value, set to NA when `p` is censored
+# and the comparison logic handles them jointly. The "_adj" branches in
+# chk_pvals() are exactly the equivalent of our recalc `p_operator`.
+reconstruct_reappraised <- function(reported,
+                                    m_digits, sd_digits, p_digits) {
+
+  if (reported$p_operator == "less_than") {
+    p_str <- paste0("<", format(reported$p_rep, scientific = FALSE,
+                                nsmall = p_digits))
+    p_num <- NA_real_
+  } else {
+    p_str <- format(reported$p_rep, scientific = FALSE, nsmall = p_digits)
+    p_num <- reported$p_rep
+  }
+
+  # `am` is the input to the *multiverse* (rng_p_fn); it must only contain
+  # the columns that lng_f's regex split can parse: m1, s1, n1, m2, s2, n2
+  # plus dpm1, dpm2, dps1, dps2, and the placeholder p / dpp that rng_p_fn
+  # explicitly drops. `p_num` and `p_dec.place` belong on `dat`, which
+  # rng_p_fn never feeds into lng_f.
+  am <- data.frame(
+    study = "sim", var = "v",
+    m1 = reported$m1_rep, s1 = reported$sd1_rep, n1 = reported$n1,
+    m2 = reported$m2_rep, s2 = reported$sd2_rep, n2 = reported$n2,
+    p = p_str, dpp = p_digits,
+    dpm1 = m_digits, dpm2 = m_digits,
+    dps1 = sd_digits, dps2 = sd_digits,
+    stringsAsFactors = FALSE
+  )
+
+  dat <- data.frame(
+    study = "sim", var = "v",
+    p = p_str, p_num = p_num, p_dec.place = p_digits,
+    stringsAsFactors = FALSE
+  )
+
+  nm    <- c("m1", "s1", "m2", "s2")
+  nm_m  <- c("m1", "m2")
+  nm_s  <- c("s1", "s2")
+  nm_n  <- c("n1", "n2")
+  nm.m  <- c("dpm1", "dpm2")
+  nm.s  <- c("dps1", "dps2")
+  nm.sf <- c("m1_sf", "s1_sf", "m2_sf", "s2_sf")
+
+  out <- suppressWarnings(
+    chk_pvals(dat = dat, am = am,
+              nm = nm, nm_m = nm_m, nm_s = nm_s, nm_n = nm_n,
+              nm.m = nm.m, nm.s = nm.s, nm.sf = nm.sf)
+  )
+
+  tibble::tibble(
+    min_p_eq    = out$p_eq_min,
+    max_p_eq    = out$p_eq_max,
+    min_p_uneq  = out$p_uneq_min,
+    max_p_uneq  = out$p_uneq_max,
+    min_p_any   = out$p_any_min,
+    max_p_any   = out$p_any_max,
+    # reappraised flag: "" = consistent, "flag" = inconsistent, NA = undecidable.
+    # We map an empty flag to inbounds = TRUE, "flag" to FALSE, and NA to NA.
+    p_inbounds  = dplyr::case_when(
+      is.na(out$p_flag_any) ~ NA,
+      out$p_flag_any == ""  ~ TRUE,
+      TRUE                  ~ FALSE
+    )
+  )
+}
+```
+
+### Reconstruction B: `recalc::recalc_independent_t_p()`
+
+Same `(reported, m_digits, sd_digits, p_digits)` input, called with the realistic settings from `simulation.qmd`: matched rounding mode, single matched alternative, both `p_methods` iterated (Student vs Welch).
+
+```{r}
+reconstruct_recalc <- function(reported,
+                               m_digits, sd_digits, p_digits,
+                               rounding_mode,
+                               analysis_alternative) {
+
+  res <- suppressWarnings(recalc_independent_t_p(
+    m1          = reported$m1_rep,
+    m2          = reported$m2_rep,
+    sd1         = reported$sd1_rep,
+    sd2         = reported$sd2_rep,
+    n1          = reported$n1,
+    n2          = reported$n2,
+    m_digits    = m_digits,
+    sd_digits   = sd_digits,
+    rounding    = rounding_mode,
+    p           = reported$p_rep,
+    p_digits    = p_digits,
+    p_operator  = reported$p_operator,
+    p_methods   = c("student_t", "welch_t"),
+    alternative = analysis_alternative
+  ))
+
+  res$reproduced |>
+    transmute(min_p, max_p, min_p_rounded, max_p_rounded, p_inbounds)
+}
+```
+
+### Reconstruction C: older `reappraised` (`rng_p_fn_old()`)
+
+Mirrors the call pattern from the 2024 simulation Rmd (`reconstruct_bolland()`): pass only `(m1, m2, sd1, sd2, n1, n2)`; the older code infers all precision information from the stored values via `dp_old()` and `sigfigs_old()`. For consistency with the original, the inbounds check is the simple `between()` comparison the 2024 simulation used — no special handling of `p_operator == "less_than"`.
+
+```{r}
+reconstruct_reappraised_old <- function(reported) {
+
+  df_bolland <- tibble::tibble(
+    study = "sim", var = "v",
+    m1 = reported$m1_rep, s1 = reported$sd1_rep, n1 = reported$n1,
+    m2 = reported$m2_rep, s2 = reported$sd2_rep, n2 = reported$n2
+  )
+
+  nm    <- c("m1", "s1", "m2", "s2")
+  nm_m  <- c("m1", "m2")
+  nm_s  <- c("s1", "s2")
+  nm_n  <- c("n1", "n2")
+  nm.m  <- paste0("dp", nm_m)
+  nm.s  <- paste0("dp", nm_s)
+  nm.sf <- paste0(nm, "_sf")
+
+  rng_data <- suppressWarnings(
+    rng_p_fn_old(dat = df_bolland,
+                 nm, nm_m, nm_s, nm_n, nm.m, nm.s, nm.sf)
+  )
+
+  min_p_val <- rng_data |>
+    dplyr::filter(stat == "min_p-value") |>
+    dplyr::pull(p_min)
+  max_p_val <- rng_data |>
+    dplyr::filter(stat == "max_p-value") |>
+    dplyr::pull(p_max)
+
+  # Faithful reproduction of the 2024 simulation's comparison: numeric p
+  # against unrounded [min_p, max_p]. Does NOT handle censored reports —
+  # for `p_operator == "less_than"`, reported$p_rep is the floor threshold
+  # (e.g. 0.001), which is what the old simulation compared against.
+  p_reported <- reported$p_rep
+  p_inbounds <- (p_reported >= min_p_val) & (p_reported <= max_p_val)
+
+  tibble::tibble(
+    min_p_old      = min_p_val,
+    max_p_old      = max_p_val,
+    p_inbounds_old = p_inbounds
+  )
+}
+```
+
+## Define experiment
+
+```{r}
+experiment_parameters <- expand_grid(
+  n_per_condition       = c(25, 100),
+  mean_1                = 0,
+  mean_2                = c(0, 0.5),
+  sd_1                  = 1,
+  sd_2                  = c(1, 2),
+  analysis_test         = c("student_t", "welch_t"),
+  analysis_alternative  = c("two.sided", "less", "greater"),
+  analysis_rounding     = c("half_up", "bankers", "truncate"),
+  m_digits              = 2L,
+  sd_digits             = 2L,
+  p_digits              = 3L,
+  iteration             = 1:50L # 50 for testing, 1:10000L for full sim 
+) |>
+  mutate(condition = paste0(
+    "n=",    n_per_condition,
+    " | m2=", mean_2,
+    " | sd2=", sd_2,
+    " | test=", analysis_test,
+    " | alt=", analysis_alternative,
+    " | round=", analysis_rounding
+  ))
+```
+
+## Run simulation
+
+```{r}
+if (file.exists("simulation_reappraised.rds")) {
+  simulation <- read_rds("simulation_reappraised.rds")
+} else {
+
+  set.seed(42)
+
+  simulation <- experiment_parameters |>
+    # Generate + analyse in one step so the raw per-replication data tibble
+    # is never stored in the simulation table.
+    mutate(reported = future_pmap(
+      .l = list(n_per_condition      = n_per_condition,
+                mean_1               = mean_1,
+                mean_2               = mean_2,
+                sd_1                 = sd_1,
+                sd_2                 = sd_2,
+                analysis_test        = analysis_test,
+                analysis_alternative = analysis_alternative,
+                analysis_rounding    = analysis_rounding,
+                m_digits             = m_digits,
+                sd_digits            = sd_digits,
+                p_digits             = p_digits),
+      .f = generate_and_analyse,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    # Reconstruct with reappraised. The package has no rounding-mode or
+    # alternative argument, so there is only one reconstruction per row.
+    mutate(rebuilt_reapp = future_pmap(
+      .l = list(reported  = reported,
+                m_digits  = m_digits,
+                sd_digits = sd_digits,
+                p_digits  = p_digits),
+      .f = reconstruct_reappraised,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    # Reconstruct with recalc. Matched rounding and matched alternative,
+    # mirroring the realistic-use call in simulation.qmd.
+    mutate(rebuilt_recalc = future_pmap(
+      .l = list(reported             = reported,
+                m_digits             = m_digits,
+                sd_digits            = sd_digits,
+                p_digits             = p_digits,
+                rounding_mode        = analysis_rounding,
+                analysis_alternative = analysis_alternative),
+      .f = reconstruct_recalc,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    # Reconstruct with older reappraised (2024 simulation Rmd code).
+    mutate(rebuilt_reapp_old = future_pmap(
+      .l = list(reported = reported),
+      .f = reconstruct_reappraised_old,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    unnest_wider(reported) |>
+    mutate(
+      # reappraised (current CRAN) output
+      min_p_reapp          = map_dbl(rebuilt_reapp, "min_p_any"),
+      max_p_reapp          = map_dbl(rebuilt_reapp, "max_p_any"),
+      inbounds_reapp       = map_lgl(rebuilt_reapp, "p_inbounds"),
+      # recalc output (matched rounding, matched alternative)
+      min_p_recalc         = map_dbl(rebuilt_recalc, "min_p"),
+      max_p_recalc         = map_dbl(rebuilt_recalc, "max_p"),
+      min_p_recalc_rounded = map_dbl(rebuilt_recalc, "min_p_rounded"),
+      max_p_recalc_rounded = map_dbl(rebuilt_recalc, "max_p_rounded"),
+      inbounds_recalc      = map_lgl(rebuilt_recalc, "p_inbounds"),
+      # reappraised (older) output
+      min_p_reapp_old      = map_dbl(rebuilt_reapp_old, "min_p_old"),
+      max_p_reapp_old      = map_dbl(rebuilt_reapp_old, "max_p_old"),
+      inbounds_reapp_old   = map_lgl(rebuilt_reapp_old, "p_inbounds_old")
+    ) |>
+    select(-rebuilt_reapp, -rebuilt_recalc, -rebuilt_reapp_old)
+
+  write_rds(simulation, "simulation_reappraised.rds", compress = "gz")
+}
+```
+
+# Results
+
+<!-- For each condition, summarize across iterations the performance and uncertainty of the method(s) -->
+
+## Overall coverage: three packages
+
+```{r}
+simulation |>
+  summarise(
+    K                  = n(),
+    coverage_recalc    = mean(inbounds_recalc),
+    coverage_reapp     = mean(inbounds_reapp),
+    coverage_reapp_old = mean(inbounds_reapp_old),
+    mcse_recalc        = sqrt(coverage_recalc    * (1 - coverage_recalc)    / K),
+    mcse_reapp         = sqrt(coverage_reapp     * (1 - coverage_reapp)     / K),
+    mcse_reapp_old     = sqrt(coverage_reapp_old * (1 - coverage_reapp_old) / K)
+  ) |>
+  kable(digits = 4,
+        caption = "Empirical coverage of each package's interval across all cells.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Coverage by analytic-choice factors
+
+Each cell shows `recalc / reappraised (current) / reappraised (older)`.
+
+```{r}
+coverage_by_factor <- simulation |>
+  group_by(analysis_alternative, analysis_rounding) |>
+  summarise(
+    K                  = n(),
+    coverage_recalc    = mean(inbounds_recalc),
+    coverage_reapp     = mean(inbounds_reapp),
+    coverage_reapp_old = mean(inbounds_reapp_old),
+    .groups            = "drop"
+  )
+
+coverage_by_factor |>
+  mutate(
+    cell = paste0(
+      scales::number(coverage_recalc,    accuracy = 0.0001), " / ",
+      scales::number(coverage_reapp,     accuracy = 0.0001), " / ",
+      scales::number(coverage_reapp_old, accuracy = 0.0001)
+    )
+  ) |>
+  select(analysis_alternative, analysis_rounding, cell) |>
+  pivot_wider(names_from = analysis_rounding, values_from = cell) |>
+  kable(caption = "Coverage: recalc / reappraised (current) / reappraised (older) by alternative × reporting rounding mode.") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 1, "Reporting rounding" = 3))
+```
+
+## Pairwise disagreements
+
+```{r}
+simulation |>
+  mutate(
+    disagree_recalc_vs_reapp     = inbounds_recalc != inbounds_reapp,
+    disagree_recalc_vs_reapp_old = inbounds_recalc != inbounds_reapp_old,
+    disagree_reapp_vs_reapp_old  = inbounds_reapp  != inbounds_reapp_old
+  ) |>
+  summarise(
+    n_disagree_recalc_vs_reapp     = sum(disagree_recalc_vs_reapp,     na.rm = TRUE),
+    n_disagree_recalc_vs_reapp_old = sum(disagree_recalc_vs_reapp_old, na.rm = TRUE),
+    n_disagree_reapp_vs_reapp_old  = sum(disagree_reapp_vs_reapp_old,  na.rm = TRUE),
+    n_total                        = n()
+  ) |>
+  kable(caption = "Number of replications where each pair of packages produces different inbounds flags.") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+simulation |>
+  mutate(
+    favours = dplyr::case_when(
+      inbounds_recalc & !inbounds_reapp & !inbounds_reapp_old   ~ "recalc only",
+      inbounds_recalc & inbounds_reapp & !inbounds_reapp_old    ~ "recalc + reappraised (current); older flags",
+      inbounds_recalc & !inbounds_reapp & inbounds_reapp_old    ~ "recalc + older; current flags",
+      !inbounds_recalc & inbounds_reapp & inbounds_reapp_old    ~ "reappraised both, recalc flags",
+      !inbounds_recalc & inbounds_reapp & !inbounds_reapp_old   ~ "reappraised (current) only",
+      !inbounds_recalc & !inbounds_reapp & inbounds_reapp_old   ~ "reappraised (older) only",
+      inbounds_recalc & inbounds_reapp & inbounds_reapp_old     ~ "all agree (consistent)",
+      !inbounds_recalc & !inbounds_reapp & !inbounds_reapp_old  ~ "all agree (flagged)"
+    )
+  ) |>
+  count(favours) |>
+  arrange(desc(n)) |>
+  kable(caption = "Joint inbounds pattern across the three packages.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Coverage by DGP
+
+```{r}
+simulation |>
+  group_by(n_per_condition, mean_2, sd_2) |>
+  summarise(
+    K                       = n(),
+    coverage_recalc         = mean(inbounds_recalc),
+    mcse_coverage_recalc    = sqrt(coverage_recalc    * (1 - coverage_recalc)    / K),
+    coverage_reapp          = mean(inbounds_reapp),
+    mcse_coverage_reapp     = sqrt(coverage_reapp     * (1 - coverage_reapp)     / K),
+    coverage_reapp_old      = mean(inbounds_reapp_old),
+    mcse_coverage_reapp_old = sqrt(coverage_reapp_old * (1 - coverage_reapp_old) / K),
+    .groups                 = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Coverage (±1 MCSE) by DGP cell.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Plot: each package's interval vs the analytic p
+
+All three packages are run on the *same* simulated data per replicate; bands show each package's `[min_p, max_p]`.
+
+```{r fig.height=12, fig.width=10}
+plot_df <- simulation |>
+  select(p_unrounded, p_rep, analysis_alternative,
+         min_p_recalc,    max_p_recalc,    inbounds_recalc,
+         min_p_reapp,     max_p_reapp,     inbounds_reapp,
+         min_p_reapp_old, max_p_reapp_old, inbounds_reapp_old) |>
+  pivot_longer(
+    cols      = c(starts_with("min_p_"), starts_with("max_p_"),
+                  starts_with("inbounds_")),
+    names_to  = c(".value", "package"),
+    # IMPORTANT: list `reapp_old` *before* `reapp` in the alternation, and
+    # anchor with ^ and $. Regex alternation is left-to-right, so listing
+    # `reapp` first lets `(.*)_reapp` greedily match `min_p_reapp_old` as
+    # (min_p, reapp) and silently drop the `_old` suffix — collapsing the
+    # older reappraised data into the current-reappraised package label.
+    names_pattern = "^(.*)_(reapp_old|recalc|reapp)$"
+  ) |>
+  mutate(package = factor(
+    dplyr::recode(package,
+                  recalc    = "recalc",
+                  reapp     = "reappraised (current)",
+                  reapp_old = "reappraised (older)"),
+    levels = c("recalc", "reappraised (current)", "reappraised (older)")
+  ))
+
+ggplot(plot_df,
+       aes(x = p_unrounded, y = p_rep, colour = inbounds)) +
+  geom_abline(slope = 1, linetype = "dotted") +
+  geom_linerange(aes(ymin = min_p, ymax = max_p), alpha = 0.25) +
+  geom_point(alpha = 0.4, size = 0.6) +
+  scale_colour_viridis_d(begin = 0.2, end = 0.7, name = "p_inbounds") +
+  facet_grid(package ~ analysis_alternative) +
+  labs(x = "True (unrounded) analytic p",
+       y = "Reported (rounded) p",
+       subtitle = "Vertical bars = each package's [min_p, max_p]") +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "bottom")
+```
+
+## Interval width: three packages
+
+The key diagnostic for interval-based inconsistency checks is how narrow the package can make `[p_min, p_max]` while still containing the truth. Both mean and max are reported per cell.
+
+```{r}
+simulation |>
+  mutate(
+    width_recalc    = max_p_recalc    - min_p_recalc,
+    width_reapp     = max_p_reapp     - min_p_reapp,
+    width_reapp_old = max_p_reapp_old - min_p_reapp_old
+  ) |>
+  group_by(analysis_rounding) |>
+  summarise(
+    K                     = n(),
+    mean_w_recalc         = mean(width_recalc),
+    mcse_mean_w_recalc    = sd(width_recalc)    / sqrt(K),
+    max_w_recalc          = max(width_recalc),
+    mean_w_reapp          = mean(width_reapp),
+    mcse_mean_w_reapp     = sd(width_reapp)     / sqrt(K),
+    max_w_reapp           = max(width_reapp),
+    mean_w_reapp_old      = mean(width_reapp_old),
+    mcse_mean_w_reapp_old = sd(width_reapp_old) / sqrt(K),
+    max_w_reapp_old       = max(width_reapp_old),
+    .groups               = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Interval width (±1 MCSE for the mean) by reporting rounding mode. MCSE for mean width = sd(width)/sqrt(K).") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+simulation |>
+  mutate(
+    width_recalc    = max_p_recalc    - min_p_recalc,
+    width_reapp     = max_p_reapp     - min_p_reapp,
+    width_reapp_old = max_p_reapp_old - min_p_reapp_old
+  ) |>
+  group_by(analysis_alternative, analysis_rounding) |>
+  summarise(
+    K                     = n(),
+    mean_w_recalc         = mean(width_recalc),
+    mcse_mean_w_recalc    = sd(width_recalc)    / sqrt(K),
+    max_w_recalc          = max(width_recalc),
+    mean_w_reapp          = mean(width_reapp),
+    mcse_mean_w_reapp     = sd(width_reapp)     / sqrt(K),
+    max_w_reapp           = max(width_reapp),
+    mean_w_reapp_old      = mean(width_reapp_old),
+    mcse_mean_w_reapp_old = sd(width_reapp_old) / sqrt(K),
+    max_w_reapp_old       = max(width_reapp_old),
+    .groups               = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Interval width (±1 MCSE for the mean) by alternative × rounding mode.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Subset analysis: replicates with true `p` < .05
+
+Interval width depends on where on the *p*-axis the multiverse sits. Near *p* ≈ 0 (or *p* ≈ 1), the *p*-axis is locally compressed by the *t*-to-*p* transformation, so a given (M, SD) preimage maps to a narrower *p*-range than it would near *p* ≈ 0.5. The subset where the true analytic *p* falls below .05 is the regime most relevant for inconsistency detection in practice — that is where most published, significant results live and where the difference between "narrow and correctly calibrated" and "wide and trivially containing" actually matters.
+
+```{r}
+sig_subset <- simulation |> filter(p_unrounded < 0.05)
+n_subset   <- nrow(sig_subset)
+n_total    <- nrow(simulation)
+```
+
+The subset contains `r n_subset` of the `r n_total` total replicates (`r scales::percent(n_subset / n_total, 0.1)`).
+
+### Three-way coverage on the p < .05 subset
+
+```{r}
+sig_subset |>
+  group_by(analysis_alternative, analysis_rounding) |>
+  summarise(
+    K                  = n(),
+    coverage_recalc    = mean(inbounds_recalc),
+    coverage_reapp     = mean(inbounds_reapp),
+    coverage_reapp_old = mean(inbounds_reapp_old),
+    .groups            = "drop"
+  ) |>
+  mutate(cell = paste0(
+    scales::number(coverage_recalc,    accuracy = 0.0001), " / ",
+    scales::number(coverage_reapp,     accuracy = 0.0001), " / ",
+    scales::number(coverage_reapp_old, accuracy = 0.0001)
+  )) |>
+  select(analysis_alternative, analysis_rounding, cell) |>
+  pivot_wider(names_from = analysis_rounding, values_from = cell) |>
+  kable(caption = "Coverage on the p < .05 subset: recalc / reappraised (current) / reappraised (older).") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 1, "Reporting rounding" = 3))
+```
+
+### Three-way interval width on the p < .05 subset
+
+```{r}
+sig_subset |>
+  mutate(
+    width_recalc    = max_p_recalc    - min_p_recalc,
+    width_reapp     = max_p_reapp     - min_p_reapp,
+    width_reapp_old = max_p_reapp_old - min_p_reapp_old
+  ) |>
+  group_by(analysis_rounding) |>
+  summarise(
+    K                     = n(),
+    mean_w_recalc         = mean(width_recalc),
+    mcse_mean_w_recalc    = sd(width_recalc)    / sqrt(K),
+    max_w_recalc          = max(width_recalc),
+    mean_w_reapp          = mean(width_reapp),
+    mcse_mean_w_reapp     = sd(width_reapp)     / sqrt(K),
+    max_w_reapp           = max(width_reapp),
+    mean_w_reapp_old      = mean(width_reapp_old),
+    mcse_mean_w_reapp_old = sd(width_reapp_old) / sqrt(K),
+    max_w_reapp_old       = max(width_reapp_old),
+    .groups               = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Interval width (±1 MCSE) on the p < .05 subset, by reporting rounding mode.") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot: subset replicates with true p < .05
+
+```{r fig.height=12, fig.width=10}
+sig_plot_df <- sig_subset |>
+  select(p_unrounded, p_rep, analysis_alternative,
+         min_p_recalc,    max_p_recalc,    inbounds_recalc,
+         min_p_reapp,     max_p_reapp,     inbounds_reapp,
+         min_p_reapp_old, max_p_reapp_old, inbounds_reapp_old) |>
+  pivot_longer(
+    cols          = c(starts_with("min_p_"), starts_with("max_p_"),
+                      starts_with("inbounds_")),
+    names_to      = c(".value", "package"),
+    names_pattern = "^(.*)_(reapp_old|recalc|reapp)$"
+  ) |>
+  mutate(package = factor(
+    dplyr::recode(package,
+                  recalc    = "recalc",
+                  reapp     = "reappraised (current)",
+                  reapp_old = "reappraised (older)"),
+    levels = c("recalc", "reappraised (current)", "reappraised (older)")
+  ))
+
+ggplot(sig_plot_df,
+       aes(x = p_unrounded, y = p_rep, colour = inbounds)) +
+  geom_abline(slope = 1, linetype = "dotted") +
+  geom_linerange(aes(ymin = min_p, ymax = max_p), alpha = 0.25) +
+  geom_point(alpha = 0.4, size = 0.6) +
+  scale_colour_viridis_d(begin = 0.2, end = 0.7, name = "p_inbounds") +
+  facet_grid(package ~ analysis_alternative) +
+  labs(x = "True (unrounded) analytic p", y = "Reported (rounded) p",
+       subtitle = "Subset: p_unrounded < .05. Vertical bars = each package's [min_p, max_p].") +
+  coord_equal(xlim = c(0, 0.06), ylim = c(0, 0.06)) +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "bottom")
+```
+
+# Discussion
+
+<!-- Discuss and interpret results of the simulation here. -->
+
+## Coverage
+
+There are three regimes across the 9 alternative × rounding cells:
+
+- **`two.sided × {half_up, bankers}` (the cells either reappraised version is designed for).** `recalc` and `reappraised` (current) both cover at ≈ 1.0. `reappraised` (older) covers at ≈ 1.0 in the *homoscedastic* (`sd_2 = 1`) sub-cells but drops in the *heteroscedastic* (`sd_2 = 2`) sub-cells where the analysis_test is Welch: the older version computes the equal-variance F-test *p* only, so it cannot bracket a Welch *p* under unequal variance.
+- **`{less, greater} × any rounding`.** `recalc` covers at ≈ 1.0 because the user passes the matching `alternative` value; both reappraised versions cover at ≈ 0 because neither has a one-sided branch — the reported one-sided *p* (which is approximately `p_two_sided / 2` for the "correct" tail and `1 − p_two_sided / 2` for the "wrong" tail) falls outside the two-sided multiverse in essentially every replicate.
+- **`two.sided × truncate`.** `recalc` covers at ≈ 1.0 when passed `rounding = "truncate"`. Both reappraised versions drop in exactly the replicates where the truncated value sits at the upper edge of the asymmetric preimage (truncation rounds *down*, so the true value can be up to one ULP above the report rather than half a ULP either side; both versions assume only the symmetric ±½-ULP preimage).
+
+The pairwise-disagreement table and the joint-pattern table quantify which package is in each disagreement. Effectively every `recalc says consistent / reappraised flags` row reflects one of the structural blind spots in reappraised. There is no cell where `reappraised says consistent / recalc flags` is a meaningful fraction — `recalc` is uniformly equal-or-stricter under matched-rounding use.
+
+The two reappraised versions also disagree with each other in some cells:
+
+- The older version's **lack of a Welch branch** drops its coverage on heteroscedastic Welch reports that the current version handles via its `p_uneq_min/max` union.
+- The older version's **no-censored-report handling** drops its coverage on `p_operator == "less_than"` cases that the current version handles via the `<x` string-parsing path in `chk_pvals()`. (See the earlier analysis of why the 2024 simulation showed apparently-poor reappraised performance; the cause was setting `p_num` to the floor threshold rather than NA, which the current version avoids by parsing the `<` prefix from the string.)
+- The older version's **heuristic 2-step corner search** (4 M-corners, then shared ±dfs SD shift) and **wholly storage-inferred precision** (both `dp` and `sf` from the value) give it a *wider* multiverse on average than the current version, so it occasionally *over-covers* relative to the current version — the older version's `inbounds = TRUE` is sometimes wrong-in-the-other-direction (e.g., for cases where the true *p* really is outside the intended-precision multiverse but lands inside the inflated one).
+
+## Interval width
+
+For cells where all three packages cover, `recalc`'s mean widths are slightly smaller than either reappraised version's, and its *maximum* widths are dramatically smaller (~½ to ⅓ of current reappraised, and an order of magnitude smaller than older reappraised). The cause is precision inference, not corner enumeration or test-statistic choice (all three packages use the same `pf()` computation for the equal-variance branch).
+
+### Why the maximum widths differ
+
+`reappraised` infers significant figures from the stored numeric value of each reported summary statistic (via its `sigfigs()` helper, which counts cleaned digits in `sprintf("%g", x)`). The current version uses *user-supplied* `dpm`/`dps` for the decimal-place count but still uses *storage-inferred* `sigfigs()` for the `|x| ≥ 1` branch of `max_round()`. The older version uses *storage-inferred* `dp` *and* `sigfigs()` for both branches. `recalc` takes `m_digits` and `sd_digits` as user-supplied arguments and never relies on storage inference.
+
+The three approaches agree on most values, but disagree systematically on **values whose trailing zeros have been dropped by R's numeric storage.** A reported SD of "2.00" with 2 dp of intended precision is stored by R as `2`, and `sigfigs(2)` returns 1 rather than the intended 3 (since `sprintf("%g", 2)` is `"2"`, not `"2.00"`).
+
+For `|x| ≥ 1`, the reappraised preimage half-width is `0.5 × 10^(magnitude − sig_figs + 1)`. With `sig_figs` undercounted, this inflates dramatically:
+
+| Value | reappraised half-width | recalc half-width (`digits = 2`) | Ratio |
+|---|---|---|---|
+| 0.32 | 0.005 | 0.005 | 1× |
+| 0.50 | 0.005 | 0.005 | 1× |
+| 1.05 | 0.005 | 0.005 | 1× |
+| **1.00** | **0.500** | 0.005 | **100×** |
+| **1.20** | **0.050** | 0.005 | **10×** |
+| **1.50** | **0.050** | 0.005 | **10×** |
+| **2.00** | **0.500** | 0.005 | **100×** |
+| 2.13 | 0.005 | 0.005 | 1× |
+| **10.30** | **0.050** | 0.005 | **10×** |
+
+When a per-replicate SD lands on a "round" value like 1.50 or 2.00, the reappraised preimage explodes by 10× to 100×, and the resulting *p*-multiverse spans a much wider range than the intended ±½ ULP preimage would justify. These hits are rare — most generated SDs land at "generic" values like 2.13 — but they dominate the *maximum* width statistic over the K replicates in each cell, while leaving the *mean* width nearly unchanged. The older version inflates further because `dp` is *also* inferred from storage, so the `|x| < 1` branch suffers the same problem.
+
+`recalc` avoids this by construction: the precision is supplied, not inferred from storage. A user-supplied `sd_digits = 2` gives the right preimage regardless of whether R drops the trailing zero.
+
+## Why the older `reappraised` fails so badly
+
+The older version's max widths approach 1.0 — essentially the full *p*-axis — in every rounding mode. That is much worse than the current version's max widths (which sit around 0.2–0.8), even though both share the same `sigfigs()` heuristic. Four design choices in the older version compound, each multiplying the others:
+
+**1. Storage inference cascades.** The current version uses *user-supplied* `dpm` / `dps` (the `nm.m` / `nm.s` columns) and only the *sigfigs* branch inherits the storage problem. The older version uses `dec_places_old()` to compute `dp` from the stored value as well, so *both* halves of `max_round_old()` — the `|x| ≥ 1` sigfigs path and the `|x| < 1` dpm path — are wrong when storage strips trailing zeros. A stored SD of `2` (intended `2.00`) gets `dp_old(2) = 0` (because `2` is integer-valued; the older `dp_old()` returns 0 in that case) *and* `sigfigs(2) = 1`. The resulting preimage half-width is `0.5 × 10^0 = 0.5` — i.e., a reported SD of "2.00" is treated as having a preimage spanning `[1.5, 2.5]`. That is a 100× inflation already, before any other consideration.
+
+**2. The 2-step heuristic uses a shared `dfs` across both SDs.** `rng_p_fn_old()` computes one preimage half-width per axis (`dfm`, `dfs`) by taking the `pmax` across both groups, then applies that single value as a uniform ±shift to *all* SDs. If group 1's stored SD is `2` (giving `dfs = 0.5`) and group 2's stored SD is `2.13` (giving `dfs = 0.005`), the older code uses `0.5` for both. Group 2's preimage gets blown up by another two orders of magnitude even though *its* storage was fine. The current version's exhaustive 16-corner enumeration uses each input's own half-width independently, so the well-stored group 2 SD stays narrow.
+
+**3. The compounded preimage spans values the F-test cannot survive.** With both SDs in roughly `[1.5, 2.5]` simultaneously (the shared-dfs shift forces them to move together), the F-statistic across the 4 M-corners varies enormously: at the corner where SDs are minimised, the within-group MS is small and F is large (small *p*); at the corner where SDs are maximised, F is small (large *p*). The resulting `[min_p, max_p]` routinely covers most of `[0, 1]`. The smoke test shows max widths of 0.97–1.00 for every rounding mode — the multiverse is effectively *uninformative* on the affected replicates.
+
+**4. No Welch branch and no censored-report handling are *additional* failure modes on top.** Even when the data are well-stored (no trailing zeros), the older version misses:
+
+- **Welch reports under heteroscedasticity.** `pval_old()` computes only the equal-variance F. When the simulated report came from `var.equal = FALSE` and the true variances differ, the equal-variance multiverse and the reported Welch *p* live on different scales. The current version's union with `p_uneq_min/max` fixes this; the older version cannot.
+- **Censored reports (`p < .001`).** The older simulation's `reconstruct_bolland()` compared the numeric floor (e.g. `0.001`) directly against the multiverse via `between()`, with no special handling for the `<` prefix. When the true *p* is genuinely tiny — which is *typically* the case for any report that hit the censor floor — the multiverse's `max_p` is far below the threshold and the comparison flags the report. This is exactly the bug we diagnosed in the 2024 simulation Rmd; it is reproduced here verbatim for fairness.
+
+The cumulative effect: in any replicate where (a) at least one of m1, m2, sd1, sd2 has trailing zeros stripped by R's numeric storage, (b) `analysis_test == "welch_t"` with heteroscedastic variances, or (c) the report collapsed to "<0.001", the older version's coverage either drops to ~0 (cases b and c) or its interval blows up to nearly [0, 1] (case a) — none of which match the actual analytic-choice grid the report was generated under.
+
+What the older version still handles correctly is the narrowest possible use case: a *two-sided* equal-variance *t*-test with *well-stored* summary statistics (no values exactly at "round" multiples of the ULP) and a *non-censored* numeric *p*. The current version expands that to (also) handle Welch and `<x` reports; `recalc` further expands it to one-sided alternatives and asymmetric rounding modes.
+
+## Conclusions
+
+1. **Coverage.** Across the 9 alternative × rounding cells, `recalc` covers in 9 of 9 (with matched-rounding and matched-alternative calls). `reappraised` (current) covers in 2 of 9 — the two-sided × symmetric-rounding cells. `reappraised` (older) covers in a smaller subset still — it loses the heteroscedastic Welch sub-cells (no Welch branch) and the censored-report sub-cases (no `<x` string handling).
+2. **Width.** Where multiple packages cover, `recalc`'s intervals are narrower in both the mean and (much more dramatically) the maximum. The older `reappraised` is wider than the current version, which is wider than `recalc`.
+3. **Architectural attribution per gap.**
+   - Missing `alternative` axis (both reappraised versions) → 6 cells of near-zero coverage.
+   - Missing asymmetric preimage (both reappraised versions) → 1 cell of ~92% coverage degraded from 1.0.
+   - `sigfigs()` from storage (both reappraised versions) → max-width inflation in the 2 cells where they cover.
+   - `dp` from storage (older only) → additional max-width inflation and additional coverage drops in the `|x| < 1` regime.
+   - No Welch branch (older only) → systematic miss on heteroscedastic Welch reports.
+   - No `<x` string handling (older only) → systematic miss on censored reports.
+
+The simulation says nothing about `reappraised`'s *primary* claim — the empirical distribution of *p*-values across a corpus of studies, evaluated against a published reference distribution. That use case is upstream of `chk_pvals()` and is not exercised here. What this simulation *does* test is the consistency check between a single reported *p* and the multiverse compatible with reported summary statistics — and on that task `recalc` dominates both reappraised versions under matched use, with the current `reappraised` cleanly dominating the older `reappraised` in turn.
+
+## Limitations of this simulation
+
+- **Normally distributed outcomes only.** Same caveat as the recalc simulation. Departures from normality affect the reported *p*-value but not the rounding-preimage logic either package implements.
+- **One precision setting** (`m_digits = 2`, `sd_digits = 2`, `p_digits = 3`). The `sigfigs()` undercounting becomes more or less severe at other precisions; in particular, integer-valued summary statistics (sd_digits = 0) would magnify the effect further.
+- **`reappraised`'s machinery is exercised here outside its usual entry point** (`pval_cont_fn`). We call `chk_pvals()` directly to extract per-replication bounds, which strips away the package's reference-distribution and AUC plotting steps. This is the right comparison for the consistency check but means the simulation does *not* validate `reappraised`'s claim about *distribution* of *p*-values across studies.
+
+# References
+
+Bradley, J. V. (1978). Robustness? *British Journal of Mathematical and Statistical Psychology*, 31(2), 144–152.
+
+Cohen, J. (1988). *Statistical power analysis for the behavioral sciences* (2nd ed.). Lawrence Erlbaum Associates.
+
+Bolland, M. (2024). *reappraised: Statistical tools for assessing publication integrity of groups of trials* [R package, version 0.2]. CRAN mirror: https://github.com/cran/reappraised, commit `9edf826` (2026-03-05).
+
+Joshi, M., & Pustejovsky, J. E. (2022). *simhelpers: Helper functions for simulation studies* [R package]. https://CRAN.R-project.org/package=simhelpers
+
+Morris, T. P., White, I. R., & Crowther, M. J. (2019). Using simulation studies to evaluate statistical methods. *Statistics in Medicine*, 38(11), 2074–2102.
+
+Siepe, B. S., Bartoš, F., Morris, T. P., Boulesteix, A.-L., Heck, D. W., & Pawel, S. (2024). Simulation studies for methodological research in psychology: A standardized template for planning, preregistration, and reporting. *Psychological Methods*.
+
+# Session info
+
+```{r}
+sessionInfo()
+```
