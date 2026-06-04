@@ -26,6 +26,10 @@ format:
         </style>
 ---
 
+# TODO
+
+- latest app is ahead of the package, and doesn't rely on the package. might need a further comparison, with code extracted from the app.
+
 ```{r, include=FALSE}
 # settings: hidden from rendered file
 # disable messages and warnings in rendered files
@@ -79,6 +83,8 @@ Three coverage series are reported throughout:
 The **failure modes** of interest are the five analytic choices outside `reappraised`'s four-test set: **Yates' correction** (R's `chisq.test()` default; SPSS "Continuity Correction"), the **likelihood ratio** (SPSS/SAS "Likelihood Ratio"), the **N−1 / Campbell** chi-square (SPSS "Linear-by-Linear"; SAS single-stratum Mantel-Haenszel), the **central-convention Fisher** exact, and the **unpooled Wald** two-proportion *z* — none of which `reappraised`'s categorical machinery can reproduce.
 
 For the four shared tests, `recalc` and `reappraised` should agree numerically to floating point (verified in the fidelity section); the coverage differences therefore come entirely from method *breadth*, not from disagreement on shared methods.
+
+**Which `reappraised` is this?** This head-to-head benchmarks the `reappraised` **package** function `pval_cat_fn()` (the four tests above; the "span" and single-`chi_midp` "default" readings). The `reappraised` **Shiny app** (`apps/app_dichotomous.R`) is a separate, more capable artifact and behaves *differently*: it computes a **battery of seven tests** — Pearson, Yates, likelihood ratio, single-stratum CMH/Mantel-Haenszel (verified identical to `recalc`'s `n1_chisq` = (N−1)/N × Pearson), Fisher (minlike), epitools central mid-*p*, and SAS classic mid-*p* — and its headline `any_match` flag reports whether the reported *p* **matches any** of them. That is a gap-aware **union**, like `recalc`'s default — *not* a single default and *not* a `[min, max]` span. Relative to `recalc`'s nine methods the app covers seven (it omits only `fisher_central` and `wald_z`), so on this axis the app is close to `recalc` and the "span"/"default" failure-mode results below characterise the **package function, not the app**.
 
 ## Prior related work
 
@@ -663,19 +669,30 @@ coverage_by_method |>
 
 ### Plot: reported p vs each tool's interval
 
-```{r fig.height=10, fig.width=10}
+```{r fig.height=18, fig.width=10}
 plot_df <- simulation |>
+  # The default is a single value, so give it a zero-width interval
+  # (min = max = p_reapp_default). Tool tokens must have no internal underscore
+  # so the names_pattern can split cleanly (hence "reappspan" / "reappdefault").
+  mutate(
+    min_p_reappspan    = min_p_reapp,      max_p_reappspan    = max_p_reapp,      inbounds_reappspan    = inbounds_reapp,
+    min_p_reappdefault = p_reapp_default,  max_p_reappdefault = p_reapp_default,  inbounds_reappdefault = inbounds_reapp_def
+  ) |>
   select(p_true, p_rep, analysis_method,
-         min_p_recalc, max_p_recalc, inbounds_recalc,
-         min_p_reapp,  max_p_reapp,  inbounds_reapp) |>
+         min_p_recalc,       max_p_recalc,       inbounds_recalc,
+         min_p_reappspan,    max_p_reappspan,    inbounds_reappspan,
+         min_p_reappdefault, max_p_reappdefault, inbounds_reappdefault) |>
   pivot_longer(
     cols          = c(starts_with("min_p_"), starts_with("max_p_"), starts_with("inbounds_")),
     names_to      = c(".value", "tool"),
-    names_pattern = "^(.*)_(recalc|reapp)$"
+    names_pattern = "^(.*)_(recalc|reappspan|reappdefault)$"
   ) |>
-  mutate(tool = dplyr::recode(tool,
-                              recalc = "recalc (6 methods)",
-                              reapp  = "reappraised (4-test span)"))
+  mutate(tool = factor(dplyr::recode(tool,
+                              recalc       = "recalc (9 methods)",
+                              reappspan    = "reappraised (span)",
+                              reappdefault = "reappraised (default)"),
+                       levels = c("recalc (9 methods)", "reappraised (span)",
+                                  "reappraised (default)")))
 
 ggplot(plot_df,
        aes(x = p_true, y = p_rep, colour = inbounds)) +
@@ -683,10 +700,10 @@ ggplot(plot_df,
   geom_linerange(aes(ymin = min_p, ymax = max_p), alpha = 0.25) +
   geom_point(alpha = 0.4, size = 0.6) +
   scale_colour_viridis_d(begin = 0.2, end = 0.7, name = "p_inbounds") +
-  facet_grid(tool ~ analysis_method) +
+  facet_grid(analysis_method ~ tool) +
   labs(x = "True (oracle) p under the reporting test",
        y = "Reported (rounded) p",
-       subtitle = "Vertical bars = each tool's [min_p, max_p] hull (recalc's decision is the union of method cells within its bar)") +
+       subtitle = "Vertical bars = each tool's [min_p, max_p] hull (recalc's decision is the union of method cells within its bar; reappraised (default) is a single value, so its bar is a point)") +
   coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
   theme_linedraw() +
   theme(panel.grid.minor = element_blank(), legend.position = "bottom",
@@ -764,18 +781,32 @@ simulation |>
   group_by(n_per_group) |>
   summarise(
     K                      = n(),
-    coverage_recalc        = mean(inbounds_recalc,    na.rm = TRUE),
-    coverage_reapp_span    = mean(inbounds_reapp,     na.rm = TRUE),
-    coverage_reapp_default = mean(inbounds_reapp_def, na.rm = TRUE),
-    covered_w_recalc_union = mean(covered_width_recalc),
-    mcse_w_recalc_union    = sd(covered_width_recalc) / sqrt(K),
-    hull_w_recalc_ref      = mean(hull_width_recalc),
-    covered_w_reapp_span   = mean(width_reapp),
-    mcse_w_reapp_span      = sd(width_reapp) / sqrt(K),
+    recalc        = mean(inbounds_recalc,    na.rm = TRUE),
+    reapp_span    = mean(inbounds_reapp,     na.rm = TRUE),
+    reapp_default = mean(inbounds_reapp_def, na.rm = TRUE),
     .groups                = "drop"
   ) |>
   kable(digits = 4,
-        caption = "Coverage and covered-region width by sample size. recalc width = union covered_width (the default decision region); recalc hull shown for reference; reappraised span width = its contiguous interval; default is a single value (~0 width), coverage only. MCSE for mean width = sd(width)/sqrt(K).") |>
+        caption = "Coverage by sample size. recalc width = union covered_width (the default decision region); recalc hull shown for reference; reappraised span width = its contiguous interval; default is a single value (~0 width), coverage only. MCSE for mean width = sd(width)/sqrt(K).") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+simulation |>
+  mutate(width_reapp = max_p_reapp - min_p_reapp) |>   # span = its covered region
+  group_by(n_per_group) |>
+  summarise(
+    K                      = n(),
+    width_recalc_union = mean(covered_width_recalc),
+    mcse_recalc_union    = sd(covered_width_recalc) / sqrt(K),
+    width_recalc_hull      = mean(hull_width_recalc),
+    mcse_recalc_hull      = sd(hull_width_recalc) / sqrt(K),
+    width_reapp_span   = mean(width_reapp),
+    mcse_reapp_span      = sd(width_reapp) / sqrt(K),
+    .groups                = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Covered-region width by sample size. recalc width = union covered_width (the default decision region); recalc hull shown for reference; reappraised span width = its contiguous interval; default is a single value (~0 width), coverage only. MCSE for mean width = sd(width)/sqrt(K).") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -1043,61 +1074,9 @@ rej |>
   kable_styling(full_width = FALSE)
 ```
 
-## Power vs sensitivity (against the recalc-union reference)
+### By p-value band
 
-`power` = fraction of truly-incorrect candidates correctly rejected; `sensitivity` = fraction of truly-reproducible candidates correctly accepted. `recalc (union)` is 1 / 1 by construction; the hull rules trade one off against the other.
-
-```{r}
-rej |>
-  summarise(
-    `recalc (union)_power`    = mean(pow_recalc_union, na.rm = TRUE),
-    `recalc (union)_sens`     = mean(sens_recalc_union, na.rm = TRUE),
-    `recalc (hull)_power`     = mean(pow_recalc_hull,  na.rm = TRUE),
-    `recalc (hull)_sens`      = mean(sens_recalc_hull, na.rm = TRUE),
-    `reappraised (span)_power`= mean(pow_reapp_span,   na.rm = TRUE),
-    `reappraised (span)_sens` = mean(sens_reapp_span,  na.rm = TRUE),
-    `reappraised (default)_power` = mean(pow_reapp_def, na.rm = TRUE),
-    `reappraised (default)_sens`  = mean(sens_reapp_def, na.rm = TRUE)
-  ) |>
-  tidyr::pivot_longer(everything(),
-    names_to = c("tool", ".value"), names_sep = "_(?=power$|sens$)") |>
-  kable(digits = 4,
-        caption = "Power (correct rejection of incorrect p) and sensitivity (acceptance of reproducible p). recalc union dominates: power AND sensitivity = 1.") |>
-  kable_styling(full_width = FALSE)
-```
-
-## Rejection power by sample size
-
-The union's advantage is largest for sparse (small-*n*) tables, where the methods spread out and the hull contains the widest gaps.
-
-```{r}
-rej |>
-  group_by(n_per_group) |>
-  summarise(
-    K                      = n(),
-    `recalc (union)`       = mean(rej_recalc_union),
-    `recalc (hull)`        = mean(rej_recalc_hull),
-    `reappraised (span)`   = mean(rej_reapp_span),
-    .groups = "drop"
-  ) |>
-  kable(digits = 4,
-        caption = "Mean rejection rate by sample size: recalc union rejects more of the axis than the hull rules, most so at small n.") |>
-  kable_styling(full_width = FALSE)
-```
-
-## Rejection power by p-value band
-
-Where on the *p*-axis does each rule's rejection power lie? This bins the swept
-candidate *p* into significance-relevant bands and reports the rejection rate of
-each rule within each band. The sweep is extended into the tail
-(`p` down to 1e-4) so the `p ≤ .001` band is populated. The union's gap-aware
-advantage over the hull rules is largest in the **larger-*p* bands**, where the
-methods spread out and a contiguous hull swallows wide between-method gaps; in
-the smallest-*p* band the methods cluster near zero, so all interval rules
-behave similarly. The practically important point is that the union stays
-high-rejection across the small-*p* bands too — catching an incorrect
-significant *p* — *without* the sensitivity loss that gives `reappraised`'s
-single default its (over-)high rejection.
+The same rejection metric, broken into significance-relevant *p*-value bands (subsets of the swept axis). The sweep is extended into the tail (`p` down to 1e-4) so the `p ≤ .001` band is populated. The plot of this breakdown is in the "Rejection power by p-value band" section below.
 
 ```{r}
 band_breaks <- c(0, 0.001, 0.02, 0.05, 1.0)
@@ -1162,6 +1141,64 @@ band_summary |>
         caption = "Mean rejection rate within each p-value band, by rule. recalc's union rejects more than the hull rules (recalc hull, reappraised span) in the larger-p bands, where between-method gaps are widest; the rules converge in the smallest-p band as the methods cluster near 0. reappraised's single default rejects most everywhere, but that is over-rejection (it accepts only a fraction of genuinely reproducible values; see the power-vs-sensitivity table).") |>
   kable_styling(full_width = FALSE)
 ```
+
+## Power vs sensitivity (against the recalc-union reference)
+
+`power` = fraction of truly-incorrect candidates correctly rejected; `sensitivity` = fraction of truly-reproducible candidates correctly accepted. `recalc (union)` is 1 / 1 by construction; the hull rules trade one off against the other.
+
+```{r}
+rej |>
+  summarise(
+    `recalc (union)_power`    = mean(pow_recalc_union, na.rm = TRUE),
+    `recalc (union)_sens`     = mean(sens_recalc_union, na.rm = TRUE),
+    `recalc (hull)_power`     = mean(pow_recalc_hull,  na.rm = TRUE),
+    `recalc (hull)_sens`      = mean(sens_recalc_hull, na.rm = TRUE),
+    `reappraised (span)_power`= mean(pow_reapp_span,   na.rm = TRUE),
+    `reappraised (span)_sens` = mean(sens_reapp_span,  na.rm = TRUE),
+    `reappraised (default)_power` = mean(pow_reapp_def, na.rm = TRUE),
+    `reappraised (default)_sens`  = mean(sens_reapp_def, na.rm = TRUE)
+  ) |>
+  tidyr::pivot_longer(everything(),
+    names_to = c("tool", ".value"), names_sep = "_(?=power$|sens$)") |>
+  kable(digits = 4,
+        caption = "Power (correct rejection of incorrect p) and sensitivity (acceptance of reproducible p). recalc union dominates: power AND sensitivity = 1.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Rejection power by sample size
+
+The union's advantage is largest for sparse (small-*n*) tables, where the methods spread out and the hull contains the widest gaps.
+
+```{r}
+rej |>
+  group_by(n_per_group) |>
+  summarise(
+    K                      = n(),
+    `recalc (union)`       = mean(rej_recalc_union),
+    `recalc (hull)`        = mean(rej_recalc_hull),
+    `reappraised (span)`   = mean(rej_reapp_span),
+    .groups = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Mean rejection rate by sample size: recalc union rejects more of the axis than the hull rules, most so at small n.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Rejection power by p-value band
+
+Where on the *p*-axis does each rule's rejection power lie? This bins the swept
+candidate *p* into significance-relevant bands and reports the rejection rate of
+each rule within each band. The sweep is extended into the tail
+(`p` down to 1e-4) so the `p ≤ .001` band is populated. The union's gap-aware
+advantage over the hull rules is largest in the **larger-*p* bands**, where the
+methods spread out and a contiguous hull swallows wide between-method gaps; in
+the smallest-*p* band the methods cluster near zero, so all interval rules
+behave similarly. The practically important point is that the union stays
+high-rejection across the small-*p* bands too — catching an incorrect
+significant *p* — *without* the sensitivity loss that gives `reappraised`'s
+single default its (over-)high rejection. The per-band rejection rates are
+tabulated in the *Overall rejection rate* section above (`band_summary`); the
+chart below visualises them.
 
 ```{r fig.height=4.5, fig.width=9}
 band_summary |>
@@ -1254,6 +1291,7 @@ As with the continuous comparison, this says nothing about `reappraised`'s *prim
 - **2×2 tables only.** Both tools handle larger tables for the asymptotic and Fisher tests; that path is not compared here.
 - **Two independent binomials.** A fixed-total or case-control design would change the sampling distribution but not the tests' *p*-value definitions.
 - **`reappraised`'s machinery is exercised outside its usual entry point.** Its per-table code is lifted out of `pval_cat_fn()`; the reference-distribution / AUC steps are not run.
+- **This benchmarks the `reappraised` package, not its Shiny app.** The `reappraised` Shiny app (`apps/app_dichotomous.R`) is a separate, more capable tool: it computes seven tests (Pearson, Yates, likelihood ratio, CMH/Mantel-Haenszel = N−1, Fisher minlike, epitools mid-*p*, SAS mid-*p*) and flags whether the reported *p* matches **any** of them — a gap-aware *union* like `recalc` (covering seven of `recalc`'s nine methods; it lacks only `fisher_central` and `wald_z`), plus a missing-data reconstruction search. So the span/default results here understate what the app does; the app and `recalc` are close on the method-breadth axis.
 - **Version-specific.** Results are pinned to `reappraised` v0.2 (CRAN, 2026-03-05); a future version that adds Yates or likelihood-ratio options would change the coverage gap.
 - **Precision sweep is coarse-grained.** Only `p_digits` ∈ {2, 3} is swept (cell counts are exact integers, so there is no proportion-precision axis on the categorical side); finer or coarser *p* reporting could be added.
 - **Specificity is assessed by sweep, not by a fitted error model.** The second simulation measures specificity by sweeping the whole *p*-axis and asking what fraction each rule rejects, taking `recalc`'s nine-method union as the reference set of reproducible values. This is a deliberately simple error model (every off-reference value is treated as equally likely to be reported in error); a more realistic error-injection DGP — perturbing a true *p* by plausible typo/miscalculation mechanisms, or computing it from a slightly different table — would weight the *p*-axis by how errors actually arise and is left to future work.
