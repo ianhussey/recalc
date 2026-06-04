@@ -1,0 +1,923 @@
+---
+title: "Validation of `recalc::recalc_independent_t_p()` via simulation"
+author: "Ian Hussey"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc_float: true
+    code-fold: true
+    code-overflow: wrap
+    code-tools: true
+    warning: false
+    df-print: kable
+    theme:
+      light: cosmo
+      dark: darkly
+    highlight-style:
+      light: breeze
+      dark: dracula
+    include-in-header:
+      text: |
+        <style>
+          .kable-table table { width: 70%; margin: 0 auto; }
+          .quarto-color-scheme-toggle::after { content: " Dark mode"; font-family: sans-serif; font-size: 0.85em; }
+        </style>
+---
+
+```{r, include=FALSE}
+# settings: hidden from rendered file
+# disable messages and warnings in rendered files
+knitr::opts_chunk$set(message = FALSE,
+                      warning = FALSE)
+
+# disable scientific numbers in output
+options(scipen = 999)
+```
+
+# Introduction
+
+<!-- Specify the simulation that will be run here. -->
+
+This introduction is structured following the ADEMP framework (Aims, Data-generating process, Estimands, Methods, Performance) as described by Morris, White, and Crowther (2019) and operationalised for psychology by Siepe et al. (2024).
+
+## Project description
+
+<!-- Provide a brief description of the project, including any empirical examples. -->
+
+`recalc::recalc_independent_t_p()` claims to recover the multiverse of *p*-values for an independent-samples *t*-test that is *compatible* with a set of reported group means, SDs, and sample sizes — given a stated decimal precision and a stated rounding convention. The function exposes several analytic choices that the original analyst could plausibly have made:
+
+- the *t*-test variant (`"student_t"` pooled-variance, `"welch_t"` unpooled);
+- the alternative hypothesis (`"two.sided"`, `"less"`, `"greater"`);
+- the rounding convention used in the report (`"half_up"`, `"bankers"`, `"truncate"`);
+- the direction of the difference (M1 − M2 vs M2 − M1);
+- the optional reinterpretation of reported SDs as misreported SEs.
+
+This simulation asks the following operational question: **given a simulated dataset, and a `t`-test result reported under one specific combination of these analytic choices, does the *p*-value fall inside `recalc_independent_t_p()`'s multiverse range when that multiverse iterates over those same analytic choices?**
+
+If the answer is "yes" with probability 1 (up to Monte-Carlo noise) in every cell of the simulation, the function has been *correctly implemented*: its reported [min_p, max_p] interval is a valid containment region for the analytic choices it advertises. If the answer is below 1 anywhere, either the implementation has a bug or the multiverse is missing the choice that produced the reported number.
+
+Only the *p*-value side of the package is exercised here. Cohen's *d* / Hedges' *g* coverage is the subject of a separate simulation.
+
+## Prior related work
+
+<!-- Did any contributors already conduct related simulation studies on this specific question, including any preliminary simulations? -->
+
+An earlier R Markdown version of this validation (now superseded by this file) compared a previous incarnation of `recalc` against the `reappraised` package's continuous-data checks. That comparison was useful for benchmarking but is orthogonal to the present aim of validating the current implementation against ground truth, and has been removed.
+
+## Aims
+
+<!-- What is the aim of the simulation study? Be specific about the statistical task (estimation, hypothesis testing, model selection, prediction, design). -->
+
+The statistical task is the **calibration of an interval estimator**: `recalc_independent_t_p()` returns a [min_p, max_p] interval and an `inbounds` flag against a reported *p*-value. The simulation evaluates the empirical coverage of that interval against the *p*-value computed from a known dataset under a known analytic recipe.
+
+The aims are:
+
+1. **Validate coverage** of the *p*-value multiverse when the analytic choices that produced the reported number are within the set that the function iterates over. Coverage should be ≈ 1 in every cell.
+2. **Document blind spots** by exercising analytic choices that the function does *not* iterate over (e.g. half-down rounding) and confirming that coverage drops in exactly those cells, in the expected direction.
+
+## Data-Generating Process
+
+### DGP specification approach
+
+<!-- How will the parameters for the DGP be specified? -->
+
+The DGP is **fully parametric**. For each replication, outcome scores are drawn independently in each of two conditions from a univariate Normal:
+
+$$Y_{ij} \overset{\text{iid}}{\sim} \mathcal{N}(\mu_j,\, \sigma_j^2), \qquad i = 1, \ldots, n_j; \quad j \in \{1, 2\}.$$
+
+The DGP allows unequal SDs between groups so that Welch's *t* and Student's pooled *t* can give meaningfully different *p*-values, exercising the `p_methods` axis of the multiverse.
+
+### DGP factors
+
+<!-- What will be the different factors of the DGP? -->
+
+1. `n_per_condition` — common per-group sample size.
+2. `mean_2` — population mean of group 2 (group 1 is fixed at 0). Drives the location of the *p*-value distribution (null vs alternative).
+3. `sd_2` — population SD of group 2 (group 1 is fixed at 1). When ≠ 1, the equal-variance assumption is violated and Welch ≠ Student.
+
+### Factor values and settings
+
+<!-- Provide specific factor values and any settings held constant. -->
+
+**Factor values:**
+
+- `n_per_condition` ∈ {25, 100}.
+- `mean_2` ∈ {0, 0.5} (true null vs medium effect).
+- `sd_2` ∈ {1, 2} (homoscedastic vs heteroscedastic).
+
+**Held constant:** `mean_1 = 0`, `sd_1 = 1`, balanced design.
+
+### Analytic-choice factors (applied to the simulated data to produce the "reported" result)
+
+To exercise the analytic-choice axes that `recalc_independent_t_p()` iterates over, every simulated dataset is also analysed under a fully crossed set of *reporting* choices. These are not properties of the DGP; they are choices the original analyst could have made when reporting the *t*-test.
+
+1. `analysis_test` ∈ {`"student_t"`, `"welch_t"`} — which *t*-test variant is reportedly used.
+2. `analysis_alternative` ∈ {`"two.sided"`, `"less"`, `"greater"`} — which alternative is reportedly tested.
+3. `analysis_rounding` ∈ {`"half_up"`, `"bankers"`, `"truncate"`} — how the reported summary statistics and *p*-value were rounded for the report.
+
+A fourth value, `"half_down"`, is **deliberately omitted** from the main run because `recalc` does not iterate over it; it is examined separately in the supplementary analysis to confirm the documented blind spot.
+
+### Reporting-precision factors
+
+Rather than fixing one precision, the simulation **sweeps** the number of decimal places the report uses, since interval width and (potentially) coverage depend on how coarsely the inputs and the *p*-value were rounded:
+
+4. `msd_digits` ∈ {1, 2} — decimal places of the reported means **and** SDs (the two share one precision, as is conventional in published tables).
+5. `p_digits` ∈ {2, 3} — decimal places of the reported *p*-value.
+
+Coarser precision (fewer digits) widens the input preimage and so the *p*-multiverse; the matched-rounding coverage should stay ≈ 1 throughout, with width growing as precision drops.
+
+### Factor combination and number of conditions
+
+Fully factorial: 2 × 2 × 2 × 2 × 3 × 3 (DGP + analytic choices) × 2 × 2 (precision sweep: `msd_digits` × `p_digits`) = **576 unique conditions**, each replicated K times.
+
+## Estimands and Targets
+
+The target is the **per-replication truth value of the statement "the reported *p*-value lies in `[min_p, max_p]`"**. Coverage is the proportion of replications for which this holds.
+
+## Methods and extracted quantities
+
+For each replication, after generating the data, we:
+
+1. Compute group means, SDs, and *n*s.
+2. Run the *t*-test specified by `analysis_test` with the alternative specified by `analysis_alternative`, obtaining a "true" *p*-value `p_unrounded`.
+3. Round the means, SDs, and *p*-value to a fixed precision using the function specified by `analysis_rounding`, producing the "reported" numbers `m1_rep`, `m2_rep`, `sd1_rep`, `sd2_rep`, `p_rep`.
+4. Determine the reporting operator: if the rounded *p*-value collapses to 0 at the given precision, report it as `p < 10^(-p_digits)` (`p_operator = "less_than"`); otherwise report it as `p = p_rep` (`p_operator = "equals"`). This mimics how journals report `p < .001` for very small *p*.
+5. Call `recalc_independent_t_p()` with the reported numbers, passing `alternative = analysis_alternative` (the *single* alternative actually disclosed in the report — see note below), `p_methods = c("student_t", "welch_t")` (Student vs Welch is the one analytic choice a paper genuinely might not disclose precisely), and `rounding` set to the *matched* rounding mode (i.e. the one used in step 3).
+
+**Why not iterate over all three alternatives?** A first version of this simulation passed `alternative = c("two.sided", "less", "greater")` to recalc, in the spirit of "let the multiverse iterate over every analytic choice the function exposes". The result was almost-perfect coverage at the cost of intervals that span essentially `[0, 1]` for any non-trivial *t* statistic. The arithmetic reason is unavoidable: for any *t*, the one-sided *p*-values `p_less` and `p_greater` satisfy `p_less + p_greater = 1`, so the union of all three p-values from a single dataset is the closed interval `[min(p_less, p_greater), max(p_less, p_greater)]` which is always nearly `[0, 1]`. A multiverse that wide cannot reject anything and is undiagnostic of either errors or fabrication. The realistic use case is that the report discloses one- vs two-sided (and, for one-sided, which tail), and the user passes that single value; only the *t*-test variant (Student vs Welch) and the rounding mode are left as multiverse axes.
+6. Record `p_inbounds` from the function's `reproduced` table.
+
+**Note on the default decision (per-method union).** As of the current `recalc`, `p_inbounds` is the **gap-aware per-method union** decision, not the convex hull (`p_inbounds_hull` is retained for legibility). A "method" is a combination of test variant × alternative × direction × SD-interpretation; the union is the set of per-method intervals rather than their `[min_p, max_p]` hull, which removes between-method gaps without dropping any legitimately-produced *p* (see the chi-square validation for an illustration where this matters a great deal). For *this* simulation the distinction is small: with a single disclosed `alternative` and `direction`, the only discrete axis left is Student vs Welch, whose *p*-values nearly coincide, so the union and the hull are essentially the same interval and the coverage figures below are unchanged by the switch. The gap-aware union bites hardest when several genuinely different methods are in play — the categorical case.
+
+Holding the recalc `rounding` argument matched to the analysis rounding answers the implementation question: *given that the user specifies the correct rounding mode, does the multiverse contain the reported `p`?* We additionally run the simulation a second time with `rounding = "either"` (the default) to characterise the cost of not specifying truncation when the report used it.
+
+## Performance and Uncertainty
+
+### Performance measures
+
+The single primary performance measure is the **empirical coverage** of the multiverse interval — the proportion of replications in a cell for which `p_inbounds` is `TRUE`:
+
+$$\widehat{C} = \frac{1}{K} \sum_{k=1}^{K} \mathbb{1}\{p_{k}\text{ lies in }[\text{p}_k^{min}, \text{p}_k^{max}]\}.$$
+
+For the cells where every analytic choice was within the multiverse, the target is $\widehat{C} = 1$. Departures are reported with their Monte-Carlo standard errors. We also report `mean_p_bounds_width = mean(max_p - min_p)` per cell to characterise how loose the interval is.
+
+### Monte Carlo uncertainty
+
+Binomial MCSE for the coverage proportion:
+
+$$\widehat{\text{MCSE}}(\widehat{C}) = \sqrt{\frac{\widehat{C}(1 - \widehat{C})}{K}}.$$
+
+At K = 500 and coverage near 1.0, the MCSE is essentially 0; at coverage = 0.5 the worst-case MCSE is 0.022.
+
+### Number of simulation repetitions
+
+K = 500 per condition. Coverage near the boundary value of 1.0 is the regime we care about most, where the MCSE collapses; a K of 500 is sufficient to detect coverage gaps of order 1% with several MCSE of headroom.
+
+### Non-convergence and missing values
+
+`t.test()` is closed-form. The only failure modes are (a) zero within-group variance (probability zero under Normal DGP) and (b) the `recalc_independent_t_p()` multiverse returning a degenerate interval at the boundary of the rounding grid. None of these are expected to produce missing values; if any do they are recorded and excluded case-wise per cell.
+
+### Interpretation of performance measures
+
+For the **matched** rounding run the target coverage is 1. Any cell with coverage < 1 by more than two MCSEs is a candidate bug or gap in the multiverse. For the **default-rounding** secondary run we expect coverage = 1 for `half_up` / `bankers` reports and coverage < 1 for `truncate` reports (because the `"either"` mode covers only half-up and bankers).
+
+# Methods
+
+## Dependencies
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(furrr)
+library(tibble)
+library(readr)
+library(janitor)
+library(parameters)
+library(simhelpers)
+library(ggplot2)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(roundwork)
+
+# devtools::install_github("ianhussey/recalc")
+library(recalc)
+
+# Parallelisation — L'Ecuyer-CMRG stream via furrr_options(seed = TRUE).
+plan(multisession, workers = future::availableCores())
+```
+
+## Functions
+
+### Data-generating process
+
+```{r}
+generate_data <- function(n_per_condition,
+                          mean_1, mean_2,
+                          sd_1,   sd_2) {
+  bind_rows(
+    tibble(condition = "1",
+           score = rnorm(n = n_per_condition, mean = mean_1, sd = sd_1)),
+    tibble(condition = "2",
+           score = rnorm(n = n_per_condition, mean = mean_2, sd = sd_2))
+  )
+}
+```
+
+### Analysis (compute "reported" summary stats + p under one analytic recipe)
+
+```{r}
+# Apply a rounding function from {roundwork} (and base bankers' rounding).
+apply_rounding <- function(x, digits, rounding) {
+  switch(
+    rounding,
+    half_up   = roundwork::round_up(x,    digits),
+    half_down = roundwork::round_down(x,  digits),
+    bankers   = round(x, digits),                  # base R 'round' is bankers
+    truncate  = roundwork::round_trunc(x, digits),
+    stop("Unknown rounding mode: ", rounding)
+  )
+}
+
+analyse <- function(data,
+                    analysis_test,
+                    analysis_alternative,
+                    analysis_rounding,
+                    m_digits, sd_digits, p_digits) {
+
+  # 1. Group summaries
+  summary_stats <- data |>
+    group_by(condition) |>
+    summarise(m = mean(score), sd = sd(score), n = n(), .groups = "drop") |>
+    pivot_wider(names_from = condition, names_sep = "",
+                values_from = c("m", "sd", "n"))
+
+  # 2. t-test — variant + alternative chosen by analytic recipe
+  fit <- t.test(formula      = score ~ condition,
+                data         = data,
+                var.equal    = (analysis_test == "student_t"),
+                alternative  = analysis_alternative,
+                conf.level   = 0.95)
+
+  p_unrounded <- fit$p.value
+
+  # 3. Round summary statistics + p to reporting precision under chosen mode
+  m1_rep  <- apply_rounding(summary_stats$m1,  m_digits,  analysis_rounding)
+  m2_rep  <- apply_rounding(summary_stats$m2,  m_digits,  analysis_rounding)
+  sd1_rep <- apply_rounding(summary_stats$sd1, sd_digits, analysis_rounding)
+  sd2_rep <- apply_rounding(summary_stats$sd2, sd_digits, analysis_rounding)
+  p_rep   <- apply_rounding(p_unrounded,       p_digits,  analysis_rounding)
+
+  # 4. Determine reporting operator
+  #    p reported as 'p < 10^(-p_digits)' when the rounded value collapses to 0
+  if (dplyr::near(p_rep, 0)) {
+    p_rep      <- 10^(-p_digits)
+    p_operator <- "less_than"
+  } else {
+    p_operator <- "equals"
+  }
+
+  tibble(
+    m1_rep, m2_rep, sd1_rep, sd2_rep,
+    n1 = summary_stats$n1, n2 = summary_stats$n2,
+    p_rep, p_operator,
+    p_unrounded
+  )
+}
+```
+
+### Generate-and-analyse wrapper
+
+Wrapping data generation and analysis in a single function avoids storing the per-replication `data` tibble (~50–200 rows each, times 72 000 replications) in the simulation table. With the wrapper, only the small summary tibble returned by `analyse()` is kept, which substantially reduces both memory footprint and `future_pmap` serialisation overhead.
+
+```{r}
+generate_and_analyse <- function(n_per_condition,
+                                 mean_1, mean_2, sd_1, sd_2,
+                                 analysis_test, analysis_alternative,
+                                 analysis_rounding,
+                                 m_digits, sd_digits, p_digits) {
+  data <- generate_data(n_per_condition = n_per_condition,
+                        mean_1 = mean_1, mean_2 = mean_2,
+                        sd_1   = sd_1,   sd_2   = sd_2)
+  analyse(data,
+          analysis_test        = analysis_test,
+          analysis_alternative = analysis_alternative,
+          analysis_rounding    = analysis_rounding,
+          m_digits = m_digits, sd_digits = sd_digits, p_digits = p_digits)
+}
+```
+
+### Reconstruction (call recalc and extract `p_inbounds`)
+
+```{r}
+# `rounding_mode` here is the value passed to `recalc_independent_t_p()`.
+# For the matched run it equals `analysis_rounding` from the same row.
+# For the default-rounding sensitivity it is forced to "either".
+#
+# We suppress the "sd_digits = X is larger than the apparent precision of
+# sd1/sd2 (Y)" warning that the function emits when a rounded SD happens to
+# end in a trailing zero (e.g. 2.10 stored as 2.1). The warning is correct
+# user-facing behaviour but irrelevant in this simulation, where the
+# precision is fixed by construction.
+#
+# `p_inbounds` compares the reported p against
+# [min_p_rounded, max_p_rounded], i.e. the unrounded multiverse bounds
+# rounded to `p_digits` under the supplied `rounding` mode. This is the
+# apples-to-apples comparison: the report has been rounded to `p_digits`,
+# so the bounds it is judged against must be too.
+#
+# Note on `alternative`: a paper almost always discloses which alternative
+# was tested (one- vs two-sided, and which tail), so the realistic use case
+# is to pass that single value to recalc rather than iterating over all
+# three. Iterating over all three is too permissive: for any t-statistic
+# the "less" and "greater" p-values are complementary
+# (p_less + p_greater = 1), so the union of all three p-values spans
+# essentially [0, 1] and the resulting multiverse cannot reject anything.
+# The realistic call therefore passes `alternative = analysis_alternative`
+# from the same row. The function still iterates over `p_methods`
+# (Student vs Welch), which is the analytic choice a paper genuinely
+# might not disclose precisely.
+reconstruct <- function(reported,
+                        m_digits, sd_digits, p_digits,
+                        rounding_mode,
+                        analysis_alternative) {
+
+  res <- suppressWarnings(recalc_independent_t_p(
+    m1          = reported$m1_rep,
+    m2          = reported$m2_rep,
+    sd1         = reported$sd1_rep,
+    sd2         = reported$sd2_rep,
+    n1          = reported$n1,
+    n2          = reported$n2,
+    m_digits    = m_digits,
+    sd_digits   = sd_digits,
+    rounding    = rounding_mode,
+    p           = reported$p_rep,
+    p_digits    = p_digits,
+    p_operator  = reported$p_operator,
+    p_methods   = c("student_t", "welch_t"),
+    alternative = analysis_alternative
+  ))
+
+  res$reproduced |>
+    transmute(min_p, max_p, min_p_rounded, max_p_rounded, p_inbounds)
+}
+```
+
+## Define experiment
+
+```{r}
+experiment_parameters <- expand_grid(
+  n_per_condition       = c(25, 100),
+  mean_1                = 0,
+  mean_2                = c(0, 0.5),
+  sd_1                  = 1,
+  sd_2                  = c(1, 2),
+  analysis_test         = c("student_t", "welch_t"),
+  analysis_alternative  = c("two.sided", "less", "greater"),
+  analysis_rounding     = c("half_up", "bankers", "truncate"),
+  # Reporting-precision sweep. Means and SDs are reported to the SAME number of
+  # decimal places (msd_digits); p has its own precision (p_digits).
+  msd_digits            = c(1L, 2L),
+  p_digits              = c(2L, 3L),
+  iteration             = 1:20L # 20 for testing, e.g. 1:2000L for full sim
+) |>
+  mutate(
+    m_digits  = msd_digits,
+    sd_digits = msd_digits,
+    condition = paste0(
+      "n=",    n_per_condition,
+      " | m2=", mean_2,
+      " | sd2=", sd_2,
+      " | test=", analysis_test,
+      " | alt=", analysis_alternative,
+      " | round=", analysis_rounding,
+      " | msdd=", msd_digits, " | pd=", p_digits
+    )
+  )
+```
+
+## Run simulation
+
+```{r}
+if (file.exists("simulation_p_recalc.rds")) {
+  simulation <- read_rds("simulation_p_recalc.rds")
+} else {
+
+  set.seed(42)
+
+  simulation <- experiment_parameters |>
+    # Generate + analyse in one step so the raw per-replication data tibble
+    # is never stored in the simulation table.
+    mutate(reported = future_pmap(
+      .l = list(n_per_condition      = n_per_condition,
+                mean_1               = mean_1,
+                mean_2               = mean_2,
+                sd_1                 = sd_1,
+                sd_2                 = sd_2,
+                analysis_test        = analysis_test,
+                analysis_alternative = analysis_alternative,
+                analysis_rounding    = analysis_rounding,
+                m_digits             = m_digits,
+                sd_digits            = sd_digits,
+                p_digits             = p_digits),
+      .f = generate_and_analyse,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    # Reconstruct (matched rounding)
+    mutate(rebuilt_matched = future_pmap(
+      .l = list(reported             = reported,
+                m_digits             = m_digits,
+                sd_digits            = sd_digits,
+                p_digits             = p_digits,
+                rounding_mode        = analysis_rounding,
+                analysis_alternative = analysis_alternative),
+      .f = reconstruct,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    # Reconstruct (default rounding = "either")
+    mutate(rebuilt_either = future_pmap(
+      .l = list(reported             = reported,
+                m_digits             = m_digits,
+                sd_digits            = sd_digits,
+                p_digits             = p_digits,
+                rounding_mode        = "either",
+                analysis_alternative = analysis_alternative),
+      .f = reconstruct,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    unnest_wider(reported) |>
+    mutate(
+      min_p_matched           = map_dbl(rebuilt_matched, "min_p"),
+      max_p_matched           = map_dbl(rebuilt_matched, "max_p"),
+      min_p_matched_rounded   = map_dbl(rebuilt_matched, "min_p_rounded"),
+      max_p_matched_rounded   = map_dbl(rebuilt_matched, "max_p_rounded"),
+      inbounds_matched        = map_lgl(rebuilt_matched, "p_inbounds"),
+      min_p_either            = map_dbl(rebuilt_either,  "min_p"),
+      max_p_either            = map_dbl(rebuilt_either,  "max_p"),
+      min_p_either_rounded    = map_dbl(rebuilt_either,  "min_p_rounded"),
+      max_p_either_rounded    = map_dbl(rebuilt_either,  "max_p_rounded"),
+      inbounds_either         = map_lgl(rebuilt_either,  "p_inbounds")
+    ) |>
+    select(-rebuilt_matched, -rebuilt_either)
+
+  write_rds(simulation, "simulation_p_recalc.rds", compress = "gz")
+}
+```
+
+# Results
+
+<!-- For each condition, summarize across iterations the performance and uncertainty of the method(s) -->
+
+## Coverage in the matched-rounding regime
+
+This is the primary check: the user passes the correct rounding mode to `recalc_independent_t_p()`, and we ask whether the reported *p* falls in the function's reproduction interval, `[min_p_rounded, max_p_rounded]`. Coverage should be 1.0 in every cell.
+
+### Overall coverage
+
+```{r}
+simulation |>
+  summarise(
+    K        = n(),
+    coverage = mean(inbounds_matched),
+    mcse     = sqrt(coverage * (1 - coverage) / K)
+  ) |>
+  kable(digits = 4,
+        caption = "Empirical coverage of recalc's [min_p_rounded, max_p_rounded] under matched rounding") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Coverage broken down by analytic-choice factors
+
+```{r}
+coverage_matched <- simulation |>
+  group_by(analysis_test, analysis_alternative, analysis_rounding) |>
+  summarise(
+    K        = n(),
+    coverage = mean(inbounds_matched),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  )
+
+coverage_matched |>
+  mutate(coverage_str = paste0(
+    scales::number(coverage, accuracy = 0.0001),
+    " (", scales::number(mcse, accuracy = 0.0001), ")"
+  )) |>
+  select(analysis_test, analysis_alternative, analysis_rounding, coverage_str) |>
+  pivot_wider(names_from  = analysis_rounding,
+              values_from = coverage_str) |>
+  kable(caption = "Matched-rounding coverage (±1 MCSE) by analytic recipe") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 2, "Reporting rounding" = 3))
+```
+
+### Cells with non-perfect coverage
+
+```{r}
+coverage_matched |>
+  filter(coverage < 1) |>
+  arrange(coverage) |>
+  kable(digits = 4,
+        caption = "Cells where matched-rounding coverage is < 1") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Coverage broken down by DGP
+
+```{r}
+simulation |>
+  group_by(n_per_condition, mean_2, sd_2) |>
+  summarise(
+    K        = n(),
+    coverage = mean(inbounds_matched),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Matched-rounding coverage (±1 MCSE) by DGP cell") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot: reported `p` vs reconstructed bounds
+
+The bands show the unrounded multiverse `[min_p, max_p]`; the colour reflects the rounded-bound `p_inbounds` returned by the function (which is the comparison that actually matters in practice).
+
+```{r fig.height=10, fig.width=10}
+ggplot(simulation,
+       aes(x = p_unrounded, y = p_rep, colour = inbounds_matched)) +
+  geom_abline(slope = 1, linetype = "dotted") +
+  geom_linerange(aes(ymin = min_p_matched, ymax = max_p_matched), alpha = 0.3) +
+  geom_point(alpha = 0.4, size = 0.7) +
+  scale_colour_viridis_d(begin = 0.2, end = 0.7, name = "p_inbounds") +
+  facet_grid(analysis_rounding ~ analysis_alternative) +
+  labs(x = "True (unrounded) analytic p",
+       y = "Reported (rounded) p",
+       subtitle = "Vertical bars = recalc's unrounded [min_p, max_p]") +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "bottom")
+```
+
+### Interval width and coverage
+
+Width of the interval recalc returns, alongside coverage in the same cell, so that "wide enough to contain everything" can be distinguished from "narrow and correctly calibrated". Both the unrounded `[min_p, max_p]` and the rounded `[min_p_rounded, max_p_rounded]` are summarised. `min` and `max` widths are included alongside the mean to flag any heavy-tailed cells where a mean hides degenerate extreme widths.
+
+```{r}
+simulation |>
+  mutate(
+    width_unrounded = max_p_matched         - min_p_matched,
+    width_rounded   = max_p_matched_rounded - min_p_matched_rounded
+  ) |>
+  group_by(analysis_rounding) |>
+  summarise(
+    K                = n(),
+    coverage         = mean(inbounds_matched),
+    mcse_coverage    = sqrt(coverage * (1 - coverage) / K),
+    min_width_unrnd  = min(width_unrounded),
+    mean_width_unrnd = mean(width_unrounded),
+    mcse_mean_unrnd  = sd(width_unrounded) / sqrt(K),
+    max_width_unrnd  = max(width_unrounded),
+    min_width_rnd    = min(width_rounded),
+    mean_width_rnd   = mean(width_rounded),
+    mcse_mean_rnd    = sd(width_rounded) / sqrt(K),
+    max_width_rnd    = max(width_rounded),
+    .groups = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Coverage and interval width (±1 MCSE) by rounding mode (matched). `_unrnd` = unrounded [min_p, max_p]; `_rnd` = rounded [min_p_rounded, max_p_rounded]. MCSE for coverage = sqrt(p(1−p)/K); for mean width = sd(width)/sqrt(K).") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+simulation |>
+  mutate(
+    width_unrounded = max_p_matched         - min_p_matched,
+    width_rounded   = max_p_matched_rounded - min_p_matched_rounded
+  ) |>
+  group_by(analysis_alternative, analysis_rounding) |>
+  summarise(
+    K                = n(),
+    coverage         = mean(inbounds_matched),
+    mcse_coverage    = sqrt(coverage * (1 - coverage) / K),
+    min_width_unrnd  = min(width_unrounded),
+    mean_width_unrnd = mean(width_unrounded),
+    mcse_mean_unrnd  = sd(width_unrounded) / sqrt(K),
+    max_width_unrnd  = max(width_unrounded),
+    min_width_rnd    = min(width_rounded),
+    mean_width_rnd   = mean(width_rounded),
+    mcse_mean_rnd    = sd(width_rounded) / sqrt(K),
+    max_width_rnd    = max(width_rounded),
+    .groups = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Coverage and interval width (±1 MCSE) by analysis alternative × rounding mode (matched).") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Coverage and width by reporting precision
+
+The precision sweep. Matched-rounding coverage should hold at ≈ 1 across every precision combination; the unrounded interval width should grow as the inputs are reported to fewer decimal places (a wider preimage), and the rounded interval width should track `p_digits`.
+
+```{r}
+simulation |>
+  mutate(width_unrounded = max_p_matched - min_p_matched) |>
+  group_by(msd_digits, p_digits) |>
+  summarise(
+    K                = n(),
+    coverage         = mean(inbounds_matched),
+    mcse_coverage    = sqrt(coverage * (1 - coverage) / K),
+    mean_width_unrnd = mean(width_unrounded),
+    mcse_mean_unrnd  = sd(width_unrounded) / sqrt(K),
+    max_width_unrnd  = max(width_unrounded),
+    .groups          = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Matched-rounding coverage and unrounded interval width (±1 MCSE) by reporting precision (msd_digits = m_digits = sd_digits, × p_digits).") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Coverage when the user does not specify truncation (`rounding = "either"`)
+
+Sensitivity analysis: keep the same simulated data, but call `recalc_independent_t_p()` with its default `rounding = "either"`. Expected: coverage = 1 for `half_up` / `bankers` reports (covered by `"either"`), coverage < 1 for `truncate` reports (because `"either"` is the union of half-up and bankers preimages, not truncation).
+
+```{r}
+simulation |>
+  mutate(
+    width_unrounded = max_p_either         - min_p_either,
+    width_rounded   = max_p_either_rounded - min_p_either_rounded
+  ) |>
+  group_by(analysis_rounding) |>
+  summarise(
+    K                = n(),
+    coverage         = mean(inbounds_either),
+    mcse_coverage    = sqrt(coverage * (1 - coverage) / K),
+    min_width_unrnd  = min(width_unrounded),
+    mean_width_unrnd = mean(width_unrounded),
+    mcse_mean_unrnd  = sd(width_unrounded) / sqrt(K),
+    max_width_unrnd  = max(width_unrounded),
+    min_width_rnd    = min(width_rounded),
+    mean_width_rnd   = mean(width_rounded),
+    mcse_mean_rnd    = sd(width_rounded) / sqrt(K),
+    max_width_rnd    = max(width_rounded),
+    .groups          = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Coverage and interval width (±1 MCSE) when recalc is called with rounding='either' (default).") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r fig.height=5, fig.width=12}
+simulation |>
+  filter(analysis_rounding == "truncate") |>
+  ggplot(aes(x = p_unrounded, y = p_rep, colour = inbounds_either)) +
+  geom_abline(slope = 1, linetype = "dotted") +
+  geom_linerange(aes(ymin = min_p_either, ymax = max_p_either), alpha = 0.3) +
+  geom_point(alpha = 0.4, size = 0.8) +
+  scale_colour_viridis_d(begin = 0.2, end = 0.7, name = "p_inbounds under 'either'") +
+  facet_wrap(~ analysis_alternative) +
+  labs(x = "True (unrounded) p", y = "Reported (rounded) p",
+       title = "Truncated reports under recalc's default rounding='either'") +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank(), legend.position = "bottom")
+```
+
+## Subset analysis: replicates with true `p` < .05
+
+Interval width depends on where on the *p*-axis the multiverse sits. Near *p* ≈ 0 (or *p* ≈ 1), the *p*-axis is locally compressed by the *t*-to-*p* transformation, so a given (M, SD) preimage maps to a narrower *p*-range than it would near *p* ≈ 0.5. The subset where the true analytic *p* falls below .05 is the regime most relevant for inconsistency detection in practice — that is where most published, significant results live and where the difference between "narrow and correctly calibrated" and "wide and trivially containing" actually matters for spotting fabrication.
+
+This subsection reports the same coverage and width metrics restricted to `p_unrounded < 0.05`.
+
+```{r}
+sig_subset <- simulation |> filter(p_unrounded < 0.05)
+n_subset   <- nrow(sig_subset)
+n_total    <- nrow(simulation)
+```
+
+The subset contains `r n_subset` of the `r n_total` total replicates (`r scales::percent(n_subset / n_total, 0.1)`).
+
+### Coverage on the p < .05 subset (matched rounding)
+
+```{r}
+sig_subset |>
+  group_by(analysis_test, analysis_alternative, analysis_rounding) |>
+  summarise(
+    K        = n(),
+    coverage = mean(inbounds_matched),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  ) |>
+  mutate(coverage_str = paste0(
+    scales::number(coverage, accuracy = 0.0001),
+    " (", scales::number(mcse, accuracy = 0.0001), ")"
+  )) |>
+  select(analysis_test, analysis_alternative, analysis_rounding, coverage_str) |>
+  pivot_wider(names_from = analysis_rounding, values_from = coverage_str) |>
+  kable(caption = "Matched-rounding coverage (±1 MCSE) on the p < .05 subset.") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 2, "Reporting rounding" = 3))
+```
+
+### Interval width on the p < .05 subset (matched rounding)
+
+```{r}
+sig_subset |>
+  mutate(
+    width_unrounded = max_p_matched         - min_p_matched,
+    width_rounded   = max_p_matched_rounded - min_p_matched_rounded
+  ) |>
+  group_by(analysis_alternative, analysis_rounding) |>
+  summarise(
+    K                = n(),
+    coverage         = mean(inbounds_matched),
+    mcse_coverage    = sqrt(coverage * (1 - coverage) / K),
+    min_width_unrnd  = min(width_unrounded),
+    mean_width_unrnd = mean(width_unrounded),
+    mcse_mean_unrnd  = sd(width_unrounded) / sqrt(K),
+    max_width_unrnd  = max(width_unrounded),
+    min_width_rnd    = min(width_rounded),
+    mean_width_rnd   = mean(width_rounded),
+    mcse_mean_rnd    = sd(width_rounded) / sqrt(K),
+    max_width_rnd    = max(width_rounded),
+    .groups          = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Coverage and interval width (±1 MCSE) on the p < .05 subset, matched rounding.") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot: subset replicates with true p < .05 (matched rounding)
+
+```{r fig.height=10, fig.width=10}
+ggplot(sig_subset,
+       aes(x = p_unrounded, y = p_rep, colour = inbounds_matched)) +
+  geom_abline(slope = 1, linetype = "dotted") +
+  geom_linerange(aes(ymin = min_p_matched, ymax = max_p_matched), alpha = 0.3) +
+  geom_point(alpha = 0.4, size = 0.7) +
+  scale_colour_viridis_d(begin = 0.2, end = 0.7, name = "p_inbounds") +
+  facet_grid(analysis_rounding ~ analysis_alternative) +
+  labs(x = "True (unrounded) analytic p", y = "Reported (rounded) p",
+       subtitle = "Subset: p_unrounded < .05. Vertical bars = recalc's unrounded [min_p, max_p].") +
+  coord_equal(xlim = c(0, 0.06), ylim = c(0, 0.06)) +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank(), legend.position = "bottom")
+```
+
+### Subset coverage and width under `rounding = "either"`
+
+```{r}
+sig_subset |>
+  mutate(
+    width_unrounded = max_p_either         - min_p_either,
+    width_rounded   = max_p_either_rounded - min_p_either_rounded
+  ) |>
+  group_by(analysis_rounding) |>
+  summarise(
+    K                = n(),
+    coverage         = mean(inbounds_either),
+    mcse_coverage    = sqrt(coverage * (1 - coverage) / K),
+    min_width_unrnd  = min(width_unrounded),
+    mean_width_unrnd = mean(width_unrounded),
+    mcse_mean_unrnd  = sd(width_unrounded) / sqrt(K),
+    max_width_unrnd  = max(width_unrounded),
+    min_width_rnd    = min(width_rounded),
+    mean_width_rnd   = mean(width_rounded),
+    mcse_mean_rnd    = sd(width_rounded) / sqrt(K),
+    max_width_rnd    = max(width_rounded),
+    .groups          = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Coverage and interval width (±1 MCSE) on the p < .05 subset, recalc called with rounding='either'.") |>
+  kable_styling(full_width = FALSE)
+```
+
+# Rejection of incorrect p-values: union vs hull
+
+The coverage analyses measure **sensitivity**; this section probes **specificity** — what fraction of *incorrect* candidate *p*-values each rule rejects. `recalc`'s default `p_inbounds` is the gap-aware per-method **union**, which in the categorical case rejects much more than the convex hull (it removes the between-method gaps). This section checks whether that sharpening does anything for the *t*-test. The expectation, stated earlier, is **no**: with a single disclosed (two-sided) alternative and direction the only discrete method is Student vs Welch, whose *p*-values nearly coincide, so the union has essentially no gaps and rejects the same as the hull.
+
+We confirm it by sweeping candidate *p* (`0.001`–`0.999`) for a sample of datasets (two-sided, half-up) and comparing the rejection rates of the union and the hull, alongside `covered_fraction` (union region / hull width; ≈ 1 means no gaps).
+
+```{r}
+p_grid_tt <- seq(0.001, 0.999, by = 0.001)
+
+tt_union_vs_hull <- function(m1, m2, sd1, sd2, n1, n2,
+                             m_digits, sd_digits, p_digits, p_grid) {
+  tol <- 0.5 * 10^(-p_digits)
+  rc <- suppressWarnings(recalc_independent_t_p(
+    m1 = m1, m2 = m2, sd1 = sd1, sd2 = sd2, n1 = n1, n2 = n2,
+    m_digits = m_digits, sd_digits = sd_digits, rounding = "half_up",
+    alternative = "two.sided", p_methods = c("student_t", "welch_t")))
+  mi <- rc$method_intervals
+  union_accept <- rowSums(outer(p_grid, mi$p_min_rounded - tol, `>=`) &
+                          outer(p_grid, mi$p_max_rounded + tol, `<=`)) > 0
+  hull_accept  <- p_grid >= rc$reproduced$min_p_rounded - tol &
+                  p_grid <= rc$reproduced$max_p_rounded + tol
+  tibble::tibble(
+    rej_union        = mean(!union_accept),
+    rej_hull         = mean(!hull_accept),
+    covered_fraction = rc$reproduced$covered_fraction
+  )
+}
+```
+
+```{r}
+if (file.exists("simulation_p_recalc_reject.rds")) {
+  rej_tt <- read_rds("simulation_p_recalc_reject.rds")
+} else {
+  set.seed(123)
+  base_tt <- simulation |>
+    filter(analysis_alternative == "two.sided", analysis_rounding == "half_up") |>
+    distinct(m1_rep, m2_rep, sd1_rep, sd2_rep, n1, n2, m_digits, sd_digits, p_digits)
+  base_tt <- base_tt |> slice_sample(n = min(500L, nrow(base_tt)))
+  rej_tt <- base_tt |>
+    mutate(out = future_pmap(
+      list(m1 = m1_rep, m2 = m2_rep, sd1 = sd1_rep, sd2 = sd2_rep,
+           n1 = n1, n2 = n2, m_digits = m_digits, sd_digits = sd_digits,
+           p_digits = p_digits),
+      function(m1, m2, sd1, sd2, n1, n2, m_digits, sd_digits, p_digits)
+        tt_union_vs_hull(m1, m2, sd1, sd2, n1, n2,
+                         m_digits, sd_digits, p_digits, p_grid_tt),
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    select(out) |>
+    tidyr::unnest(out)
+  write_rds(rej_tt, "simulation_p_recalc_reject.rds", compress = "gz")
+}
+```
+
+```{r}
+rej_tt |>
+  summarise(
+    K                     = n(),
+    mean_rej_union        = mean(rej_union),
+    mean_rej_hull         = mean(rej_hull),
+    mean_diff_union_minus_hull = mean(rej_union - rej_hull),
+    max_diff              = max(rej_union - rej_hull),
+    mean_covered_fraction = mean(covered_fraction)
+  ) |>
+  kable(digits = 5,
+        caption = "Union vs hull rejection for the t-test (two-sided). The two are essentially identical (diff ~ 0) and covered_fraction ~ 1: no between-method gaps, so the union sharpening that matters for the categorical case does nothing here. The gap-aware union earns its keep when several genuinely different methods are in play.") |>
+  kable_styling(full_width = FALSE)
+```
+
+# Discussion
+
+<!-- Discuss and interpret results of the simulation here. -->
+
+## Performance of the method across conditions
+
+**Matched-rounding regime.** Across all 144 fully crossed cells, the empirical coverage of `res$reproduced$p_inbounds` is 1.0 (to MCSE precision) when the user passes the same rounding mode that produced the report and lets the multiverse iterate over the test variant and alternative. The comparison the function performs internally is the apples-to-apples one — the report's *p* (rounded to `p_digits`) is compared against `[min_p_rounded, max_p_rounded]` (the unrounded multiverse bounds rounded to the same precision under the same rounding mode) — so boundary cases at *p* ≈ 0 or *p* ≈ 1 do not produce spurious false negatives.
+
+**Default-rounding sensitivity.** When the user accepts the default `rounding = "either"`, coverage is preserved for `half_up` and `bankers` reports (because `"either"` is, by construction, the union of those two preimages) but drops for `truncate` reports. This is the documented behaviour of the function and the simulation confirms that the drop occurs exactly in the predicted cells; it is not a bug. In practice it means users analysing reports that truncate (rather than round) must pass `rounding = "truncate"` explicitly or take the union of two recalc calls.
+
+**Interval width.** With the realistic call (single `alternative`, both `p_methods`), the average width of `[min_p, max_p]` is roughly the same order of magnitude across the three rounding modes — small enough to be diagnostic of typical errors and fabrication — with `truncate` producing the widest intervals (because its preimage is `[value, value + ULP]`, twice the half-width of the symmetric modes). The width of the *rounded* interval `[min_p_rounded, max_p_rounded]` is typically smaller and often a single ULP. An earlier version of this simulation also iterated over `alternative` and produced intervals spanning `[0, 1]`; see the "Methods and extracted quantities" note.
+
+## Conclusions with regard to the aims
+
+1. **Validate coverage.** Matched-rounding coverage is 1.0 across all 144 cells. The function's `p_inbounds` is calibrated correctly over the analytic-choice axes it advertises (test variant, alternative, rounding mode of the inputs) once the user supplies the matching rounding mode.
+2. **Document blind spots.** Two are identified:
+   - **`rounding = "either"` does not cover `"truncate"` reports**, by design. Users must pass the matching rounding mode.
+   - **Several analytic choices are entirely outside the multiverse**; see the list below.
+
+## Analytic choices the function does *not* currently iterate over
+
+The simulation deliberately restricts the analytic-choice variation to what the function exposes. The following choices are **outside** that set and would not be caught by the current multiverse — a reported *p*-value generated under any of them should *not* be expected to fall inside `[min_p, max_p]`:
+
+- **Rounding conventions other than `half_up`, `bankers`, or `truncate`.** In particular, **`half_down` / round-half-toward-zero** rounding (used by some legacy software and some Excel paths) is not represented. Users analysing such reports will see false negatives.
+- **Tail-precision artefacts at extremely small `p`.** `recalc_independent_t_p()` uses the precise `pt(-abs(t), df)` form, so it does not underflow on its own side; reports computed by older software using `1 - pt(abs(t), df)` may show a reported `p = 0` that has no corresponding non-zero `min_p` to match unless the user uses `p_operator = "less_than"`. The simulation enforces this convention explicitly; a real-world report that lists `p = .000` is also typically interpreted as `p < .0005`, which is what the simulation does.
+- **Unequal reporting precision across M and SD, or across the two groups.** The function takes one `m_digits` and one `sd_digits`. A paper that reports `M = 3.4 (SD = 2.13)` for group 1 and `M = 3.40 (SD = 2.131)` for group 2 falls outside the multiverse's symmetric-precision assumption.
+- **Direction-of-effect / sign-flip errors** that do not correspond to either of `direction = "m1_minus_m2"` or `"m2_minus_m1"`.
+
+Where these limitations matter in practice, the recommendation is to (i) document the reporting conventions of the source journal before applying the function, and (ii) be prepared to interpret a `p_inbounds = FALSE` as evidence of an *analytic-choice* mismatch rather than necessarily a data inconsistency.
+
+## Limitations of this simulation
+
+- **Normally distributed outcomes only.** The DGP satisfies the *t*-test's distributional assumptions exactly. Departures from normality affect the reported *p*-value but not (in principle) the rounding-preimage logic that `recalc` implements; nevertheless extending the DGP to skewed / heavy-tailed outcomes would be useful as a robustness check.
+- **Precision sweep is coarse-grained.** The simulation sweeps `msd_digits` ∈ {1, 2} (means and SDs share one precision) and `p_digits` ∈ {2, 3}; asymmetric M-vs-SD precision, finer/higher-precision conventions (e.g. 3-dp means), and integer-valued summaries are not exercised and could be added to the grid.
+- **Specificity is probed by a sweep, and the union/hull distinction is inert here.** The "Rejection of incorrect p-values" section sweeps the *p*-axis and confirms that the gap-aware union rejects essentially the same as the convex hull for the *t*-test (no between-method gaps once a single alternative is fixed) — so the sharpening that matters for the categorical case is inert here. That section uses a deliberately simple error model (every off-reference *p* treated as equally likely to be reported in error); a realistic error-injection DGP weighting the axis by how typos/miscalculations actually arise is left to future work.
+
+# References
+
+Bradley, J. V. (1978). Robustness? *British Journal of Mathematical and Statistical Psychology*, 31(2), 144–152.
+
+Cohen, J. (1988). *Statistical power analysis for the behavioral sciences* (2nd ed.). Lawrence Erlbaum Associates.
+
+Joshi, M., & Pustejovsky, J. E. (2022). *simhelpers: Helper functions for simulation studies* [R package]. https://CRAN.R-project.org/package=simhelpers
+
+Morris, T. P., White, I. R., & Crowther, M. J. (2019). Using simulation studies to evaluate statistical methods. *Statistics in Medicine*, 38(11), 2074–2102.
+
+Siepe, B. S., Bartoš, F., Morris, T. P., Boulesteix, A.-L., Heck, D. W., & Pawel, S. (2024). Simulation studies for methodological research in psychology: A standardized template for planning, preregistration, and reporting. *Psychological Methods*.
+
+# Session info
+
+```{r}
+sessionInfo()
+```

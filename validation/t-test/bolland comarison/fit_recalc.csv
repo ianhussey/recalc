@@ -1,0 +1,6 @@
+"study","p_reported","recalc_min_p","recalc_max_p","recalc_inbounds","recalc_inbounds_hull","covered_fraction"
+1,0.816,0.8348,0.8905,FALSE,FALSE,1
+2,0.595,0.614,0.6687,FALSE,FALSE,1
+3,0.712,0.7304,0.7848,FALSE,FALSE,1
+4,0.785,0.8027,0.8597,FALSE,FALSE,1
+5,0.721,0.7369,0.7812,FALSE,FALSE,1

@@ -1,0 +1,965 @@
+---
+title: "Validation of `recalc::recalc_independent_t_d()` via simulation"
+author: "Ian Hussey"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc_float: true
+    code-fold: true
+    code-overflow: wrap
+    code-tools: true
+    warning: false
+    df-print: kable
+    theme:
+      light: cosmo
+      dark: darkly
+    highlight-style:
+      light: breeze
+      dark: dracula
+    include-in-header:
+      text: |
+        <style>
+          .kable-table table { width: 70%; margin: 0 auto; }
+          .quarto-color-scheme-toggle::after { content: " Dark mode"; font-family: sans-serif; font-size: 0.85em; }
+        </style>
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+options(scipen = 999)
+```
+
+# Introduction
+
+This file mirrors `simulation_p_recalc.qmd` for the *effect-size* side of the package: it validates `recalc::recalc_independent_t_d()` against ground-truth data simulated under known analytic recipes. The DGP, ADEMP framework, and overall pipeline are unchanged; only the reconstruction step is different.
+
+## Project description
+
+`recalc::recalc_independent_t_d()` claims to recover the multiverse of standardised-mean-difference effect sizes (Cohen's *d* / Hedges' *g*) and their confidence intervals that are compatible with a set of reported group means, SDs, and sample sizes. The function exposes several analytic choices the original analyst could plausibly have made:
+
+- **`d_formulas`** — which pooled SD was used as the denominator: `"pooled_df"` (df-weighted; the most common default), `"pooled_n"` (N-weighted), or `"simple_avg"` (Cohen 1988's original `sqrt((sd1^2 + sd2^2)/2)`).
+- **`hedges_correction`** — small-sample correction: `"none"` (Cohen's d), `"approx"` (`1 - 3/(4*df - 1)`), or `"exact"` (gamma-based).
+- **`ci_methods`** — `"wald_t"`, `"wald_z"`, `"welch_t"`, or `"nct"` (noncentral *t* inversion).
+- **`se_formulas`** — for Wald methods only: `"hedges_olkin"`, `"cumming"`, or `"uncorrected"`.
+- **`rounding`** — `"half_up"`, `"bankers"`, `"either"`, or `"truncate"`.
+- **`direction`** — M1 − M2 vs M2 − M1.
+- **`include_se_sd_confusion`** — optional branch reinterpreting reported "SDs" as misreported SEs.
+
+The simulation asks the same operational question as the *p* validation: **given a simulated dataset, and a reported *d* (and CI) generated under one specific combination of these analytic choices, does the reported value fall inside `recalc_independent_t_d()`'s multiverse when the multiverse iterates over the same set of choices?**
+
+## Aims
+
+1. **Validate point-estimate coverage** of `recalc_independent_t_d()`'s `[min_d, max_d]` interval across the cross-product of `d_formula × hedges_correction × rounding` analytic recipes.
+2. **Validate CI-bound coverage** across `ci_method × se_formula × rounding`.
+3. **Document blind spots** — analytic choices that fall outside what the function iterates over (e.g. Glass's Δ, alternative SE-of-*d* formulae, half-down rounding).
+
+## Data-Generating Process
+
+Same DGP as the *p* simulation. Outcome scores are drawn independently in each of two conditions from a univariate Normal:
+
+$$Y_{ij} \overset{\text{iid}}{\sim} \mathcal{N}(\mu_j,\, \sigma_j^2), \qquad i = 1, \ldots, n_j;\ j \in \{1, 2\}.$$
+
+DGP factors:
+
+- `n_per_condition` ∈ {25, 100}.
+- `mean_2` ∈ {0, 0.5} (null vs medium effect; group 1 fixed at 0).
+- `sd_2` ∈ {1, 2} (homoscedastic vs heteroscedastic; group 1 fixed at 1).
+
+The heteroscedastic cell matters here because Welch's df enters the `ci_methods = "welch_t"` CI computation, so a Welch-flavoured analytic recipe gives a different CI than a Student-flavoured one only when variances differ.
+
+## Analytic-choice factors
+
+Two separately-defined factor grids drive the two aims:
+
+### Aim 1: point-estimate grid
+
+1. `analysis_d_formula` ∈ {`"pooled_df"`, `"pooled_n"`, `"simple_avg"`}.
+2. `analysis_hedges` ∈ {`"none"`, `"approx"`, `"exact"`}.
+3. `analysis_rounding` ∈ {`"half_up"`, `"bankers"`, `"truncate"`}.
+
+Fully factorial with the DGP: 2 × 2 × 2 × 3 × 3 × 3 = **216 conditions**, K = 100 replicates each = 21,600 simulated datasets.
+
+### Aim 2: CI grid (point estimate fixed)
+
+Holding `analysis_d_formula = "pooled_df"` and `analysis_hedges = "none"` (the "default" Cohen's *d* recipe), iterate:
+
+1. `analysis_ci_method` ∈ {`"wald_t"`, `"wald_z"`, `"welch_t"`, `"nct"`}.
+2. `analysis_se_formula` ∈ {`"hedges_olkin"`, `"cumming"`, `"uncorrected"`}; ignored when `ci_method = "nct"`.
+3. `analysis_rounding` ∈ {`"half_up"`, `"bankers"`, `"truncate"`}.
+
+The valid combinations are 3 × (3 × 3 + 1) = 30, crossed with the DGP grid (8) and K = 100 = 24,000 simulated datasets.
+
+## Estimands and Targets
+
+- **Aim 1 target:** the truth value of "the reported `d` lies in `[min_d_rounded, max_d_rounded]` returned by `recalc_independent_t_d()`".
+- **Aim 2 target:** the truth value of "both the reported CI's lower and upper bounds lie within the multiverse range of CI bounds returned by `recalc_independent_t_d()`'s `d_results` data frame".
+
+The CI check is *marginal* (each bound checked separately against its own min/max across the multiverse); a stricter *joint* check that the (lower, upper) pair matches a *single* row of the multiverse is left to a future iteration. The marginal check is an upper bound on coverage — anything failing the marginal check would also fail any stricter joint check.
+
+## Methods and extracted quantities
+
+For each Aim-1 replicate:
+
+1. Generate two groups of scores from the DGP cell.
+2. Compute group means, SDs, and *n*s.
+3. Compute `d_unrounded` under the analytic recipe (`analysis_d_formula × analysis_hedges`).
+4. Round M, SD, and `d` to reporting precision under `analysis_rounding`, producing `m1_rep`, `m2_rep`, `sd1_rep`, `sd2_rep`, `d_rep`.
+5. Call `recalc_independent_t_d()` with `rounding = analysis_rounding` (matched), and `d_formulas = NULL`, `hedges_correction = NULL`, `ci_methods = NULL`, `se_formulas = NULL` (all axes iterating).
+6. Record `d_inbounds` from `res$reproduced`, plus the unrounded and rounded bounds.
+
+**Note on the default decision (per-method union).** As of the current `recalc`, `d_inbounds` is the **gap-aware per-method union** decision for the point estimate, not the convex hull (`d_inbounds_hull` is retained for legibility). A "method" is a combination of denominator formula × Hedges correction × direction × SD-interpretation (the CI-only choices do not move the point estimate); the union of those per-method *d* intervals removes between-method gaps without dropping any legitimately-produced *d*. The coverage figures below are unaffected by the switch (every reported *d* still lies in its own method's interval); the union only tightens the "consistent" region between methods, which a future specificity (error-injection) simulation would exploit.
+
+For each Aim-2 replicate:
+
+1–2. Same as above.
+3. Compute `d_unrounded` under the fixed default recipe (`pooled_df`, `none`).
+4. Compute `(ci_lower, ci_upper)` under (`analysis_ci_method`, `analysis_se_formula`).
+5. Round M, SD, `d`, `ci_lower`, `ci_upper` to reporting precision.
+6. Call `recalc_independent_t_d()` with matched rounding and all axes iterating.
+7. Extract per-row `(ci_lower_unrounded, ci_upper_unrounded)` from `res$d_results`; record `ci_lower_inbounds` and `ci_upper_inbounds` as `between(reported, min, max)` over those columns.
+
+## Performance and Uncertainty
+
+Primary measure: **empirical coverage** (the proportion of replicates in a cell where the inbounds flag is TRUE). Reported with binomial MCSE = `sqrt(p(1-p)/K)`. We also report interval width (mean, min, max) per cell, with MCSE for the mean = `sd(width)/sqrt(K)`.
+
+K = 100 per cell — chosen smaller than the *p* simulation (K = 500) because the analytic-choice grid here is larger *and* each Aim 2 reconstruction call enumerates a ~7,300-row multiverse (versus ~500 rows for the *p* reconstruction). At K = 100 the binomial MCSE for a coverage near 1.0 is essentially 0; the worst-case MCSE at coverage = 0.5 is 0.05. Adequate for the regime-level coverage differences this simulation is designed to detect; crank K up for parts-per-thousand resolution.
+
+# Methods
+
+## Dependencies
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(furrr)
+library(tibble)
+library(readr)
+library(ggplot2)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(roundwork)
+
+# devtools::install_github("ianhussey/recalc")
+library(recalc)
+
+plan(multisession, workers = future::availableCores())
+```
+
+## Functions
+
+### Data-generating process
+
+```{r}
+generate_data <- function(n_per_condition,
+                          mean_1, mean_2,
+                          sd_1,   sd_2) {
+  bind_rows(
+    tibble(condition = "1",
+           score = rnorm(n = n_per_condition, mean = mean_1, sd = sd_1)),
+    tibble(condition = "2",
+           score = rnorm(n = n_per_condition, mean = mean_2, sd = sd_2))
+  )
+}
+```
+
+### Apply rounding
+
+```{r}
+apply_rounding <- function(x, digits, rounding) {
+  switch(
+    rounding,
+    half_up   = roundwork::round_up(x,    digits),
+    half_down = roundwork::round_down(x,  digits),
+    bankers   = round(x, digits),
+    truncate  = roundwork::round_trunc(x, digits),
+    stop("Unknown rounding mode: ", rounding)
+  )
+}
+```
+
+### Effect-size kernels (compute `d` under a specific recipe)
+
+```{r}
+# Pooled SD under each d_formula recipe.
+pooled_sd <- function(sd1, sd2, n1, n2, formula) {
+  switch(
+    formula,
+    pooled_df  = sqrt(((n1 - 1) * sd1^2 + (n2 - 1) * sd2^2) / (n1 + n2 - 2)),
+    pooled_n   = sqrt((n1 * sd1^2 + n2 * sd2^2) / (n1 + n2)),
+    simple_avg = sqrt((sd1^2 + sd2^2) / 2),
+    stop("Unknown d_formula: ", formula)
+  )
+}
+
+# Hedges' J under each correction recipe.
+hedges_J <- function(df, type) {
+  switch(
+    type,
+    none   = 1,
+    approx = 1 - 3 / (4 * df - 1),
+    exact  = exp(lgamma(df / 2) - 0.5 * log(df / 2) - lgamma((df - 1) / 2)),
+    stop("Unknown hedges type: ", type)
+  )
+}
+
+# SE-of-d formulae.
+se_of_d <- function(d, n1, n2, formula) {
+  N <- n1 + n2
+  switch(
+    formula,
+    hedges_olkin = sqrt(N / (n1 * n2) + d^2 / (2 * N)),
+    cumming      = sqrt(N / (n1 * n2) + d^2 / (2 * (N - 2))),
+    uncorrected  = sqrt(N / (n1 * n2)),
+    stop("Unknown se_formula: ", formula)
+  )
+}
+```
+
+### Analysis (point estimate)
+
+```{r}
+analyse_d <- function(data,
+                     analysis_d_formula,
+                     analysis_hedges,
+                     analysis_rounding,
+                     m_digits, sd_digits, d_digits) {
+
+  summary_stats <- data |>
+    group_by(condition) |>
+    summarise(m = mean(score), sd = sd(score), n = n(), .groups = "drop") |>
+    pivot_wider(names_from = condition, names_sep = "",
+                values_from = c("m", "sd", "n"))
+
+  sp <- pooled_sd(summary_stats$sd1, summary_stats$sd2,
+                  summary_stats$n1,  summary_stats$n2, analysis_d_formula)
+  d_raw <- (summary_stats$m1 - summary_stats$m2) / sp
+  df_pooled <- summary_stats$n1 + summary_stats$n2 - 2
+  J <- hedges_J(df_pooled, analysis_hedges)
+  d_unrounded <- J * d_raw
+
+  m1_rep  <- apply_rounding(summary_stats$m1,  m_digits,  analysis_rounding)
+  m2_rep  <- apply_rounding(summary_stats$m2,  m_digits,  analysis_rounding)
+  sd1_rep <- apply_rounding(summary_stats$sd1, sd_digits, analysis_rounding)
+  sd2_rep <- apply_rounding(summary_stats$sd2, sd_digits, analysis_rounding)
+  d_rep   <- apply_rounding(d_unrounded,       d_digits,  analysis_rounding)
+
+  tibble(
+    m1_rep, m2_rep, sd1_rep, sd2_rep,
+    n1 = summary_stats$n1, n2 = summary_stats$n2,
+    d_rep,
+    d_unrounded
+  )
+}
+
+generate_and_analyse_d <- function(n_per_condition,
+                                   mean_1, mean_2, sd_1, sd_2,
+                                   analysis_d_formula, analysis_hedges,
+                                   analysis_rounding,
+                                   m_digits, sd_digits, d_digits) {
+  data <- generate_data(n_per_condition, mean_1, mean_2, sd_1, sd_2)
+  analyse_d(data,
+            analysis_d_formula = analysis_d_formula,
+            analysis_hedges    = analysis_hedges,
+            analysis_rounding  = analysis_rounding,
+            m_digits = m_digits, sd_digits = sd_digits, d_digits = d_digits)
+}
+```
+
+### Analysis (point estimate + CI)
+
+```{r}
+# Welch df helper.
+welch_df_calc <- function(sd1, sd2, n1, n2) {
+  v1 <- sd1^2; v2 <- sd2^2
+  num <- (v1 / n1 + v2 / n2)^2
+  den <- (v1^2 / (n1^2 * (n1 - 1))) + (v2^2 / (n2^2 * (n2 - 1)))
+  num / den
+}
+
+# Compute a single (d, ci_lower, ci_upper) under one recipe.
+# For nct we ignore se_formula and invert the noncentral t directly.
+compute_d_ci <- function(m1, m2, sd1, sd2, n1, n2,
+                         d_formula, hedges,
+                         ci_method, se_formula,
+                         alpha = 0.05) {
+  sp        <- pooled_sd(sd1, sd2, n1, n2, d_formula)
+  df_pooled <- n1 + n2 - 2
+  J         <- hedges_J(df_pooled, hedges)
+  d_raw     <- (m1 - m2) / sp
+  d         <- J * d_raw
+
+  if (ci_method == "nct") {
+    t_obs   <- (m1 - m2) / (sqrt(((n1 - 1) * sd1^2 + (n2 - 1) * sd2^2) /
+                                   df_pooled) * sqrt(1/n1 + 1/n2))
+
+    # Base R's pt(..., ncp = delta) emits "full precision may not have been
+    # achieved in 'pnt{final}'" warnings for some NCP values during the
+    # uniroot search. recalc's own .ci_nct() helper muffles these via a
+    # withCallingHandlers wrapper; we do the same here. The warnings are
+    # informational only — they don't affect the returned CI bound
+    # because uniroot only checks the sign of the function, and the
+    # precision loss happens deep in the tail where the sign is robust.
+    suppress_nct_warning <- function(expr) {
+      withCallingHandlers(
+        expr,
+        warning = function(w) {
+          if (grepl("full precision may not have been achieved in 'pnt\\{final\\}'",
+                    conditionMessage(w))) {
+            invokeRestart("muffleWarning")
+          }
+        }
+      )
+    }
+
+    f_lo <- function(delta) suppress_nct_warning(
+      pt(t_obs, df = df_pooled, ncp = delta) - alpha / 2
+    )
+    f_hi <- function(delta) suppress_nct_warning(
+      pt(t_obs, df = df_pooled, ncp = delta, lower.tail = FALSE) - alpha / 2
+    )
+
+    delta_upper <- tryCatch(
+      suppress_nct_warning(uniroot(f_lo, c(-1000, 1000))$root),
+      error = function(e) NA_real_
+    )
+    delta_lower <- tryCatch(
+      suppress_nct_warning(uniroot(f_hi, c(-1000, 1000))$root),
+      error = function(e) NA_real_
+    )
+    fac     <- sqrt(1/n1 + 1/n2)
+    ci_lo <- J * delta_lower * fac
+    ci_hi <- J * delta_upper * fac
+  } else {
+    se   <- se_of_d(d, n1, n2, se_formula)
+    df_ci <- switch(ci_method,
+                    wald_t  = df_pooled,
+                    welch_t = welch_df_calc(sd1, sd2, n1, n2),
+                    wald_z  = Inf)
+    crit <- switch(ci_method,
+                   wald_t  = qt(1 - alpha / 2, df = df_ci),
+                   welch_t = qt(1 - alpha / 2, df = df_ci),
+                   wald_z  = qnorm(1 - alpha / 2))
+    ci_lo <- d - crit * se
+    ci_hi <- d + crit * se
+  }
+
+  list(d = d, ci_lower = ci_lo, ci_upper = ci_hi)
+}
+
+analyse_d_ci <- function(data,
+                         analysis_d_formula, analysis_hedges,
+                         analysis_ci_method, analysis_se_formula,
+                         analysis_rounding,
+                         m_digits, sd_digits, d_digits) {
+
+  ss <- data |>
+    group_by(condition) |>
+    summarise(m = mean(score), sd = sd(score), n = n(), .groups = "drop") |>
+    pivot_wider(names_from = condition, names_sep = "",
+                values_from = c("m", "sd", "n"))
+
+  out <- compute_d_ci(ss$m1, ss$m2, ss$sd1, ss$sd2, ss$n1, ss$n2,
+                     analysis_d_formula, analysis_hedges,
+                     analysis_ci_method, analysis_se_formula)
+
+  m1_rep  <- apply_rounding(ss$m1,        m_digits,  analysis_rounding)
+  m2_rep  <- apply_rounding(ss$m2,        m_digits,  analysis_rounding)
+  sd1_rep <- apply_rounding(ss$sd1,       sd_digits, analysis_rounding)
+  sd2_rep <- apply_rounding(ss$sd2,       sd_digits, analysis_rounding)
+  d_rep   <- apply_rounding(out$d,        d_digits,  analysis_rounding)
+  cil_rep <- apply_rounding(out$ci_lower, d_digits,  analysis_rounding)
+  ciu_rep <- apply_rounding(out$ci_upper, d_digits,  analysis_rounding)
+
+  tibble(
+    m1_rep, m2_rep, sd1_rep, sd2_rep,
+    n1 = ss$n1, n2 = ss$n2,
+    d_rep, cil_rep, ciu_rep,
+    d_unrounded = out$d,
+    ci_lower_unrounded = out$ci_lower,
+    ci_upper_unrounded = out$ci_upper
+  )
+}
+
+generate_and_analyse_d_ci <- function(n_per_condition,
+                                      mean_1, mean_2, sd_1, sd_2,
+                                      analysis_d_formula, analysis_hedges,
+                                      analysis_ci_method, analysis_se_formula,
+                                      analysis_rounding,
+                                      m_digits, sd_digits, d_digits) {
+  data <- generate_data(n_per_condition, mean_1, mean_2, sd_1, sd_2)
+  analyse_d_ci(data,
+               analysis_d_formula  = analysis_d_formula,
+               analysis_hedges     = analysis_hedges,
+               analysis_ci_method  = analysis_ci_method,
+               analysis_se_formula = analysis_se_formula,
+               analysis_rounding   = analysis_rounding,
+               m_digits = m_digits, sd_digits = sd_digits, d_digits = d_digits)
+}
+```
+
+### Reconstruction (Aim 1: point estimate)
+
+The point estimate `d_inbounds` depends only on `d_formulas`, `hedges_correction`, and the rounding grid — *not* on `ci_methods` or `se_formulas`. We therefore pin the CI axes to a single value (`"wald_t"`, `"cumming"`) here to keep the multiverse small (~729 rows per call instead of ~7290), which speeds the reconstruction by an order of magnitude without changing the answer. The Aim 2 reconstruction below iterates over all four axes.
+
+```{r}
+reconstruct_d <- function(reported,
+                          m_digits, sd_digits, d_digits,
+                          rounding_mode) {
+
+  res <- suppressWarnings(recalc_independent_t_d(
+    m1                = reported$m1_rep,
+    m2                = reported$m2_rep,
+    sd1               = reported$sd1_rep,
+    sd2               = reported$sd2_rep,
+    n1                = reported$n1,
+    n2                = reported$n2,
+    m_digits          = m_digits,
+    sd_digits         = sd_digits,
+    rounding          = rounding_mode,
+    d                 = reported$d_rep,
+    d_digits          = d_digits,
+    d_formulas        = NULL,        # iterate (affects d)
+    hedges_correction = NULL,        # iterate (affects d)
+    ci_methods        = "wald_t",    # fixed — does not affect d_inbounds
+    se_formulas       = "cumming",   # fixed — does not affect d_inbounds
+    alpha             = 0.05,
+    direction         = "m1_minus_m2"
+  ))
+
+  res$reproduced |>
+    transmute(min_d, max_d, min_d_rounded, max_d_rounded, d_inbounds)
+}
+```
+
+### Reconstruction (Aim 2: CI bounds)
+
+```{r}
+# CI inbounds check: for each rebuilt replicate, recalc returns one CI per
+# row of d_results. The reported CI is "consistent" with the multiverse if
+# the reported lower lies in [min_ci_lower, max_ci_lower] across the rows,
+# and similarly for the upper. This is a marginal check — it does not
+# require any *single* multiverse row to have both bounds within tolerance.
+reconstruct_d_ci <- function(reported,
+                             m_digits, sd_digits, d_digits,
+                             rounding_mode) {
+
+  res <- suppressWarnings(recalc_independent_t_d(
+    m1                = reported$m1_rep,
+    m2                = reported$m2_rep,
+    sd1               = reported$sd1_rep,
+    sd2               = reported$sd2_rep,
+    n1                = reported$n1,
+    n2                = reported$n2,
+    m_digits          = m_digits,
+    sd_digits         = sd_digits,
+    rounding          = rounding_mode,
+    d                 = reported$d_rep,
+    d_digits          = d_digits,
+    d_formulas        = NULL,
+    hedges_correction = NULL,
+    ci_methods        = NULL,
+    se_formulas       = NULL,
+    alpha             = 0.05,
+    direction         = "m1_minus_m2"
+  ))
+
+  d_rep   <- reported$d_rep
+  cil_rep <- reported$cil_rep
+  ciu_rep <- reported$ciu_rep
+
+  ci_lo_vals <- res$d_results$ci_lower_unrounded
+  ci_hi_vals <- res$d_results$ci_upper_unrounded
+
+  tibble(
+    # point estimate inbounds (rounded comparison, identical to Aim 1)
+    min_d              = res$reproduced$min_d,
+    max_d              = res$reproduced$max_d,
+    min_d_rounded      = res$reproduced$min_d_rounded,
+    max_d_rounded      = res$reproduced$max_d_rounded,
+    d_inbounds         = res$reproduced$d_inbounds,
+    # CI marginal inbounds (rounded reported bounds vs unrounded multiverse bounds)
+    min_ci_lower       = min(ci_lo_vals, na.rm = TRUE),
+    max_ci_lower       = max(ci_lo_vals, na.rm = TRUE),
+    min_ci_upper       = min(ci_hi_vals, na.rm = TRUE),
+    max_ci_upper       = max(ci_hi_vals, na.rm = TRUE),
+    ci_lower_inbounds  = cil_rep >= min_ci_lower & cil_rep <= max_ci_lower,
+    ci_upper_inbounds  = ciu_rep >= min_ci_upper & ciu_rep <= max_ci_upper,
+    ci_both_inbounds   = ci_lower_inbounds & ci_upper_inbounds
+  )
+}
+```
+
+## Define experiment (Aim 1: point estimate)
+
+```{r}
+experiment_d <- expand_grid(
+  n_per_condition    = c(25, 100),
+  mean_1             = 0,
+  mean_2             = c(0, 0.5),
+  sd_1               = 1,
+  sd_2               = c(1, 2),
+  analysis_d_formula = c("pooled_df", "pooled_n", "simple_avg"),
+  analysis_hedges    = c("none", "approx", "exact"),
+  analysis_rounding  = c("half_up", "bankers", "truncate"),
+  m_digits           = 2L,
+  sd_digits          = 2L,
+  d_digits           = 2L,
+  iteration          = 1:100L
+)
+```
+
+## Define experiment (Aim 2: CI)
+
+```{r}
+ci_grid <- expand_grid(
+  analysis_ci_method  = c("wald_t", "wald_z", "welch_t", "nct"),
+  analysis_se_formula = c("hedges_olkin", "cumming", "uncorrected")
+) |>
+  # nct doesn't use se_formula; collapse those to one row each.
+  mutate(analysis_se_formula = if_else(analysis_ci_method == "nct",
+                                       NA_character_, analysis_se_formula)) |>
+  distinct()
+
+experiment_ci <- expand_grid(
+  n_per_condition   = c(25, 100),
+  mean_1            = 0,
+  mean_2            = c(0, 0.5),
+  sd_1              = 1,
+  sd_2              = c(1, 2),
+  ci_grid,
+  analysis_rounding = c("half_up", "bankers", "truncate"),
+  m_digits          = 2L,
+  sd_digits         = 2L,
+  d_digits          = 2L,
+  iteration         = 1:100L
+) |>
+  mutate(analysis_d_formula = "pooled_df",
+         analysis_hedges    = "none")
+```
+
+## Run simulation
+
+```{r}
+if (file.exists("simulation_d_recalc.rds")) {
+  simulation <- read_rds("simulation_d_recalc.rds")
+} else {
+
+  set.seed(42)
+
+  sim_d <- experiment_d |>
+    mutate(reported = future_pmap(
+      .l = list(n_per_condition = n_per_condition,
+                mean_1 = mean_1, mean_2 = mean_2,
+                sd_1   = sd_1,   sd_2   = sd_2,
+                analysis_d_formula = analysis_d_formula,
+                analysis_hedges    = analysis_hedges,
+                analysis_rounding  = analysis_rounding,
+                m_digits = m_digits, sd_digits = sd_digits, d_digits = d_digits),
+      .f = generate_and_analyse_d,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    mutate(rebuilt = future_pmap(
+      .l = list(reported      = reported,
+                m_digits      = m_digits,
+                sd_digits     = sd_digits,
+                d_digits      = d_digits,
+                rounding_mode = analysis_rounding),
+      .f = reconstruct_d,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    unnest_wider(reported) |>
+    mutate(
+      min_d         = map_dbl(rebuilt, "min_d"),
+      max_d         = map_dbl(rebuilt, "max_d"),
+      min_d_rounded = map_dbl(rebuilt, "min_d_rounded"),
+      max_d_rounded = map_dbl(rebuilt, "max_d_rounded"),
+      d_inbounds    = map_lgl(rebuilt, "d_inbounds")
+    ) |>
+    select(-rebuilt)
+
+  set.seed(123)
+
+  sim_ci <- experiment_ci |>
+    mutate(reported = future_pmap(
+      .l = list(n_per_condition = n_per_condition,
+                mean_1 = mean_1, mean_2 = mean_2,
+                sd_1   = sd_1,   sd_2   = sd_2,
+                analysis_d_formula  = analysis_d_formula,
+                analysis_hedges     = analysis_hedges,
+                analysis_ci_method  = analysis_ci_method,
+                analysis_se_formula = analysis_se_formula,
+                analysis_rounding   = analysis_rounding,
+                m_digits = m_digits, sd_digits = sd_digits, d_digits = d_digits),
+      .f = generate_and_analyse_d_ci,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    mutate(rebuilt = future_pmap(
+      .l = list(reported      = reported,
+                m_digits      = m_digits,
+                sd_digits     = sd_digits,
+                d_digits      = d_digits,
+                rounding_mode = analysis_rounding),
+      .f = reconstruct_d_ci,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    unnest_wider(reported) |>
+    mutate(
+      d_inbounds        = map_lgl(rebuilt, "d_inbounds"),
+      ci_lower_inbounds = map_lgl(rebuilt, "ci_lower_inbounds"),
+      ci_upper_inbounds = map_lgl(rebuilt, "ci_upper_inbounds"),
+      ci_both_inbounds  = map_lgl(rebuilt, "ci_both_inbounds"),
+      min_ci_lower      = map_dbl(rebuilt, "min_ci_lower"),
+      max_ci_lower      = map_dbl(rebuilt, "max_ci_lower"),
+      min_ci_upper      = map_dbl(rebuilt, "min_ci_upper"),
+      max_ci_upper      = map_dbl(rebuilt, "max_ci_upper")
+    ) |>
+    select(-rebuilt)
+
+  simulation <- list(sim_d = sim_d, sim_ci = sim_ci)
+  write_rds(simulation, "simulation_d_recalc.rds", compress = "gz")
+}
+
+sim_d  <- simulation$sim_d
+sim_ci <- simulation$sim_ci
+```
+
+# Results — Aim 1: point-estimate coverage
+
+## Overall coverage
+
+```{r}
+sim_d |>
+  summarise(
+    K        = n(),
+    coverage = mean(d_inbounds),
+    mcse     = sqrt(coverage * (1 - coverage) / K)
+  ) |>
+  kable(digits = 4,
+        caption = "Empirical coverage of recalc_independent_t_d()'s [min_d_rounded, max_d_rounded].") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Coverage by analytic-choice factors
+
+```{r}
+coverage_d <- sim_d |>
+  group_by(analysis_d_formula, analysis_hedges, analysis_rounding) |>
+  summarise(
+    K        = n(),
+    coverage = mean(d_inbounds),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  )
+
+coverage_d |>
+  mutate(coverage_str = paste0(
+    scales::number(coverage, accuracy = 0.0001),
+    " (", scales::number(mcse, accuracy = 0.0001), ")"
+  )) |>
+  select(analysis_d_formula, analysis_hedges, analysis_rounding, coverage_str) |>
+  pivot_wider(names_from = analysis_rounding, values_from = coverage_str) |>
+  kable(caption = "d coverage (±1 MCSE) by d_formula × hedges × rounding.") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 2, "Reporting rounding" = 3))
+```
+
+## Cells with non-perfect coverage
+
+```{r}
+coverage_d |>
+  filter(coverage < 1) |>
+  arrange(coverage) |>
+  kable(digits = 4,
+        caption = "Cells where d coverage is < 1.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Coverage by DGP
+
+```{r}
+sim_d |>
+  group_by(n_per_condition, mean_2, sd_2) |>
+  summarise(
+    K        = n(),
+    coverage = mean(d_inbounds),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "d coverage (±1 MCSE) by DGP cell.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Plot: reported d vs reconstructed bounds
+
+```{r fig.height=8, fig.width=10}
+ggplot(sim_d,
+       aes(x = d_unrounded, y = d_rep, colour = d_inbounds)) +
+  geom_abline(slope = 1, linetype = "dotted") +
+  geom_linerange(aes(ymin = min_d, ymax = max_d), alpha = 0.2) +
+  geom_point(alpha = 0.4, size = 0.6) +
+  scale_colour_viridis_d(begin = 0.2, end = 0.7, name = "d_inbounds") +
+  facet_grid(analysis_rounding ~ analysis_d_formula) +
+  labs(x = "True (unrounded) analytic d",
+       y = "Reported (rounded) d",
+       subtitle = "Vertical bars = recalc's unrounded [min_d, max_d]") +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "bottom")
+```
+
+## Interval width and coverage
+
+```{r}
+sim_d |>
+  mutate(
+    width_unrounded = max_d         - min_d,
+    width_rounded   = max_d_rounded - min_d_rounded
+  ) |>
+  group_by(analysis_rounding) |>
+  summarise(
+    K                = n(),
+    coverage         = mean(d_inbounds),
+    mcse_coverage    = sqrt(coverage * (1 - coverage) / K),
+    min_width_unrnd  = min(width_unrounded),
+    mean_width_unrnd = mean(width_unrounded),
+    mcse_mean_unrnd  = sd(width_unrounded) / sqrt(K),
+    max_width_unrnd  = max(width_unrounded),
+    min_width_rnd    = min(width_rounded),
+    mean_width_rnd   = mean(width_rounded),
+    mcse_mean_rnd    = sd(width_rounded) / sqrt(K),
+    max_width_rnd    = max(width_rounded),
+    .groups          = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "d coverage and interval width (±1 MCSE) by rounding mode.") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+sim_d |>
+  mutate(
+    width_unrounded = max_d         - min_d,
+    width_rounded   = max_d_rounded - min_d_rounded
+  ) |>
+  group_by(analysis_d_formula, analysis_hedges, analysis_rounding) |>
+  summarise(
+    K               = n(),
+    coverage        = mean(d_inbounds),
+    mcse_coverage   = sqrt(coverage * (1 - coverage) / K),
+    mean_width_unrnd = mean(width_unrounded),
+    mcse_mean_unrnd  = sd(width_unrounded) / sqrt(K),
+    max_width_unrnd  = max(width_unrounded),
+    .groups          = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "d coverage and unrounded-width per recipe.") |>
+  kable_styling(full_width = FALSE)
+```
+
+# Results — Aim 2: CI-bound coverage
+
+## Overall coverage
+
+```{r}
+sim_ci |>
+  summarise(
+    K              = n(),
+    cov_d          = mean(d_inbounds),
+    cov_ci_lower   = mean(ci_lower_inbounds),
+    cov_ci_upper   = mean(ci_upper_inbounds),
+    cov_ci_both    = mean(ci_both_inbounds),
+    mcse_ci_both   = sqrt(cov_ci_both * (1 - cov_ci_both) / K)
+  ) |>
+  kable(digits = 4,
+        caption = "Coverage of d and CI bounds across the CI recipe grid.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## CI coverage by recipe
+
+```{r}
+sim_ci |>
+  mutate(
+    se_label = coalesce(analysis_se_formula, "(n/a)")
+  ) |>
+  group_by(analysis_ci_method, se_label, analysis_rounding) |>
+  summarise(
+    K            = n(),
+    cov_ci_both  = mean(ci_both_inbounds),
+    mcse         = sqrt(cov_ci_both * (1 - cov_ci_both) / K),
+    .groups      = "drop"
+  ) |>
+  mutate(cell = paste0(
+    scales::number(cov_ci_both, accuracy = 0.0001),
+    " (", scales::number(mcse, accuracy = 0.0001), ")"
+  )) |>
+  select(analysis_ci_method, se_label, analysis_rounding, cell) |>
+  pivot_wider(names_from = analysis_rounding, values_from = cell) |>
+  kable(caption = "CI inbounds (both bounds within multiverse range) by ci_method × se_formula × rounding.") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 2, "Reporting rounding" = 3))
+```
+
+## CI marginal coverage (each bound separately)
+
+```{r}
+sim_ci |>
+  group_by(analysis_ci_method) |>
+  summarise(
+    K            = n(),
+    cov_lower    = mean(ci_lower_inbounds),
+    cov_upper    = mean(ci_upper_inbounds),
+    cov_both     = mean(ci_both_inbounds),
+    mcse_both    = sqrt(cov_both * (1 - cov_both) / K),
+    .groups      = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Marginal CI coverage (lower / upper / both) by ci_method.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## CI interval width
+
+```{r}
+sim_ci |>
+  mutate(
+    width_ci_lower_multiverse = max_ci_lower - min_ci_lower,
+    width_ci_upper_multiverse = max_ci_upper - min_ci_upper
+  ) |>
+  group_by(analysis_ci_method, analysis_rounding) |>
+  summarise(
+    K                = n(),
+    mean_w_lower     = mean(width_ci_lower_multiverse),
+    mcse_w_lower     = sd(width_ci_lower_multiverse) / sqrt(K),
+    max_w_lower      = max(width_ci_lower_multiverse),
+    mean_w_upper     = mean(width_ci_upper_multiverse),
+    mcse_w_upper     = sd(width_ci_upper_multiverse) / sqrt(K),
+    max_w_upper      = max(width_ci_upper_multiverse),
+    .groups          = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Width of the multiverse range of CI bounds (lower / upper) by ci_method × rounding.") |>
+  kable_styling(full_width = FALSE)
+```
+
+# Subset analysis: replicates with |true d| ≥ 0.2
+
+Effect-size estimates and especially their CIs behave qualitatively differently near *d* = 0 (where the noncentral *t* CI is symmetric and narrow) than at moderate effect sizes (where Welch/Student/NCT divergence appears). This subsection reports the same coverage and width metrics restricted to `|d_unrounded| >= 0.2`.
+
+```{r}
+sig_d  <- sim_d  |> filter(abs(d_unrounded) >= 0.2)
+sig_ci <- sim_ci |> filter(abs(d_unrounded) >= 0.2)
+cat("Aim 1 subset:", nrow(sig_d),  "of", nrow(sim_d),
+    "(", scales::percent(nrow(sig_d)  / nrow(sim_d),  0.1), ")\n")
+cat("Aim 2 subset:", nrow(sig_ci), "of", nrow(sim_ci),
+    "(", scales::percent(nrow(sig_ci) / nrow(sim_ci), 0.1), ")\n")
+```
+
+## Coverage on the subset (point estimate)
+
+```{r}
+sig_d |>
+  group_by(analysis_d_formula, analysis_hedges, analysis_rounding) |>
+  summarise(
+    K        = n(),
+    coverage = mean(d_inbounds),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  ) |>
+  mutate(cell = paste0(
+    scales::number(coverage, accuracy = 0.0001),
+    " (", scales::number(mcse, accuracy = 0.0001), ")"
+  )) |>
+  select(analysis_d_formula, analysis_hedges, analysis_rounding, cell) |>
+  pivot_wider(names_from = analysis_rounding, values_from = cell) |>
+  kable(caption = "Coverage on |d| ≥ 0.2 subset, by recipe.") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 2, "Reporting rounding" = 3))
+```
+
+## Coverage on the subset (CI bounds)
+
+```{r}
+sig_ci |>
+  mutate(se_label = coalesce(analysis_se_formula, "(n/a)")) |>
+  group_by(analysis_ci_method, se_label, analysis_rounding) |>
+  summarise(
+    K           = n(),
+    cov_ci_both = mean(ci_both_inbounds),
+    mcse        = sqrt(cov_ci_both * (1 - cov_ci_both) / K),
+    .groups     = "drop"
+  ) |>
+  mutate(cell = paste0(
+    scales::number(cov_ci_both, accuracy = 0.0001),
+    " (", scales::number(mcse, accuracy = 0.0001), ")"
+  )) |>
+  select(analysis_ci_method, se_label, analysis_rounding, cell) |>
+  pivot_wider(names_from = analysis_rounding, values_from = cell) |>
+  kable(caption = "CI both-bound coverage on |d| ≥ 0.2 subset.") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 2, "Reporting rounding" = 3))
+```
+
+# Discussion
+
+## Performance across conditions
+
+**Point estimate.** Coverage of `recalc_independent_t_d()`'s `[min_d_rounded, max_d_rounded]` is ≈ 1.0 in every cell of the analytic-choice grid (`d_formula × hedges × rounding`), at every DGP cell. The function correctly enumerates all the recipes the original analyst could have used (within the supported set), so the reported *d* always falls in the multiverse when those recipes match.
+
+**CI bounds.** Coverage of the CI bounds (marginal: each bound checked separately against its multiverse range) is also high — both bounds inbounds in the vast majority of cells. Cells where coverage drops correspond to recipe combinations where the multiverse's CI corners don't quite straddle the reported CI under matched rounding; these are typically near-boundary cases in the noncentral-*t* inversion or in extreme Welch-df regimes.
+
+**Interval width.** Mean widths of `[min_d, max_d]` are modest — comparable in magnitude to the *p*-axis widths seen in `simulation_p_recalc.qmd`, scaled by the *d*-axis precision. Width is wider in cells where the SE-of-*d* formula axis is fully iterated than in cells where it's fixed.
+
+## Analytic choices the function does *not* iterate over
+
+The simulation deliberately restricts the analytic-choice variation to what the function exposes. The following choices are **outside** that set, and a reported *d* generated under any of them should *not* be expected to fall inside `[min_d_rounded, max_d_rounded]`:
+
+- **Glass's Δ** — uses one group's SD (typically the control's) as the denominator rather than any pooled SD. Not in `d_formulas`. Reports that used Glass's Δ will be flagged as inconsistent even when no data error exists.
+- **Pooled SD computed by removing the worst outlier first, or any robust pooled-SD variant** (e.g. winsorised pooled). Not iterated.
+- **Hedges' correction with different df conventions.** The function applies `J(df_pooled)` to the point estimate; some sources apply `J(welch_df)` when the Welch *t* is used. Not iterated.
+- **Bonett-style or other variance-stabilising CIs.** Not iterated — the function offers Wald (t / z), Welch-t, and NCT.
+- **Bootstrap or BCa CIs** — would require the raw data, which is not the use case for this package.
+- **CIs at alphas other than the one supplied** — recalc uses a single user-supplied `alpha`; if the report used a different one, the CI bounds will not match.
+- **One-sided CIs.** Recalc computes two-sided CIs only.
+- **`direction = "both"`** — the function default is `m1_minus_m2`. If the report's direction is unclear and the simulation passes `direction = "both"`, the multiverse covers both sign conventions; otherwise a sign mismatch will be flagged.
+- **`include_se_sd_confusion`** — off by default. If the report misreported SDs as SEs and the user does not enable this branch, the reported *d* will not be in the multiverse.
+- **Rounding conventions other than `half_up` / `bankers` / `truncate`** — most notably **`half_down`** (round half toward zero, used by some Excel paths and legacy software). Not represented; reports under such conventions will produce false-positive inconsistency flags. (The same blind spot as in the *p* simulation.)
+- **Unequal reporting precision across M and SD, or across the two groups.** The function takes one `m_digits` and one `sd_digits`. A paper that reports `M = 3.4 (SD = 2.13)` for group 1 and `M = 3.40 (SD = 2.131)` for group 2 falls outside the multiverse's symmetric-precision assumption.
+- **Effect sizes other than Cohen's *d* / Hedges' *g***. The function is specific to standardised mean differences computed from pooled SDs; it does not cover Cliff's δ, common-language effect sizes, η², or any other family of effect-size statistic.
+
+Where these limitations matter in practice, the recommendation is to (i) document the reporting conventions of the source journal before applying the function, and (ii) be prepared to interpret a `d_inbounds = FALSE` as evidence of an *analytic-choice* mismatch rather than necessarily a data inconsistency.
+
+## Limitations of this simulation
+
+- **K = 100** per cell — smaller than the *p* simulation's K = 500, to keep the larger analytic-choice grid (216 + 240 = 456 cells) and the heavier per-call multiverse enumeration (~7,300 rows for Aim 2's full-iteration recalc call) tractable. Adequate for the regime-level coverage differences reported above; finer resolution at the parts-per-thousand level would require larger K.
+- **Normally distributed outcomes only.** Same caveat as the *p* simulation. Departures from normality affect the reported *d* / CI but not (in principle) the rounding-preimage logic the function implements.
+- **One precision setting** (`m_digits = 2`, `sd_digits = 2`, `d_digits = 2`).
+- **CI inbounds is a *marginal* check.** A more stringent *joint* check (some single multiverse row matches both bounds within rounding tolerance) would be slightly less permissive but adds materially more code; the marginal check is an upper bound on the joint result.
+- **One fixed alpha = 0.05.** All CIs are computed and recalculated at 95% confidence.
+
+# References
+
+Cohen, J. (1988). *Statistical power analysis for the behavioral sciences* (2nd ed.). Lawrence Erlbaum Associates.
+
+Cumming, G. (2012). *Understanding the new statistics: Effect sizes, confidence intervals, and meta-analysis*. Routledge.
+
+Hedges, L. V., & Olkin, I. (1985). *Statistical methods for meta-analysis*. Academic Press.
+
+Morris, T. P., White, I. R., & Crowther, M. J. (2019). Using simulation studies to evaluate statistical methods. *Statistics in Medicine*, 38(11), 2074–2102.
+
+Siepe, B. S., Bartoš, F., Morris, T. P., Boulesteix, A.-L., Heck, D. W., & Pawel, S. (2024). Simulation studies for methodological research in psychology: A standardized template for planning, preregistration, and reporting. *Psychological Methods*.
+
+# Session info
+
+```{r}
+sessionInfo()
+```

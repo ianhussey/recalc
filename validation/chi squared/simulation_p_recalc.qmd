@@ -1,0 +1,1121 @@
+---
+title: "Validation of `recalc::recalc_chisq_p()` via simulation"
+author: "Ian Hussey"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc_float: true
+    code-fold: true
+    code-overflow: wrap
+    code-tools: true
+    warning: false
+    df-print: kable
+    theme:
+      light: cosmo
+      dark: darkly
+    highlight-style:
+      light: breeze
+      dark: dracula
+    include-in-header:
+      text: |
+        <style>
+          .kable-table table { width: 70%; margin: 0 auto; }
+          .quarto-color-scheme-toggle::after { content: " Dark mode"; font-family: sans-serif; font-size: 0.85em; }
+        </style>
+---
+
+```{r, include=FALSE}
+# settings: hidden from rendered file
+# disable messages and warnings in rendered files
+knitr::opts_chunk$set(message = FALSE,
+                      warning = FALSE)
+
+# disable scientific numbers in output
+options(scipen = 999)
+```
+
+# Introduction
+
+<!-- Specify the simulation that will be run here. -->
+
+This introduction is structured following the ADEMP framework (Aims, Data-generating process, Estimands, Methods, Performance) as described by Morris, White, and Crowther (2019) and operationalised for psychology by Siepe et al. (2024).
+
+## Project description
+
+<!-- Provide a brief description of the project, including any empirical examples. -->
+
+`recalc::recalc_chisq_p()` claims to recover the multiverse of *p*-values for a test of association in a 2×2 contingency table that is *compatible* with a reported table — given a stated decimal precision and rounding convention. Its purpose is specifically to absorb the **between-package analytic flexibility** of categorical tests: the same 2×2 table yields materially different *p*-values depending on which test a given statistical package computed (and reported) by default.
+
+The function exposes a `p_methods` axis spanning **nine** tests. The table below states what each computes and the statistical software / default output that tends to emit it — i.e. the production pathway a reported *p* is most likely to have come from:
+
+| `p_methods` value | test | software / default output it reproduces |
+|---|---|---|
+| `pearson` | Pearson χ², no continuity correction | Stata `tabulate, chi2`; SPSS "Pearson Chi-Square" row; SAS "Chi-Square" row; R `chisq.test(correct = FALSE)`; gtsummary ≥1.3.6; `= pooled two-proportion z²` |
+| `yates` | Pearson χ² with Yates' continuity correction (2×2) | R `chisq.test()` / `prop.test()` **default**; SPSS "Continuity Correction" row; `tableone` default; gtsummary <1.3.6 |
+| `likelihood_ratio` | likelihood-ratio G² | SPSS / SAS "Likelihood Ratio" row; `DescTools::GTest` |
+| `n1_chisq` | N−1 / Campbell-Richardson, (N−1)/N × Pearson | SPSS "Linear-by-Linear Association" (2×2); SAS `PROC FREQ` single-stratum Mantel-Haenszel |
+| `fisher` | Fisher's exact, two-sided, *minlike* convention | SPSS / SAS / R `fisher.test()` default; gtsummary auto-fallback when any expected cell <5 |
+| `fisher_central` | Fisher's exact, two-sided, *central* (equal-tailed) convention (2×2) | `exact2x2(tsmethod = "central")`; the "double the one-sided" path of some SPSS / Prism versions |
+| `fisher_midp` | central two-sided mid-*p* adjusted Fisher (2×2) | StatXact; OpenEpi; `epitools` |
+| `fisher_midp_sas` | SAS `PROC FREQ` exact mid-*p* (2×2) | SAS `PROC FREQ` `EXACT` mid-*p* |
+| `wald_z` | unpooled (Wald) two-proportion *z* (2×2) | hand-rolled / online calculators; methods sections reporting a "z-test" (≠ Pearson) |
+
+(For tables larger than 2×2 the 2×2-only methods — `yates`, `fisher_central`, `fisher_midp`, `fisher_midp_sas`, `wald_z` — are dropped; `n1_chisq` is retained as scaled Pearson.)
+
+It additionally exposes an **input-rounding** axis: when a 2×2 table is reported only as rounded proportions/percentages plus group totals, the underlying integer counts are not uniquely determined, and the function enumerates every integer table consistent with the reported, rounded proportions (via the package-wide rounding-preimage machinery; see `recalc_rounding`).
+
+This simulation asks: **given a simulated 2×2 table, and a *p*-value reported under one specific test method (i.e. the value a particular statistical package would have produced), does that *p*-value fall inside `recalc_chisq_p()`'s multiverse range when the multiverse iterates over the method axis?** And, in the input-rounding regime: **when only rounded proportions are reported, does the reconstructed multiverse still contain the *p*-value computed from the true table?**
+
+Chi-square tests of association are inherently two-sided, so — unlike the *t*-test validation — there is no `alternative` / `direction` axis here. The cell counts are exact integers, so input rounding enters only through the proportion-reconstruction route.
+
+## Prior related work
+
+<!-- Did any contributors already conduct related simulation studies on this specific question, including any preliminary simulations? -->
+
+The companion simulation `validation/t-test/simulation_p_recalc.qmd` validates the continuous-data (`recalc_independent_t_p()`) function with the same coverage logic. The `reappraised` package (Bolland et al.) implements several of the same categorical tests — in particular it reverse-engineered the SAS `PROC FREQ` mid-*p* — and is used here as an external reference point for the `fisher_midp_sas` method.
+
+## Aims
+
+<!-- What is the aim of the simulation study? Be specific about the statistical task. -->
+
+The statistical task is the **calibration of an interval estimator**: `recalc_chisq_p()` returns a `[min_p, max_p]` interval and an `inbounds` flag against a reported *p*-value. The aims are:
+
+1. **Numerical parity** — confirm that each per-method *p*-value `recalc_chisq_p()` computes is identical (to floating-point tolerance) to an *independent* implementation of that method: base R for Pearson / Yates / Fisher; closed-form G² for the likelihood ratio; (N−1)/N × Pearson for the N−1 χ²; brute-force hypergeometric enumeration for the central Fisher and the central mid-*p*; the closed-form unpooled *z* for the Wald test; and the `reappraised`/SAS factorial algorithm for the SAS mid-*p*.
+2. **Validate coverage** — when the multiverse iterates over the method axis, the *p*-value produced by *any* of those methods should fall inside `[min_p, max_p]`. Coverage should be ≈ 1 in every cell (exact-counts regime).
+3. **Validate the input-rounding route** — when a table is reported only as rounded proportions, the reconstructed multiverse should still contain the *p*-value computed from the true table. Coverage should be ≈ 1 (proportion-reconstruction regime).
+4. **Document diagnosticity / blind spots** — a *restricted* multiverse that omits the method which produced the report (here, Pearson-only) should *fail* to contain the other methods' *p*-values. This confirms the multiverse is informative rather than trivially wide.
+
+## Data-Generating Process
+
+### DGP specification approach
+
+<!-- How will the parameters for the DGP be specified? -->
+
+The DGP is **fully parametric**. For each replication, a 2×2 table is generated by drawing the number of "successes" (outcome level 1) in each of two independent groups from a Binomial:
+
+$$X_j \overset{\text{ind}}{\sim} \text{Binomial}(n_j,\, \pi_j), \qquad j \in \{1, 2\},$$
+
+and forming the table with rows = groups and columns = (success, failure). Small group sizes and probabilities away from the extremes produce sparse tables with low expected cell counts, which is exactly the regime in which the asymptotic (Pearson / LR), exact (Fisher), and mid-*p* methods diverge most — the regime the `p_methods` multiverse exists to cover.
+
+### DGP factors
+
+1. `n_per_group` — common per-group sample size.
+2. `pi_1` — success probability in group 1.
+3. `delta` — added to `pi_1` to give group 2's probability (`pi_2 = pi_1 + delta`); `delta = 0` is the true null.
+
+### Factor values and settings
+
+**Factor values:**
+
+- `n_per_group` ∈ {20, 80, 200} (sparse-exact regime → asymptotic regime).
+- `pi_1` ∈ {0.3, 0.5}.
+- `delta` ∈ {0, 0.2, 0.4} (true null, moderate, and strong association). The `0.4` level is included specifically to populate the small-*p* region: interval width depends on where on the *p*-axis the multiverse sits, so a stratified width analysis needs replicates spread across *p*, including small *p*.
+
+**Held constant:** balanced design (`n1 = n2`).
+
+### Analytic-choice factors (applied to the simulated data to produce the "reported" result)
+
+To exercise the axes that `recalc_chisq_p()` iterates over, every simulated table is also "reported" under a crossed set of analyst choices. These are not properties of the DGP; they are choices the original analyst / their software made.
+
+1. `analysis_method` ∈ {`"pearson"`, `"yates"`, `"likelihood_ratio"`, `"n1_chisq"`, `"fisher"`, `"fisher_central"`, `"fisher_midp"`, `"fisher_midp_sas"`, `"wald_z"`} — which of `recalc_chisq_p()`'s nine tests (i.e. which package's default) produced the reported *p*.
+2. `analysis_rounding` ∈ {`"half_up"`, `"bankers"`, `"truncate"`} — how the reported *p*-value (and, in the proportion regime, the reported proportions) were rounded.
+
+### Reporting-precision factors
+
+The reporting precision is **swept** rather than fixed:
+
+3. `p_digits` ∈ {2, 3} — decimal places of the reported *p*-value (a coarser `p_digits` collapses more small *p*'s to a `p < 10^(-p_digits)` censored report).
+4. `prop_digits` ∈ {2, 3} — decimal places of the reported proportions used in the reconstruction regime (a coarser `prop_digits` admits more integer tables; a finer one pins the count more tightly).
+
+### Factor combination and number of conditions
+
+Fully factorial: 3 × 2 × 3 × 9 × 3 (DGP + analytic choices) × 2 × 2 (precision sweep) = **1944 unique conditions**, each replicated K times.
+
+## Estimands and Targets
+
+The target is the **per-replication truth value of "the reported *p*-value lies in `[min_p, max_p]`"**. Coverage is the proportion of replications for which this holds, evaluated in three regimes: exact-counts (full method set), proportion-reconstruction (full method set), and Pearson-only (blind-spot).
+
+## Methods and extracted quantities
+
+For each replication we (1) generate a 2×2 table; (2) compute the *true* *p*-value `p_unrounded` under `analysis_method` using an **independent** oracle (not `recalc`); (3) round it to `p_digits` under `analysis_rounding`, using `p < 10^(-p_digits)` (`p_operator = "less_than"`) when it collapses to 0, else `p = p_rep`; (4) call `recalc_chisq_p()` four ways and record `p_inbounds`:
+
+- **exact counts, all methods** — feed the true integer table and `p_methods = <all nine>`, `rounding = analysis_rounding`;
+- **proportion reconstruction, all methods** — feed only the rounded proportions + totals (`prop1`, `prop2`, `n1`, `n2`, `prop_digits`), `rounding = analysis_rounding`;
+- **proportion reconstruction with default `rounding = "either"`** — the rounding-mismatch sensitivity (expected to under-cover `truncate` reports);
+- **exact counts, Pearson only** — the blind-spot probe.
+
+## Performance and Uncertainty
+
+### Performance measures
+
+The primary measure is **empirical coverage** — the proportion of replications in a cell for which the reported *p* falls inside the multiverse interval:
+
+$$\widehat{C} = \frac{1}{K} \sum_{k=1}^{K} \mathbb{1}\{p_k \in [\text{min}_k, \text{max}_k]\}.$$
+
+We also report **interval width** (`max_p - min_p`, mean and max per cell, with its Monte-Carlo standard error) to characterise how loose the multiverse is, and the **distribution of reconstructed-table-set sizes** for the proportion regime.
+
+### Monte Carlo uncertainty
+
+Binomial MCSE for the coverage proportion:
+
+$$\widehat{\text{MCSE}}(\widehat{C}) = \sqrt{\frac{\widehat{C}(1 - \widehat{C})}{K}}.$$
+
+For the mean interval width we use $\widehat{\text{MCSE}} = \text{sd(width)}/\sqrt{K}$. At $K = 500$ and coverage near 1.0 the coverage MCSE is essentially 0; at coverage = 0.5 the worst-case MCSE is 0.022.
+
+### Number of simulation repetitions
+
+K = 500 per condition for the full run (the file ships set to a smaller K for fast iteration; see the experiment grid). Coverage near the boundary value of 1.0 is the regime of interest, where the MCSE collapses; K = 500 is sufficient to detect coverage gaps of order 1% with several MCSE of headroom.
+
+### Non-convergence and missing values
+
+The only failure mode is a **degenerate table** — an empty row or column margin (e.g. zero successes in both groups), for which every test is undefined. These are rare under the Binomial DGP at the sample sizes used, yield `NA`, and are excluded case-wise per cell. `recalc_chisq_p()` and the oracles are otherwise closed-form (Fisher/mid-*p* are exact enumerations), so no other missingness arises.
+
+### Interpretation of performance measures
+
+Targets: $\widehat{C} = 1$ for the two full-method regimes (exact counts and proportion reconstruction) under **matched** rounding; $\widehat{C} < 1$ off the diagonal in the Pearson-only regime (the blind-spot probe); and, in the rounding-mismatch sensitivity, $\widehat{C} = 1$ for `half_up` / `bankers` reports but $\widehat{C} < 1$ for `truncate` reports when `recalc` is called with the default `rounding = "either"`. Any matched-rounding cell with coverage < 1 by more than two MCSEs is a candidate bug or gap in the multiverse.
+
+# Methods
+
+## Dependencies
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(furrr)
+library(tibble)
+library(readr)
+library(ggplot2)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(roundwork)
+
+# devtools::install_github("ianhussey/recalc")
+library(recalc)
+
+# Parallelisation — L'Ecuyer-CMRG stream via furrr_options(seed = TRUE).
+plan(multisession, workers = future::availableCores())
+```
+
+## Functions
+
+### Independent oracles (ground-truth p per method, computed without `recalc`)
+
+These deliberately use a *different* implementation path from `recalc`'s internals, so that agreement is meaningful:
+
+- Pearson / Yates / Fisher use base R `chisq.test()` / `fisher.test()`.
+- The likelihood ratio uses the closed-form G² definition.
+- The N−1 χ² uses (N−1)/N × the base-R Pearson statistic.
+- The central Fisher and the central mid-*p* are obtained by *summation over the full hypergeometric support* (vs `recalc`'s `phyper`-based tails).
+- The unpooled Wald *z* uses the closed-form two-proportion statistic.
+- The SAS mid-*p* uses the `reappraised` package's factorial-product algorithm verbatim (vs `recalc`'s `dhyper` + `fisher.test`).
+
+```{r}
+# G^2 likelihood-ratio chi-square p-value
+oracle_lr <- function(tab) {
+  N <- sum(tab)
+  if (any(rowSums(tab) == 0) || any(colSums(tab) == 0)) return(NA_real_)
+  E  <- outer(rowSums(tab), colSums(tab)) / N
+  nz <- tab > 0
+  G  <- 2 * sum(tab[nz] * log(tab[nz] / E[nz]))
+  df <- (nrow(tab) - 1L) * (ncol(tab) - 1L)
+  pchisq(G, df, lower.tail = FALSE)
+}
+
+# Central two-sided mid-p by explicit summation over the hypergeometric support
+oracle_midp_central <- function(tab) {
+  r1 <- sum(tab[1, ]); r2 <- sum(tab[2, ]); c1 <- sum(tab[, 1]); N <- r1 + r2
+  if (r1 == 0 || r2 == 0 || c1 == 0 || c1 == N) return(NA_real_)
+  a       <- tab[1, 1]
+  support <- max(0, c1 - r2):min(r1, c1)
+  probs   <- dhyper(support, m = r1, n = r2, k = c1)
+  p_obs   <- dhyper(a,       m = r1, n = r2, k = c1)
+  lower   <- sum(probs[support <= a])   # P(X <= a)
+  upper   <- sum(probs[support >= a])   # P(X >= a)
+  min(1, 2 * min(lower - 0.5 * p_obs, upper - 0.5 * p_obs))
+}
+
+# SAS PROC FREQ mid-p, using reappraised's factorial-product algorithm verbatim
+# (Bolland et al., reappraised::pval_cat_fn, "midp.sas"). 100000 scaling guards
+# against intermediate overflow exactly as in the original.
+oracle_midp_sas <- function(tab) {
+  pf <- tryCatch(suppressWarnings(fisher.test(tab)$p.value),
+                 error = function(e) NA_real_)
+  if (is.na(pf)) return(NA_real_)
+  d1 <- tab[1, 1]; d2 <- tab[1, 2]; d3 <- tab[2, 1]; d4 <- tab[2, 2]
+  d5 <- d1 + d2 + d3 + d4
+  num   <- c(seq(max(d1 + d2, 1), 1, -1), seq(max(d3 + d4, 1), 1, -1),
+             seq(max(d1 + d3, 1), 1, -1), seq(max(d2 + d4, 1), 1, -1))
+  denom <- c(seq(max(d5, 1), 1, -1), seq(max(d1, 1), 1, -1), seq(max(d2, 1), 1, -1),
+             seq(max(d3, 1), 1, -1), seq(max(d4, 1), 1, -1))
+  len <- length(num) - length(denom)
+  if (len > 0) denom <- c(denom, rep(1, len))
+  if (len < 0) num   <- c(num,   rep(1, abs(len)))
+  num   <- sort(num,   decreasing = TRUE)
+  denom <- sort(denom, decreasing = TRUE)
+  p <- 100000
+  for (j in seq_along(denom)) p <- p * num[j] / denom[j]
+  p <- p / 100000
+  round(pf - 0.5 * p, 9)
+}
+
+# N-1 (Campbell) chi-square: (N-1)/N times the uncorrected Pearson statistic.
+oracle_n1 <- function(tab) {
+  if (any(rowSums(tab) == 0) || any(colSums(tab) == 0)) return(NA_real_)
+  N  <- sum(tab)
+  x2 <- suppressWarnings(chisq.test(tab, correct = FALSE)$statistic)
+  df <- (nrow(tab) - 1L) * (ncol(tab) - 1L)
+  pchisq((N - 1) / N * x2, df, lower.tail = FALSE)
+}
+
+# Central (equal-tailed) two-sided Fisher exact p, via summation over the
+# hypergeometric support (independent of recalc's phyper-based version).
+oracle_fisher_central <- function(tab) {
+  r1 <- sum(tab[1, ]); r2 <- sum(tab[2, ]); c1 <- sum(tab[, 1]); N <- r1 + r2
+  if (r1 == 0 || r2 == 0 || c1 == 0 || c1 == N) return(NA_real_)
+  a <- tab[1, 1]
+  support <- max(0, c1 - r2):min(r1, c1)
+  probs   <- dhyper(support, m = r1, n = r2, k = c1)
+  min(1, 2 * min(sum(probs[support <= a]), sum(probs[support >= a])))
+}
+
+# Unpooled (Wald) two-proportion z, two-sided.
+oracle_wald_z <- function(tab) {
+  n1 <- sum(tab[1, ]); n2 <- sum(tab[2, ])
+  if (n1 == 0 || n2 == 0) return(NA_real_)
+  p1 <- tab[1, 1] / n1; p2 <- tab[2, 1] / n2
+  se <- sqrt(p1 * (1 - p1) / n1 + p2 * (1 - p2) / n2)
+  if (!is.finite(se) || se == 0) return(NA_real_)
+  2 * pnorm(-abs((p1 - p2) / se))
+}
+
+oracle_p <- function(tab, method) {
+  out <- tryCatch(
+    suppressWarnings(switch(
+      method,
+      pearson          = chisq.test(tab, correct = FALSE)$p.value,
+      yates            = chisq.test(tab, correct = TRUE)$p.value,
+      likelihood_ratio = oracle_lr(tab),
+      n1_chisq         = oracle_n1(tab),
+      fisher           = fisher.test(tab)$p.value,
+      fisher_central   = oracle_fisher_central(tab),
+      fisher_midp      = oracle_midp_central(tab),
+      fisher_midp_sas  = oracle_midp_sas(tab),
+      wald_z           = oracle_wald_z(tab),
+      stop("unknown method")
+    )),
+    error = function(e) NA_real_
+  )
+  as.numeric(out)
+}
+```
+
+### Data-generating process
+
+```{r}
+generate_table <- function(n_per_group, pi_1, pi_2) {
+  s1 <- rbinom(1, n_per_group, pi_1)
+  s2 <- rbinom(1, n_per_group, pi_2)
+  matrix(c(s1, n_per_group - s1,
+           s2, n_per_group - s2),
+         nrow = 2, byrow = TRUE)   # rows = groups; cols = (success, failure)
+}
+```
+
+### Analysis (compute the "reported" p under one method + rounding recipe)
+
+```{r}
+# Apply a rounding function from {roundwork} (and base bankers' rounding).
+apply_rounding <- function(x, digits, rounding) {
+  switch(
+    rounding,
+    half_up   = roundwork::round_up(x,    digits),
+    half_down = roundwork::round_down(x,  digits),
+    bankers   = round(x, digits),                  # base R 'round' is bankers
+    truncate  = roundwork::round_trunc(x, digits),
+    stop("Unknown rounding mode: ", rounding)
+  )
+}
+
+generate_and_analyse <- function(n_per_group, pi_1, delta,
+                                 analysis_method, analysis_rounding,
+                                 p_digits, prop_digits) {
+  pi_2 <- pi_1 + delta
+  tab  <- generate_table(n_per_group, pi_1, pi_2)
+
+  s1 <- tab[1, 1]; s2 <- tab[2, 1]
+  p_unrounded <- oracle_p(tab, analysis_method)
+
+  # Degenerate table (empty margin -> undefined test): flag and drop later.
+  if (is.na(p_unrounded)) {
+    return(tibble(s1, s2, n1 = n_per_group, n2 = n_per_group,
+                  p_rep = NA_real_, p_operator = NA_character_,
+                  p_unrounded = NA_real_))
+  }
+
+  p_rep <- apply_rounding(p_unrounded, p_digits, analysis_rounding)
+  if (dplyr::near(p_rep, 0)) {
+    p_rep      <- 10^(-p_digits)
+    p_operator <- "less_than"
+  } else {
+    p_operator <- "equals"
+  }
+
+  tibble(s1, s2, n1 = n_per_group, n2 = n_per_group,
+         p_rep, p_operator, p_unrounded)
+}
+```
+
+### Reconstruction (call `recalc` and extract `p_inbounds`)
+
+```{r}
+all_methods <- c("pearson", "yates", "likelihood_ratio", "n1_chisq",
+                 "fisher", "fisher_central", "fisher_midp", "fisher_midp_sas",
+                 "wald_z")
+
+# Regime 1 + blind-spot: exact integer counts.
+reconstruct_counts <- function(reported, p_digits, rounding_mode, methods) {
+  tab <- matrix(c(reported$s1, reported$n1 - reported$s1,
+                  reported$s2, reported$n2 - reported$s2),
+                nrow = 2, byrow = TRUE)
+  res <- suppressMessages(suppressWarnings(recalc_chisq_p(
+    counts     = tab,
+    p          = reported$p_rep,
+    p_digits   = p_digits,
+    p_operator = reported$p_operator,
+    p_methods  = methods,
+    rounding   = rounding_mode
+  )))
+  res$reproduced |>
+    transmute(min_p, max_p, min_p_rounded, max_p_rounded,
+              p_inbounds, p_inbounds_hull, n_method_intervals, covered_width,
+              hull_width, covered_fraction)
+}
+
+# Regime 2: report only rounded proportions; recalc reconstructs the integer
+# tables consistent with them. `report_rounding` is how the analyst rounded the
+# reported proportion (always one of half_up/bankers/truncate); `recalc_rounding`
+# is the rounding mode passed to recalc (which additionally accepts "either").
+# For the matched run the two are equal; for the rounding-mismatch sensitivity
+# the report stays under `report_rounding` while recalc is told "either".
+reconstruct_props <- function(reported, p_digits, prop_digits,
+                              report_rounding, recalc_rounding, methods) {
+  prop1 <- apply_rounding(reported$s1 / reported$n1, prop_digits, report_rounding)
+  prop2 <- apply_rounding(reported$s2 / reported$n2, prop_digits, report_rounding)
+  res <- suppressMessages(suppressWarnings(recalc_chisq_p(
+    prop1       = prop1,
+    prop2       = prop2,
+    n1          = reported$n1,
+    n2          = reported$n2,
+    prop_digits = prop_digits,
+    p           = reported$p_rep,
+    p_digits    = p_digits,
+    p_operator  = reported$p_operator,
+    p_methods   = methods,
+    rounding    = recalc_rounding
+  )))
+  # number of distinct reconstructed tables enumerated
+  n_tables <- dplyr::n_distinct(res$p_results$input_adj_counts)
+  res$reproduced |>
+    transmute(min_p, max_p, min_p_rounded, max_p_rounded, p_inbounds) |>
+    mutate(n_tables = n_tables)
+}
+```
+
+## Define experiment
+
+```{r}
+experiment_parameters <- expand_grid(
+  n_per_group       = c(20L, 80L, 200L),
+  pi_1              = c(0.3, 0.5),
+  delta             = c(0, 0.2, 0.4),
+  analysis_method   = all_methods,
+  analysis_rounding = c("half_up", "bankers", "truncate"),
+  # Reporting-precision sweep.
+  p_digits          = c(2L, 3L),
+  prop_digits       = c(2L, 3L),
+  iteration         = 1:25L # 25 for testing, e.g. 1:1000L for full sim
+) |>
+  mutate(condition = paste0(
+    "n=",      n_per_group,
+    " | pi1=", pi_1,
+    " | delta=", delta,
+    " | method=", analysis_method,
+    " | round=", analysis_rounding,
+    " | pd=", p_digits, " | propd=", prop_digits
+  ))
+```
+
+## Run simulation
+
+```{r}
+if (file.exists("simulation_p_recalc.rds")) {
+  simulation <- read_rds("simulation_p_recalc.rds")
+} else {
+
+  set.seed(42)
+
+  simulation <- experiment_parameters |>
+    mutate(reported = future_pmap(
+      .l = list(n_per_group       = n_per_group,
+                pi_1              = pi_1,
+                delta             = delta,
+                analysis_method   = analysis_method,
+                analysis_rounding = analysis_rounding,
+                p_digits          = p_digits,
+                prop_digits       = prop_digits),
+      .f = generate_and_analyse,
+      .progress = TRUE,
+      .options  = furrr_options(seed = TRUE)
+    )) |>
+    unnest_wider(reported) |>
+    # Drop degenerate tables (undefined test).
+    filter(!is.na(p_unrounded)) |>
+    nest(reported = c(s1, s2, n1, n2, p_rep, p_operator, p_unrounded)) |>
+    # Regime 1: exact counts, full method set.
+    mutate(rebuilt_counts = future_pmap(
+      .l = list(reported      = reported,
+                p_digits      = p_digits,
+                rounding_mode = analysis_rounding),
+      .f = function(reported, p_digits, rounding_mode)
+        reconstruct_counts(reported, p_digits, rounding_mode, all_methods),
+      .progress = TRUE,
+      .options  = furrr_options(seed = TRUE)
+    )) |>
+    # Regime 2: proportion reconstruction, full method set, matched rounding.
+    mutate(rebuilt_props = future_pmap(
+      .l = list(reported      = reported,
+                p_digits      = p_digits,
+                prop_digits   = prop_digits,
+                rounding_mode = analysis_rounding),
+      .f = function(reported, p_digits, prop_digits, rounding_mode)
+        reconstruct_props(reported, p_digits, prop_digits,
+                          report_rounding = rounding_mode,
+                          recalc_rounding = rounding_mode, all_methods),
+      .progress = TRUE,
+      .options  = furrr_options(seed = TRUE)
+    )) |>
+    # Regime 2 sensitivity: proportion reconstruction with recalc's DEFAULT
+    # rounding = "either" (rather than the matched analysis_rounding). For
+    # truncated reports this should under-cover, since "either" assumes a
+    # symmetric +/-1/2-ULP preimage and truncation is asymmetric.
+    mutate(rebuilt_props_either = future_pmap(
+      .l = list(reported        = reported,
+                p_digits        = p_digits,
+                prop_digits     = prop_digits,
+                report_rounding = analysis_rounding),
+      .f = function(reported, p_digits, prop_digits, report_rounding)
+        reconstruct_props(reported, p_digits, prop_digits,
+                          report_rounding = report_rounding,
+                          recalc_rounding = "either", all_methods),
+      .progress = TRUE,
+      .options  = furrr_options(seed = TRUE)
+    )) |>
+    # Blind-spot: exact counts, Pearson only.
+    mutate(rebuilt_pearson = future_pmap(
+      .l = list(reported      = reported,
+                p_digits      = p_digits,
+                rounding_mode = analysis_rounding),
+      .f = function(reported, p_digits, rounding_mode)
+        reconstruct_counts(reported, p_digits, rounding_mode, "pearson"),
+      .progress = TRUE,
+      .options  = furrr_options(seed = TRUE)
+    )) |>
+    unnest_wider(reported) |>
+    mutate(
+      min_p_counts          = map_dbl(rebuilt_counts,  "min_p"),
+      max_p_counts          = map_dbl(rebuilt_counts,  "max_p"),
+      min_p_counts_rounded  = map_dbl(rebuilt_counts,  "min_p_rounded"),
+      max_p_counts_rounded  = map_dbl(rebuilt_counts,  "max_p_rounded"),
+      inbounds_counts       = map_lgl(rebuilt_counts,  "p_inbounds"),       # union (default)
+      inbounds_counts_hull  = map_lgl(rebuilt_counts,  "p_inbounds_hull"),  # convex hull
+      n_method_intervals    = map_dbl(rebuilt_counts,  "n_method_intervals"),
+      covered_width         = map_dbl(rebuilt_counts,  "covered_width"),
+      hull_width            = map_dbl(rebuilt_counts,  "hull_width"),
+      covered_fraction      = map_dbl(rebuilt_counts,  "covered_fraction"),
+      min_p_props           = map_dbl(rebuilt_props,   "min_p"),
+      max_p_props           = map_dbl(rebuilt_props,   "max_p"),
+      inbounds_props        = map_lgl(rebuilt_props,   "p_inbounds"),
+      n_tables_props        = map_dbl(rebuilt_props,   "n_tables"),
+      inbounds_props_either = map_lgl(rebuilt_props_either, "p_inbounds"),
+      inbounds_pearson_only = map_lgl(rebuilt_pearson, "p_inbounds")
+    ) |>
+    select(-rebuilt_counts, -rebuilt_props, -rebuilt_props_either, -rebuilt_pearson)
+
+  write_rds(simulation, "simulation_p_recalc.rds", compress = "gz")
+}
+```
+
+# Results
+
+## Numerical parity: `recalc`'s per-method p vs independent oracles
+
+Before any coverage analysis, we confirm the underlying math. For a deterministic grid of 2×2 tables spanning sparse and dense regimes, we compare the *p*-value `recalc_chisq_p()` returns for each single method against the independent oracle for that method. Maximum absolute discrepancies should be at floating-point tolerance.
+
+```{r}
+parity_tables <- list(
+  matrix(c(10,  2,  3, 15), 2, byrow = TRUE),
+  matrix(c( 8,  7,  9,  6), 2, byrow = TRUE),
+  matrix(c( 1,  9, 10,  2), 2, byrow = TRUE),
+  matrix(c(20, 30, 25, 25), 2, byrow = TRUE),
+  matrix(c( 0,  5,  6,  4), 2, byrow = TRUE),
+  matrix(c(50, 50, 60, 40), 2, byrow = TRUE),
+  matrix(c( 3,  3,  3,  3), 2, byrow = TRUE),
+  matrix(c(15,  1,  2, 14), 2, byrow = TRUE)
+)
+
+recalc_method_p <- function(tab, method) {
+  r <- suppressMessages(suppressWarnings(
+    recalc_chisq_p(counts = tab, p_methods = method)))
+  if (nrow(r$p_results) == 0) return(NA_real_)
+  r$p_results$p_unrounded[r$p_results$method == method][1]
+}
+
+parity <- map_dfr(seq_along(parity_tables), function(i) {
+  tab <- parity_tables[[i]]
+  map_dfr(all_methods, function(m) {
+    tibble(
+      table     = i,
+      method    = m,
+      recalc_p  = recalc_method_p(tab, m),
+      oracle_p  = oracle_p(tab, m)
+    )
+  })
+}) |>
+  mutate(abs_diff = abs(recalc_p - oracle_p))
+
+parity |>
+  group_by(method) |>
+  summarise(max_abs_diff = max(abs_diff, na.rm = TRUE),
+            n_compared   = sum(!is.na(abs_diff)),
+            .groups = "drop") |>
+  kable(digits = 12,
+        caption = "Max |recalc p - oracle p| per method across the parity grid") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+parity |>
+  mutate(across(c(recalc_p, oracle_p), ~ signif(.x, 6))) |>
+  kable(digits = 6, caption = "Per-table parity detail") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Regime 1 — exact counts, full method multiverse
+
+The user supplies the true integer table and lets the multiverse iterate over all nine methods. The reported *p* (produced by `analysis_method`) should be reproducible in every cell. Coverage here uses the **default** `p_inbounds` — the gap-aware per-method **union** (see the "Sharper, gap-aware bounds" section); it equals 1 by construction since the reporting method is one of the nine and its own value reproduces the report.
+
+### Overall coverage
+
+```{r}
+simulation |>
+  summarise(
+    K        = n(),
+    coverage = mean(inbounds_counts),
+    mcse     = sqrt(coverage * (1 - coverage) / K)
+  ) |>
+  kable(digits = 4,
+        caption = "Exact-counts coverage using the default per-method union decision (p_inbounds).") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Coverage by reporting method × rounding
+
+```{r}
+coverage_counts <- simulation |>
+  group_by(analysis_method, analysis_rounding) |>
+  summarise(
+    K        = n(),
+    coverage = mean(inbounds_counts),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  )
+
+coverage_counts |>
+  mutate(coverage_str = paste0(
+    scales::number(coverage, accuracy = 0.0001),
+    " (", scales::number(mcse, accuracy = 0.0001), ")"
+  )) |>
+  select(analysis_method, analysis_rounding, coverage_str) |>
+  pivot_wider(names_from = analysis_rounding, values_from = coverage_str) |>
+  kable(caption = "Exact-counts coverage (±1 MCSE) by reporting method and rounding") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 1, "Reporting rounding" = 3))
+```
+
+### Cells with non-perfect coverage
+
+```{r}
+coverage_counts |>
+  filter(coverage < 1) |>
+  arrange(coverage) |>
+  kable(digits = 4, caption = "Exact-counts cells where coverage is < 1") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Coverage by DGP
+
+```{r}
+simulation |>
+  group_by(n_per_group, pi_1, delta) |>
+  summarise(
+    K        = n(),
+    coverage = mean(inbounds_counts),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  ) |>
+  kable(digits = 4, caption = "Exact-counts coverage (±1 MCSE) by DGP cell") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot: reported p vs reconstructed bounds
+
+```{r fig.height=8, fig.width=10}
+ggplot(simulation,
+       aes(x = p_unrounded, y = p_rep, colour = inbounds_counts)) +
+  geom_abline(slope = 1, linetype = "dotted") +
+  geom_linerange(aes(ymin = min_p_counts, ymax = max_p_counts), alpha = 0.3) +
+  geom_point(alpha = 0.4, size = 0.7) +
+  scale_colour_viridis_d(begin = 0.2, end = 0.7, name = "p_inbounds") +
+  facet_wrap(~ analysis_method) +
+  labs(x = "True (unrounded) p under the reporting method",
+       y = "Reported (rounded) p",
+       subtitle = "Vertical bars = recalc's full-method [min_p, max_p]") +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank(), legend.position = "bottom")
+```
+
+### Multiverse width
+
+Two widths are reported: the **union covered width** (`covered_width` — the default decision region, the total width of the per-method cells) and, for reference, the **hull width** (`hull_width` — the full min-to-max method spread). The union is the operationally relevant one (it is what `p_inbounds` uses); the hull is much larger because it fills in the between-method gaps. Both shrink as *n* grows and the methods converge.
+
+```{r}
+simulation |>
+  group_by(n_per_group) |>
+  summarise(
+    K                   = n(),
+    coverage            = mean(inbounds_counts),
+    mean_covered_width  = mean(covered_width),
+    mcse_covered_width  = sd(covered_width) / sqrt(K),
+    max_covered_width   = max(covered_width),
+    mean_hull_width     = mean(hull_width),
+    max_hull_width      = max(hull_width),
+    .groups             = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Decision-region (union covered) width vs full method-spread (hull) width by sample size. The union covered width is the one p_inbounds uses; the hull is shown for reference. MCSE for mean covered width = sd/sqrt(K).") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Interval width by p-value
+
+Width is not constant along the *p*-axis. The nine tests differ most (in absolute *p*) at moderate *p*; as the true *p* approaches 0 (strong association) or 1 (no association) the tests are squeezed toward the boundary, so width shrinks. The table bins replicates by the reported (true) *p* and reports both the union covered width (the decision region) and the hull width (method spread) per bin; the scatter shows both replicate-by-replicate. This is the categorical analogue of the *t*-test validation's *p* < .05 width analysis.
+
+```{r}
+p_breaks <- c(0, 0.001, 0.01, 0.05, 0.10, 0.50, 1.0)
+simulation |>
+  mutate(p_bin = cut(p_unrounded, p_breaks, include.lowest = TRUE)) |>
+  group_by(p_bin) |>
+  summarise(
+    K                  = n(),
+    coverage           = mean(inbounds_counts),
+    mean_covered_width = mean(covered_width),
+    max_covered_width  = max(covered_width),
+    mean_hull_width    = mean(hull_width),
+    max_hull_width     = max(hull_width),
+    .groups            = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Union covered width (decision region) vs hull width (method spread) by p-value bin. Both are largest at moderate p and shrink toward the boundaries; the covered width is a small fraction of the hull.") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r fig.height=5, fig.width=9}
+simulation |>
+  select(p_unrounded, `union (covered)` = covered_width, `hull` = hull_width) |>
+  tidyr::pivot_longer(c(`union (covered)`, hull), names_to = "width_type", values_to = "width") |>
+  ggplot(aes(x = p_unrounded, y = width, colour = width_type)) +
+  geom_point(alpha = 0.15, size = 0.6) +
+  geom_smooth(se = FALSE) +
+  scale_colour_viridis_d(begin = 0.2, end = 0.7, name = NULL) +
+  labs(x = "Reported (true) p", y = "Width",
+       title = "Decision-region (union) vs hull width vs p-value (exact counts)") +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank(), legend.position = "bottom")
+```
+
+### Coverage and width by reporting precision
+
+The precision sweep for the exact-counts regime. The method multiverse itself does not depend on `prop_digits` (that only affects the reconstruction regime), but `p_digits` controls the precision the reported *p* and the multiverse bounds are rounded to for the inbounds comparison, so coverage and the rounded-bound width can shift with it.
+
+```{r}
+simulation |>
+  group_by(p_digits) |>
+  summarise(
+    K                  = n(),
+    coverage           = mean(inbounds_counts),
+    mcse               = sqrt(coverage * (1 - coverage) / K),
+    mean_covered_width = mean(covered_width),
+    mean_hull_width    = mean(hull_width),
+    .groups            = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Exact-counts coverage and width (union covered vs hull) by reported p precision.") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+simulation |>
+  group_by(prop_digits, p_digits) |>
+  summarise(
+    K               = n(),
+    coverage_props  = mean(inbounds_props),
+    mcse            = sqrt(coverage_props * (1 - coverage_props) / K),
+    mean_n_tables   = mean(n_tables_props),
+    .groups         = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Proportion-reconstruction coverage and mean reconstructed-table count by precision (prop_digits x p_digits).") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Sharper, gap-aware bounds: per-method union vs the global hull
+
+The coverage checks above use the **global hull** `[min_p, max_p]` — a reported *p* is judged reproducible if it lies anywhere between the smallest and largest of the recalculated *p*-values across all methods (and reconstructed tables). But the recalculated values are not a continuous band: each test method produces its own value (or, under input rounding, its own narrow interval), and **between methods there can be gaps**. The hull fills those gaps in, so a reported *p* that lands in a gap — a value no single method actually produces — is currently called "consistent".
+
+A sharper rule keeps **100% coverage** while removing the gaps: take the **union of the per-method intervals** instead of their convex hull. Every legitimately-produced *p* still lies inside its own method's interval, so nothing that should pass starts failing; but a value in a between-method gap now (correctly) fails. This union rule is the **default** in `recalc_chisq_p()`: `reproduced$p_inbounds` is the gap-aware union decision, while `p_inbounds_hull` keeps the convex-hull decision for legibility. The summary also reports `n_method_intervals` (how many disjoint reproducible intervals there are) and `covered_fraction = covered_width / hull_width` (what fraction of the hull is actually reproducible — small means mostly gap), and the per-method intervals are returned in `method_intervals`.
+
+### Illustration
+
+For the table below the nine methods spread across the *p*-axis. The grey band is the global hull; the coloured points are the nine method values; the dashed line is a hypothetical reported *p* that sits **inside the hull but in a gap** — `p_inbounds_hull = TRUE` (hull) yet `p_inbounds = FALSE` (the default union: no method reproduces it).
+
+```{r fig.height=3.6, fig.width=9}
+illus_tab <- matrix(c(12, 8, 8, 12), nrow = 2, byrow = TRUE)
+illus     <- recalc_chisq_p(counts = illus_tab, p_digits = 3)
+illus_mi  <- illus$method_intervals
+gap_p     <- 0.25  # a reported p that falls between methods
+
+ggplot(illus_mi, aes(x = p_min, y = stats::reorder(method, p_min))) +
+  annotate("rect", xmin = illus$reproduced$min_p, xmax = illus$reproduced$max_p,
+           ymin = -Inf, ymax = Inf, alpha = 0.12) +
+  geom_vline(xintercept = gap_p, linetype = "dashed", colour = "#b2182b") +
+  geom_point(aes(colour = method), size = 4, show.legend = FALSE) +
+  annotate("text", x = gap_p, y = 0.6, label = "reported p = 0.25\n(in hull, in a gap)",
+           colour = "#b2182b", size = 3, hjust = 0.5, vjust = 0) +
+  scale_colour_viridis_d() +
+  labs(x = "Recalculated p", y = NULL,
+       title = "Per-method p-values vs the global hull",
+       subtitle = paste0("Hull [", round(illus$reproduced$min_p, 3), ", ",
+                         round(illus$reproduced$max_p, 3),
+                         "]; covered_fraction = ",
+                         round(illus$reproduced$covered_fraction, 3),
+                         " (", illus$reproduced$n_method_intervals, " disjoint intervals)")) +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank())
+```
+
+```{r}
+illus$reproduced |>
+  transmute(min_p, max_p, p_at_0.25 = gap_p,
+            p_inbounds_hull = dplyr::between(gap_p, min_p, max_p),
+            covered_fraction, n_method_intervals) |>
+  kable(digits = 4,
+        caption = "The illustration table: the hull spans the methods, but most of it is gap (low covered_fraction), so a reported p = 0.25 is in the hull yet reproduced by no method.") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Union vs hull coverage and the size of the reproducible region
+
+Across the simulation, the union rule keeps coverage at ≈ 1 (every legitimately-produced *p* is still covered) while the reproducible region is a fraction of the hull. `covered_fraction` is smallest exactly where the hull is widest — large *p* and sparse tables — which is where the hull is least informative.
+
+```{r}
+simulation |>
+  summarise(
+    K              = n(),
+    coverage_hull  = mean(inbounds_counts_hull),
+    coverage_union = mean(inbounds_counts),       # union is the default
+    mcse_union     = sqrt(coverage_union * (1 - coverage_union) / K)
+  ) |>
+  kable(digits = 4,
+        caption = "Exact-counts coverage: global hull vs per-method union. Both target 1 (the union removes gaps without dropping any legitimately-produced p).") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+p_breaks <- c(0, 0.001, 0.01, 0.05, 0.10, 0.50, 1.0)
+simulation |>
+  mutate(p_bin = cut(p_unrounded, p_breaks, include.lowest = TRUE)) |>
+  group_by(p_bin) |>
+  summarise(
+    K                     = n(),
+    coverage_union        = mean(inbounds_counts),
+    mean_hull_width       = mean(hull_width),
+    mean_covered_width    = mean(covered_width),
+    mean_covered_fraction = mean(covered_fraction),
+    .groups               = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "By p-value bin: union coverage stays ~1, but covered_fraction shrinks as p grows and the hull widens — the hull is most gap-filled (least sharp) at large p.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Regime 2 — proportion reconstruction (input rounding)
+
+Here the table is reported only as proportions rounded to `prop_digits` (swept over {2, 3}), plus group totals. `recalc_chisq_p()` enumerates every integer table consistent with the rounded proportions and runs all methods over each. Because the true table is always among the enumerated set and the reporting method is in the method set, coverage should again be ≈ 1.
+
+### Overall coverage
+
+```{r}
+simulation |>
+  summarise(
+    K        = n(),
+    coverage = mean(inbounds_props),
+    mcse     = sqrt(coverage * (1 - coverage) / K)
+  ) |>
+  kable(digits = 4,
+        caption = "Proportion-reconstruction coverage (full method set)") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Coverage by reporting method × rounding
+
+```{r}
+simulation |>
+  group_by(analysis_method, analysis_rounding) |>
+  summarise(
+    K        = n(),
+    coverage = mean(inbounds_props),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  ) |>
+  mutate(coverage_str = paste0(
+    scales::number(coverage, accuracy = 0.0001),
+    " (", scales::number(mcse, accuracy = 0.0001), ")"
+  )) |>
+  select(analysis_method, analysis_rounding, coverage_str) |>
+  pivot_wider(names_from = analysis_rounding, values_from = coverage_str) |>
+  kable(caption = "Proportion-reconstruction coverage (±1 MCSE) by method and rounding") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 1, "Reporting rounding" = 3))
+```
+
+### Size of the reconstructed table set
+
+How many integer tables the proportion route enumerates, broken down by `prop_digits`. The set is a singleton when the proportion pins the count exactly and grows with `n` (coarser relative precision admits more integer counts); a finer `prop_digits = 3` pins the count more tightly than `prop_digits = 2`.
+
+```{r}
+simulation |>
+  group_by(prop_digits, n_per_group) |>
+  summarise(
+    K              = n(),
+    mean_n_tables  = mean(n_tables_props),
+    max_n_tables   = max(n_tables_props),
+    pct_multi      = mean(n_tables_props > 1),
+    .groups        = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Number of reconstructed tables by prop_digits and sample size. pct_multi = fraction of replicates with >1 feasible table.") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Cells with non-perfect coverage
+
+```{r}
+simulation |>
+  group_by(analysis_method, analysis_rounding, n_per_group) |>
+  summarise(coverage = mean(inbounds_props), K = n(), .groups = "drop") |>
+  filter(coverage < 1) |>
+  arrange(coverage) |>
+  kable(digits = 4,
+        caption = "Proportion-reconstruction cells where coverage is < 1") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Rounding-mismatch sensitivity (proportion regime, `rounding = "either"`)
+
+The results above pass `recalc_chisq_p()` the *matched* rounding mode. This is the sensitivity analysis: keep the same simulated data, but reconstruct the proportion regime with `recalc`'s **default** `rounding = "either"`. Because `"either"` assumes a symmetric ±½-ULP preimage around each reported proportion, while truncation is asymmetric (`[value, value + ULP]`), the true table can fall outside the reconstructed set for `truncate` reports — so coverage should hold for `half_up` / `bankers` reports and drop for `truncate` reports. This is the categorical analogue of the *t*-test sim's "coverage when the user does not specify truncation".
+
+```{r}
+simulation |>
+  group_by(analysis_rounding) |>
+  summarise(
+    K               = n(),
+    coverage_matched = mean(inbounds_props),
+    coverage_either  = mean(inbounds_props_either),
+    mcse_either      = sqrt(coverage_either * (1 - coverage_either) / K),
+    .groups          = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Proportion-regime coverage under matched rounding vs recalc's default rounding='either', by the report's rounding mode. The drop is expected for 'truncate' only.") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+simulation |>
+  filter(analysis_rounding == "truncate") |>
+  group_by(n_per_group) |>
+  summarise(
+    K                = n(),
+    coverage_matched = mean(inbounds_props),
+    coverage_either  = mean(inbounds_props_either),
+    .groups          = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Truncated reports: matched ('truncate') vs default ('either') proportion-regime coverage, by sample size. The miss appears where the truncated proportion lands in the upper half of its ULP.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Blind-spot — Pearson-only multiverse
+
+Sensitivity / diagnosticity check: restrict the multiverse to `p_methods = "pearson"` and re-evaluate against reports produced by every method. Coverage should be ≈ 1 on the Pearson diagonal and **below 1** for the other methods — demonstrating that the multiverse is informative (a wrong-method report is *not* trivially absorbed) and, conversely, that to catch a report you must include the method that produced it.
+
+```{r}
+simulation |>
+  group_by(analysis_method) |>
+  summarise(
+    K        = n(),
+    coverage = mean(inbounds_pearson_only),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Coverage when the multiverse is restricted to Pearson only, by the method that actually produced the report") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r fig.height=4.5, fig.width=10}
+simulation |>
+  group_by(analysis_method, n_per_group) |>
+  summarise(coverage = mean(inbounds_pearson_only), .groups = "drop") |>
+  ggplot(aes(x = factor(n_per_group), y = coverage, fill = analysis_method)) +
+  geom_col(position = position_dodge()) +
+  scale_fill_viridis_d(name = "Reporting method") +
+  labs(x = "n per group",
+       y = "Coverage (Pearson-only multiverse)",
+       title = "A Pearson-only multiverse misses non-Pearson reports",
+       subtitle = "Coverage is ~1 only when the report was itself Pearson; the gap shrinks as n grows and methods converge") +
+  ylim(0, 1) +
+  theme_linedraw() +
+  theme(legend.position = "bottom")
+```
+
+## Subset analysis: replicates with true `p` < .05
+
+The *p* < .05 regime is where most published, significant categorical results live, and where the difference between "narrow and correctly calibrated" and "wide and trivially containing" matters most for inconsistency detection. The `delta = 0.4` DGP level was added specifically to populate this regime. This subsection reports coverage and width restricted to `p_unrounded < 0.05`.
+
+```{r}
+sig_subset <- simulation |> filter(p_unrounded < 0.05)
+n_subset   <- nrow(sig_subset)
+n_total    <- nrow(simulation)
+```
+
+The subset contains `r n_subset` of the `r n_total` total replicates (`r scales::percent(n_subset / n_total, 0.1)`).
+
+### Coverage on the p < .05 subset
+
+```{r}
+sig_subset |>
+  summarise(
+    K               = n(),
+    coverage_counts = mean(inbounds_counts),
+    coverage_props  = mean(inbounds_props),
+    mcse_counts     = sqrt(coverage_counts * (1 - coverage_counts) / K),
+    mcse_props      = sqrt(coverage_props  * (1 - coverage_props)  / K)
+  ) |>
+  kable(digits = 4,
+        caption = "Coverage on the p < .05 subset (exact-counts and proportion-reconstruction regimes). Targets = 1.") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Interval width on the p < .05 subset
+
+```{r}
+sig_subset |>
+  group_by(n_per_group) |>
+  summarise(
+    K                  = n(),
+    coverage           = mean(inbounds_counts),
+    mean_covered_width = mean(covered_width),
+    mcse_covered_width = sd(covered_width) / sqrt(K),
+    max_covered_width  = max(covered_width),
+    mean_hull_width    = mean(hull_width),
+    .groups            = "drop"
+  ) |>
+  kable(digits = 5,
+        caption = "Union covered width (decision region) vs hull width on the p < .05 subset, by sample size. Markedly narrower than the all-p widths above. MCSE for mean covered width = sd/sqrt(K).") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Plot: subset replicates with true p < .05
+
+```{r fig.height=7, fig.width=9}
+ggplot(sig_subset,
+       aes(x = p_unrounded, y = p_rep, colour = inbounds_counts)) +
+  geom_abline(slope = 1, linetype = "dotted") +
+  geom_linerange(aes(ymin = min_p_counts, ymax = max_p_counts), alpha = 0.3) +
+  geom_point(alpha = 0.4, size = 0.7) +
+  scale_colour_viridis_d(begin = 0.2, end = 0.7, name = "p_inbounds") +
+  facet_wrap(~ analysis_method) +
+  labs(x = "True (oracle) p under the reporting method", y = "Reported (rounded) p",
+       subtitle = "Subset: p_unrounded < .05. Vertical bars = recalc's full-method [min_p, max_p].") +
+  coord_equal(xlim = c(0, 0.05), ylim = c(0, 0.05)) +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank(), legend.position = "bottom")
+```
+
+# Discussion
+
+<!-- Discuss and interpret results of the simulation here. -->
+
+## Performance of the method across conditions
+
+**Numerical parity.** `recalc_chisq_p()`'s per-method *p*-values match the independent oracles to floating-point tolerance for every method, including the two mid-*p* variants computed by deliberately different algorithms (summation over the hypergeometric support for the central mid-*p*; the `reappraised`/SAS factorial-product loop for the SAS mid-*p*). This establishes that the building blocks of the multiverse are correct, not merely internally consistent.
+
+**Exact-counts coverage.** With the full nine-method multiverse and matched rounding, coverage of `[min_p_rounded, max_p_rounded]` is 1.0 (to MCSE precision) across every cell: whichever package produced the reported *p*, that value lies in the multiverse. The multiverse is widest in the sparse regime (small `n`), exactly where the methods diverge, and collapses toward a point as `n` grows and the asymptotic / exact / mid-*p* values converge — i.e. the interval is as narrow as it can be while remaining a valid containment region.
+
+**Proportion-reconstruction coverage.** When only rounded proportions are reported, the reconstructed multiverse still contains the true-table *p*-value with coverage ≈ 1, confirming the input-rounding enumeration (`interval_from_digits` → feasible integer counts) always includes the true table. The size of the reconstructed set is a singleton at small `n` and grows with `n` at fixed `prop_digits`, so the larger-`n` cells genuinely exercise multi-table enumeration.
+
+**Diagnosticity.** Restricting the multiverse to Pearson only drops coverage below 1 for every non-Pearson reporting method — most sharply in the small-`n`, sparse regime where Yates, Fisher, and the mid-*p* methods diverge most from Pearson. This confirms the multiverse is not trivially `[0, 1]`: omitting the method a report used produces a (correct) miss. The practical corollary is that, to avoid false negatives, the user should include every method any plausible source package might have used — which is exactly what the default `p_methods = NULL` (all methods) does.
+
+**Rounding-mismatch sensitivity.** In the proportion regime, calling `recalc` with its default `rounding = "either"` preserves coverage for `half_up` / `bankers` reports but drops it for `truncate` reports, because `"either"` covers only the symmetric ±½-ULP preimage while truncation is asymmetric. The drop is confined to truncated proportions whose fractional part lands in the upper half of their ULP. As in the *t*-test validation, this is documented behaviour rather than a bug: a user analysing a source that truncates percentages must pass `rounding = "truncate"` explicitly.
+
+**Sharper, gap-aware bounds.** The per-method union keeps coverage at 1.0 while the reproducible region is, on average, roughly half the hull and far less than that at large *p* (small `covered_fraction`), where the methods spread out and the hull fills in wide gaps. The union therefore removes "consistent" verdicts for *p*-values that no single method actually produces, with no loss of sensitivity — a strictly sharper test. The practical caveat (see below) is that the *gain* from this sharpening is a specificity gain, and specificity is not yet measured here.
+
+## Conclusions with regard to the aims
+
+1. **Numerical parity** — confirmed for all nine methods.
+2. **Coverage (exact counts)** — 1.0 across all cells under matched rounding.
+3. **Input-rounding route** — coverage ≈ 1 under matched rounding; the true table is always enumerated. Under the default `"either"`, truncated reports under-cover as expected.
+4. **Diagnosticity / blind spot** — a method-restricted multiverse correctly misses reports produced by the omitted methods.
+
+## Analytic choices the function does *not* currently iterate over
+
+- **Tables larger than 2×2.** This simulation exercises only the dichotomous 2×2 case. For larger tables `recalc_chisq_p()` supports `pearson`, `likelihood_ratio`, and `fisher` (dropping the 2×2-only Yates and mid-*p* methods); that path is not validated here and warrants a separate sweep.
+- **Monte-Carlo Fisher for large/ sparse r×c tables** (`fisher_simulate = TRUE`) introduces its own seed-dependent variation and is not exercised.
+- **Rounding conventions other than `half_up`, `bankers`, `truncate`** (e.g. `half_down`) for the reported *p* or proportions are outside the multiverse, as in the *t*-test validation.
+- **Alternative mid-*p* definitions** beyond the central and SAS forms (e.g. epitools' odds-ratio-based `ormidp`) may differ slightly; only the two implemented definitions are guaranteed to be covered.
+- **Structural-zero / fixed-margin designs** other than the two-independent-binomials DGP used here.
+
+## Limitations of this simulation
+
+- **Two independent binomials only.** The DGP fixes neither margin (other than the group totals), matching a comparative-trial / cohort design. A fixed-total multinomial or a case-control design with both margins informative would be a useful robustness check, though the tests' *p*-value definitions are unchanged.
+- **Precision sweep is coarse-grained.** The simulation sweeps `p_digits` ∈ {2, 3} and `prop_digits` ∈ {2, 3}; whole-number percentages (`prop_digits = 0`/`1`) and higher-precision *p* reporting are not included and could be added to the grid.
+- **Only correct (reproducible) reported *p*-values are simulated; specificity is not measured.** Every reported *p* here is, by construction, the value some legitimate analytic choice produces, so the simulation measures **sensitivity** — does the multiverse contain a *p* it should? — and the headline target is therefore 1.0 by design. It does **not** yet inject *incorrect* reported *p*-values (typos, miscalculations, fabrication, or values from an analysis inconsistent with the reported table) and so does not measure **specificity** — how often the multiverse correctly *rejects* a wrong *p*. This is exactly where the sharper per-method union bounds matter: they shrink the "consistent" region (especially at large *p*) without losing sensitivity, which should raise specificity. Quantifying that gain requires an error-injection DGP (e.g. perturb the reported *p* off the reproducible set, or compute it from a different table) and is left to future work.
+
+# References
+
+Bolland, M. J., Gamble, G. D., Avenell, A., Grey, A., & Lumley, T. (2019). Baseline P value distributions in randomized trials were uniform for continuous but not categorical variables. *Journal of Clinical Epidemiology*, 112, 67–76.
+
+Morris, T. P., White, I. R., & Crowther, M. J. (2019). Using simulation studies to evaluate statistical methods. *Statistics in Medicine*, 38(11), 2074–2102.
+
+Siepe, B. S., Bartoš, F., Morris, T. P., Boulesteix, A.-L., Heck, D. W., & Pawel, S. (2024). Simulation studies for methodological research in psychology: A standardized template for planning, preregistration, and reporting. *Psychological Methods*.
+
+# Session info
+
+```{r}
+sessionInfo()
+```

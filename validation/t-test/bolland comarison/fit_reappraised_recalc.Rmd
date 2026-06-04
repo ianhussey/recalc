@@ -1,0 +1,113 @@
+```{r}
+
+# fit_reappraised_recalc.R
+# -----------------------------------------------------------------------------
+# Fit both `reappraised` and `recalc` to a small set of baseline two-group
+# comparisons (reported means, SDs, ns, and a two-sided p), where the reported
+# p-values were *truncated* to 3 dp. Both tools ask the same question — is the
+# reported p compatible with the summary statistics? — but express it
+# differently:
+#   * recalc      -> a per-study multiverse interval + an in-bounds flag
+#                    (here with rounding = "truncate" to match the report).
+#   * reappraised -> a per-study single recalculated p + its distance from the
+#                    reported p (pval_cont_fn(); it assumes half-up rounding).
+# -----------------------------------------------------------------------------
+
+suppressPackageStartupMessages({
+  library(recalc)
+  library(reappraised)
+})
+
+dat <- structure(list(m1 = c(0.05, 0.06, 0.04, -0.06, 0.03),
+                      m2 = c(0, -0.07, -0.05, 0, -0.08),
+                      sd1 = c(0.96, 1.11, 1.03, 0.99, 1.22),
+                      sd2 = c(1.07, 0.83, 1.02, 0.99, 1.3),
+                      n1 = c(25L, 25L, 25L, 25L, 25L),
+                      n2 = c(25L, 25L, 25L, 25L, 25L),
+                      p = c(0.816, 0.595, 0.712, 0.785, 0.721)),
+                 row.names = c(NA, -5L), class = "data.frame")
+
+# Reporting precision (means/SDs to 2 dp, p to 3 dp). Values like 0 and 1.3 are
+# treated as 0.00 / 1.30 to match the 2-dp convention of the rest of the table.
+m_digits <- 2L; sd_digits <- 2L; p_digits <- 3L
+rounding_map <- c(trunc = "truncate", truncate = "truncate",
+                  half_up = "half_up", bankers = "bankers")
+
+# ---- recalc -----------------------------------------------------------------
+# Per study: does the reported p fall inside recalc's t-test p-multiverse
+# (Student + Welch, two-sided), given the reported summary stats and rounding?
+recalc_fit <- do.call(rbind, lapply(seq_len(nrow(dat)), function(i) {
+  res <- suppressWarnings(recalc_independent_t_p(
+    m1 = dat$m1[i], m2 = dat$m2[i], sd1 = dat$sd1[i], sd2 = dat$sd2[i],
+    n1 = dat$n1[i], n2 = dat$n2[i],
+    m_digits = m_digits, sd_digits = sd_digits,
+    p = dat$p[i], p_digits = p_digits, p_operator = "equals",
+    alternative = "two.sided"
+  ))
+  rp <- res$reproduced
+  data.frame(
+    study            = i,
+    p_reported       = dat$p[i],
+    recalc_min_p     = round(rp$min_p, 4),
+    recalc_max_p     = round(rp$max_p, 4),
+    recalc_inbounds  = rp$p_inbounds,        # default: gap-aware union
+    recalc_inbounds_hull = rp$p_inbounds_hull,
+    covered_fraction = round(rp$covered_fraction, 3)
+  )
+}))
+
+# ---- reappraised ------------------------------------------------------------
+# Build the load_clean()-style wide frame pval_cont_fn() expects: groups encoded
+# as numeric suffixes (m1/m2, s1/s2, n1/n2), decimal places in dpm*/dps*/dpp,
+# the reported p as a string in `p` plus numeric `p_num`, and data_type tag.
+reapp_df <- data.frame(
+  study = paste0("S", seq_len(nrow(dat))), var = "baseline",
+  n1 = dat$n1, n2 = dat$n2,
+  m1 = dat$m1, m2 = dat$m2,
+  s1 = dat$sd1, s2 = dat$sd2,
+  p = formatC(dat$p, format = "f", digits = p_digits), p_num = dat$p,
+  dpm1 = m_digits, dpm2 = m_digits, dps1 = sd_digits, dps2 = sd_digits,
+  dpp = p_digits,
+  data_type = c("pval_cont", rep(NA_character_, nrow(dat) - 1L)),
+  stringsAsFactors = FALSE
+)
+
+reapp <- pval_cont_fn(df = reapp_df, calc_refp = "n", verbose = FALSE)
+rr <- reapp$pval_cont_results
+# pval_cont_fn also returns a per-study min/max p range (over the rounding
+# preimage AND equal/unequal variance: the "either.var" columns) plus a flag,
+# directly comparable to recalc's interval. Note reappraised assumes *half-up*
+# symmetric rounding, whereas recalc here uses the matched "truncate".
+reapp_fit <- data.frame(
+  study           = seq_len(nrow(rr)),
+  p_reported      = rr$reported_pvalue_numeric,
+  reapp_calc_p    = round(rr$pvalue_calc_from_summary_stats, 4),
+  reapp_min_p     = round(rr$`min_possible_p_either.var`, 4),
+  reapp_max_p     = round(rr$`max_possible_p_either.var`, 4),
+  reapp_inbounds  = rr$`pvalue_flag_either.var` != "flag",  # "" = consistent
+  diff_rep_calc_p = round(rr$difference_reported_calculated_p, 4)
+)
+
+# ---- report -----------------------------------------------------------------
+cat("\n================ recalc (rounding = half-up or bankers) ================\n")
+print(recalc_fit, row.names = FALSE)
+cat("\n================ reappraised (pval_cont_fn; half-up rounding) =\n")
+print(reapp_fit, row.names = FALSE)
+
+cat("\n================ side-by-side ================================\n")
+comparison <- data.frame(
+  study          = recalc_fit$study,
+  p_reported     = recalc_fit$p_reported,
+  recalc_range   = sprintf("[%.3f, %.3f]", recalc_fit$recalc_min_p, recalc_fit$recalc_max_p),
+  recalc_ok      = recalc_fit$recalc_inbounds,
+  reapp_range    = sprintf("[%.3f, %.3f]", reapp_fit$reapp_min_p, reapp_fit$reapp_max_p),
+  reapp_ok       = reapp_fit$reapp_inbounds
+)
+print(comparison, row.names = FALSE)
+
+write.csv(recalc_fit, "fit_recalc.csv", row.names = FALSE)
+write.csv(reapp_fit,  "fit_reappraised.csv", row.names = FALSE)
+write.csv(comparison, "fit_comparison.csv", row.names = FALSE)
+cat("\nSaved fit_recalc.csv, fit_reappraised.csv, fit_comparison.csv\n")
+
+```

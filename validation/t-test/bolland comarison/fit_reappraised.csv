@@ -1,0 +1,6 @@
+"study","p_reported","reapp_calc_p","reapp_min_p","reapp_max_p","reapp_inbounds","diff_rep_calc_p"
+1,0.816,0.863,0.835,0.89,FALSE,0.047
+2,0.595,0.641,0.614,0.669,FALSE,0.046
+3,0.712,0.758,0.73,0.785,FALSE,0.046
+4,0.785,0.831,0.803,0.86,FALSE,0.046
+5,0.721,0.759,0.737,0.781,FALSE,0.038

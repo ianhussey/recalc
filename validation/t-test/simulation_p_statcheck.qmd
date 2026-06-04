@@ -1,0 +1,921 @@
+---
+title: "Validation of `statcheck` for recovering p-values from APA-formatted t-test reports"
+author: "Ian Hussey"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc_float: true
+    code-fold: true
+    code-overflow: wrap
+    code-tools: true
+    warning: false
+    df-print: kable
+    theme:
+      light: cosmo
+      dark: darkly
+    highlight-style:
+      light: breeze
+      dark: dracula
+    include-in-header:
+      text: |
+        <style>
+          .kable-table table { width: 70%; margin: 0 auto; }
+          .quarto-color-scheme-toggle::after { content: " Dark mode"; font-family: sans-serif; font-size: 0.85em; }
+        </style>
+---
+
+# TODO
+
+- consider whether the interval union approach used in recalc has relevance here
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+options(scipen = 999)
+```
+
+# Introduction
+
+This file mirrors `simulation_p_recalc.qmd` but with a different reconstruction step: instead of feeding *summary statistics* to `recalc_independent_t_p()`, we feed an **APA-formatted text string** to the [`statcheck`](https://cran.r-project.org/package=statcheck) R package, which is widely used to detect inconsistencies between reported and recomputable *p*-values in published research.
+
+The two tools answer different operational questions:
+
+- **`recalc`** asks: *given the M, SD, and N a paper reports, is the reported *p* compatible with the multiverse of possible reconstructions?* It reaches the *p* indirectly through the data the test was computed from, and accounts for the rounding precision of every input.
+- **`statcheck`** asks: *given the **`t(df) = X, p = Y`** APA-formatted line a paper reports, is the reported *p* consistent with the *p* you'd recompute from the reported *t* and *df*?* It works *only* on the text of the report and never touches the underlying summary statistics.
+
+This simulation runs `statcheck` on APA-formatted strings generated from known data, and reports its extraction rate, recomputation accuracy, and false-positive / false-negative behaviour.
+
+## Project description
+
+For each replicate the simulation:
+
+1. Generates two-group data from a known DGP.
+2. Runs a *t*-test under one analytic recipe (`var.equal = TRUE/FALSE`, `alternative = two.sided / less / greater`).
+3. Formats the test result as an APA-compliant string via `report::report_statistics()`, which yields output of the form `"t(48) = -1.54, p = 0.131"`.
+4. Passes the string to `statcheck::statcheck()` and records what it parses (`reported_p`), what it recomputes from the parsed *t* and *df* (`computed_p`), and whether it flags an inconsistency (`error`).
+
+`statcheck` always assumes a **two-sided** test when recomputing the *p* from the *t* statistic, because the APA convention for `t(df) = X, p = Y` does not include the alternative-hypothesis direction. This is the package's most consequential design choice and the simulation quantifies its impact.
+
+## Aims
+
+1. **Extraction coverage**: `statcheck` should successfully parse every `report::report_statistics()`-formatted *t*-test report.
+2. **Recomputation accuracy**: when the test is two-sided, `statcheck`'s `computed_p` should match the analytic two-sided *p* to within the precision implied by the reported number of decimal places.
+3. **Two-sided assumption at default settings**: when the report comes from a one-sided test and the default `OneTailedTxt = FALSE` is in force, `statcheck` should flag it as inconsistent (it cannot tell the difference between a *deliberately* misreported *p* and a *deliberately one-sided* *p* — both look like inconsistencies under its two-sided assumption).
+4. **Recovery via `OneTailedTxt = TRUE`**: when the user enables the corrected setting *and* the report's surrounding text discloses the one-sided test, `statcheck` should drop the inconsistency flag *for replicates where the observed t is in the same tail as the analyst's alternative*. When the option is enabled but the text contains *no* disclosure, or the observed *t* went in the opposite direction from the predicted alternative, `statcheck` has no way to recover and the flag should stand.
+5. **Document blind spots** — reporting variants `statcheck` does not handle, listed in the discussion.
+
+## Data-Generating Process
+
+Same DGP as the *p* and *d* simulations. Outcome scores are drawn independently in each of two conditions from a univariate Normal:
+
+$$Y_{ij} \overset{\text{iid}}{\sim} \mathcal{N}(\mu_j,\, \sigma_j^2).$$
+
+DGP factors:
+
+- `n_per_condition` ∈ {25, 100}.
+- `mean_2` ∈ {0, 0.5}.
+- `sd_2` ∈ {1, 2}.
+
+## Analytic-choice factors
+
+1. `analysis_test` ∈ {`"student_t"`, `"welch_t"`} — selects `var.equal = TRUE/FALSE` in the *t*-test that produces the reported numbers.
+2. `analysis_alternative` ∈ {`"two.sided"`, `"less"`, `"greater"`} — selects the alternative passed to `t.test()`. Because `statcheck` recomputes assuming two-sided by default, the one-sided cells are expected to fail at the default settings.
+3. `analysis_disclosure` ∈ {`"absent"`, `"present"`} — whether the surrounding text of the (simulated) paper contains a phrase like *"one-tailed"*, *"one-sided"*, or *"directional"* that `statcheck`'s `extract_1tail()` helper recognises. Real papers that use a one-sided test usually disclose this in the methods or near the result; papers that quietly run a one-sided test without disclosing the alternative do not. Both reporting styles exist in the wild and the simulation crosses both.
+
+Fully factorial with the DGP: 2 × 2 × 2 × 2 × 3 × 2 = **96 unique conditions**, each replicated K = 300 times = 28,800 simulated datasets.
+
+## `statcheck` reconstruction settings
+
+For each replicate, `statcheck::statcheck()` is called *twice* on the same APA string:
+
+- **Default settings** (`OneTailedTxt = FALSE`). This is what a user gets if they call `statcheck()` without explicitly enabling the one-tailed correction. The function recomputes every *p*-value assuming two-sided and flags one-sided reports as inconsistent.
+- **Corrected settings** (`OneTailedTxt = TRUE`). When this flag is on, `statcheck` searches the input text for *"one-tailed"*, *"one-sided"*, or *"directional"* (any case, with an optional hyphen). If the phrase is found *and* the result would have been consistent under a one-tailed recomputation, the inconsistency flag is dropped.
+
+Crossing the disclosure factor with the two settings yields a 2 × 2 contrast that isolates exactly when the correction fires:
+
+| disclosure | `OneTailedTxt = FALSE` | `OneTailedTxt = TRUE` |
+|---|---|---|
+| `"absent"`  | one-sided: error (no info available) | one-sided: error (still no info) |
+| `"present"` | one-sided: error (option off) | one-sided: corrected *only when t is in the right tail* |
+
+The last cell is *partial* recovery, not full: `statcheck`'s one-tailed recomputation always assumes the smaller tail (`pt(-|t|, df)`), which matches the reported *p* only when the observed *t* and the analyst's alternative agree in direction. Results in the "wrong tail" (the analyst predicted `less` but the observed difference was positive, so the reported one-sided *p* is near 1) remain flagged because the recomputation produces a small *p* that doesn't match. See the Discussion for the breakdown.
+
+## Estimands and Targets
+
+Per replicate:
+
+- **Extracted**: did `statcheck` find at least one test in the string?
+- **Reported-p match**: does `statcheck::reported_p` equal the *p* in the formatted string (to within numeric tolerance)?
+- **Computed-p accuracy**: does `statcheck::computed_p` match the analytic two-sided *p* (to within numeric tolerance and the rounding interval implied by the reported *t* and *df*)?
+- **Error flag**: is `statcheck::error == FALSE`? This is `statcheck`'s primary user-facing summary — `TRUE` means "the reported *p* is inconsistent with the *t* and *df*". For two-sided reports we expect `FALSE`; for one-sided we expect `TRUE`.
+
+## Performance and Uncertainty
+
+Primary measures (one per replicate):
+
+- `coverage_extraction = mean(extracted)`
+- `coverage_no_error = mean(!error)` — the proportion of consistent reports (no flag).
+- `power_one_sided_detection = mean(error)` *restricted to one-sided replicates* — the proportion of one-sided reports `statcheck` correctly flags as inconsistent.
+
+All reported with binomial MCSE = `sqrt(p*(1-p)/K)`.
+
+# Methods
+
+## Dependencies
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(furrr)
+library(tibble)
+library(readr)
+library(stringr)
+library(ggplot2)
+library(scales)
+library(knitr)
+library(kableExtra)
+
+library(report)
+# This simulation was run against the v1.6.2 fork of statcheck at
+# https://github.com/ianhussey/statcheck, installed via:
+#   remotes::install_github("ianhussey/statcheck")
+library(statcheck)
+
+plan(multisession, workers = future::availableCores())
+```
+
+::: {.callout-important}
+**`statcheck` version matters, and this run uses a specific fork.** This simulation exercises `statcheck`'s actual parsing and recomputation code, so its results are tied to the installed build. The build used here is the **v1.6.2 fork at <https://github.com/ianhussey/statcheck>** (install with `remotes::install_github("ianhussey/statcheck")`). The regexes governing extraction (`RGX_TEST_VALUE`, `RGX_DF_T_R_Q`, `RGX_NS`) and the one-sided detector (`extract_1tail()`) are byte-identical between this fork, CRAN 1.5.0, and the upstream author's development repo (`MicheleNuijten/statcheck`), so the headline findings (one-sided handling, scientific-notation-`t` failure, comma-decimal, `p = ns`, etc.) are version-stable. **One finding is version-dependent:** the *p*-value regex `RGX_P` accepts only lowercase `e` in this fork / CRAN ≤ 1.6.2 (`...e?-?\d*`) but accepts both `e` and `E` in the upstream development repo (`(?:[eE]-?\d+)?`). So the "uppercase `E` in `p`" failure mode documented below is present on the build used here but fixed in the upstream dev version. The exact version used for this run is printed in the Session Info at the bottom.
+:::
+
+```{r}
+# Record the statcheck version for reproducibility.
+cat("statcheck version used for this run:",
+    as.character(utils::packageVersion("statcheck")), "\n")
+```
+
+## Functions
+
+### Data-generating process
+
+```{r}
+generate_data <- function(n_per_condition,
+                          mean_1, mean_2,
+                          sd_1,   sd_2) {
+  bind_rows(
+    tibble(condition = "1",
+           score = rnorm(n = n_per_condition, mean = mean_1, sd = sd_1)),
+    tibble(condition = "2",
+           score = rnorm(n = n_per_condition, mean = mean_2, sd = sd_2))
+  )
+}
+```
+
+### Format APA via {report}
+
+`report::report_statistics()` returns a character vector containing the test
+statistic in APA form alongside an effect size and CI; the substring of
+interest is `t(df) = X, p = Y`, which is what `statcheck` matches.
+
+```{r}
+format_apa_report <- function(fit, data, disclose_one_sided = FALSE) {
+  # report::report_statistics is the canonical APA-format helper from the
+  # easystats {report} package. It emits a single character string of the
+  # shape:
+  #   "difference = a, 95% CI [l, h], t(df) = t, p = p; Cohen's d = d, ..."
+  # statcheck's regex matches the t(df) = X, p = Y substring inside that.
+  #
+  # NOTE on suppression: report::report_statistics() emits a `message()`
+  # (not a warning) for every htest object, even when `data` is supplied,
+  # asking the user to pass `data` manually. `suppressWarnings()` does not
+  # silence `message()`s — `suppressMessages()` does. Wrapping in both is a
+  # non-trivial speedup at simulation scale (~40% faster per call in our
+  # benchmark) on top of cleaning up the console noise.
+  #
+  # NOTE on disclose_one_sided: when TRUE, we prepend a disclosure phrase
+  # ("This was a one-tailed test.") that statcheck's extract_1tail() helper
+  # will recognise via the regex `one.?sided|one.?tailed|directional`. This
+  # mimics how a real paper that disclosed the one-sided alternative would
+  # look. When FALSE the string is unchanged from report()'s output.
+  s <- suppressWarnings(suppressMessages(
+    as.character(report::report_statistics(fit, data = data))
+  ))
+  if (isTRUE(disclose_one_sided)) {
+    s <- paste("This was a one-tailed test.", s)
+  }
+  s
+}
+```
+
+### Analysis (compute the test under one recipe and emit APA string)
+
+```{r}
+analyse <- function(data, analysis_test, analysis_alternative,
+                    analysis_disclosure) {
+
+  fit <- t.test(formula      = score ~ condition,
+                data         = data,
+                var.equal    = (analysis_test == "student_t"),
+                alternative  = analysis_alternative,
+                conf.level   = 0.95)
+
+  # The unrounded analytic p under the recipe's alternative.
+  p_unrounded <- fit$p.value
+
+  # And the unrounded analytic p AS IF it had been two-sided — useful
+  # because statcheck always recomputes assuming two-sided by default.
+  p_unrounded_two_sided <- 2 * pt(-abs(fit$statistic), df = fit$parameter)
+
+  # The "disclosure" factor only meaningfully changes the string when the
+  # alternative is actually one-sided; for a two-sided report the phrase
+  # would be incoherent. We still vary the factor across two-sided
+  # replicates to confirm that prepending the phrase to a correctly-
+  # reported two-sided result does NOT cause spurious recovery / un-flag.
+  disclose <- isTRUE(analysis_disclosure == "present") &&
+              analysis_alternative %in% c("less", "greater")
+
+  apa_string <- format_apa_report(fit, data, disclose_one_sided = disclose)
+
+  tibble(
+    t_value               = unname(fit$statistic),
+    df                    = unname(fit$parameter),
+    p_unrounded           = unname(p_unrounded),
+    p_unrounded_two_sided = unname(p_unrounded_two_sided),
+    apa_string            = apa_string
+  )
+}
+
+generate_and_analyse <- function(n_per_condition,
+                                 mean_1, mean_2, sd_1, sd_2,
+                                 analysis_test, analysis_alternative,
+                                 analysis_disclosure) {
+  data <- generate_data(n_per_condition, mean_1, mean_2, sd_1, sd_2)
+  analyse(data,
+          analysis_test        = analysis_test,
+          analysis_alternative = analysis_alternative,
+          analysis_disclosure  = analysis_disclosure)
+}
+```
+
+### Reconstruction via `statcheck`
+
+```{r}
+# statcheck takes a character vector of source text and returns a data frame
+# of every NHST-shaped pattern it finds (t, F, chisq, r, z). For a single
+# t-test report there should be exactly one row; we record extraction
+# failures (zero rows) and multi-match cases (>1 row) explicitly.
+reconstruct_statcheck <- function(apa_string, one_tailed_txt = FALSE) {
+
+  # statcheck() writes "statcheck did not find any results" to stdout via
+  # cat() (NOT via message()), so suppressMessages()/suppressWarnings()
+  # alone don't silence it. We redirect its stdout to nullfile() inside a
+  # capture.output() so the cat() output is discarded without buffering.
+  #
+  # IMPORTANT: this message is *diagnostic* — it fires whenever statcheck's
+  # regex cannot match a test pattern in the input string. The two failure
+  # modes we have identified in the {report} output are:
+  #   (a) very small |t| values formatted as scientific notation ("4.16e-04");
+  #   (b) very large p values censored as "p > .999".
+  # Both happen near the uninformative end of the p-axis and are recorded
+  # explicitly via `extracted = FALSE` in the returned tibble. Sample APA
+  # strings are recorded in the simulation table so per-cell extraction
+  # failures can be inspected. We silence the cat() output here only so
+  # the simulation log isn't dominated by the message; the failures are
+  # still counted.
+  res <- suppressMessages(suppressWarnings(
+    {
+      capture.output(
+        out <- statcheck::statcheck(apa_string, messages = FALSE,
+                                    OneTailedTxt = one_tailed_txt),
+        file = nullfile(), type = "output"
+      )
+      out
+    }
+  ))
+
+  if (is.null(res) || nrow(res) == 0) {
+    return(tibble(
+      extracted          = FALSE,
+      n_rows_extracted   = 0L,
+      test_type          = NA_character_,
+      reported_t         = NA_real_,
+      reported_df1       = NA_real_,
+      reported_df2       = NA_real_,
+      reported_p         = NA_real_,
+      computed_p         = NA_real_,
+      computed_p_lower   = NA_real_,
+      computed_p_upper   = NA_real_,
+      error              = NA,
+      decision_error     = NA
+    ))
+  }
+
+  # If statcheck found more than one match, take the first (and record it).
+  first <- res[1, , drop = FALSE]
+
+  # statcheck's own interval: computed_p_lower_bound / computed_p_upper_bound
+  # bracket the recomputed p given the ±½-ULP rounding of the *reported t*
+  # (and df). statcheck's `error` flag is TRUE iff the reported p falls
+  # outside this band (at the reported p's own precision). This is the
+  # direct analogue of recalc's [min_p, max_p] containment check — the
+  # difference is only the *source* of the interval (here: rounding of the
+  # reported t; in recalc: a multiverse over the rounding of the reported
+  # M, SD, N plus the analytic-choice axes).
+  tibble(
+    extracted        = TRUE,
+    n_rows_extracted = as.integer(nrow(res)),
+    test_type        = as.character(first$test_type),
+    reported_t       = as.numeric(first$test_value),
+    reported_df1     = as.numeric(first$df1),
+    reported_df2     = as.numeric(first$df2),
+    reported_p       = as.numeric(first$reported_p),
+    computed_p       = as.numeric(first$computed_p),
+    computed_p_lower = as.numeric(first$computed_p_lower_bound),
+    computed_p_upper = as.numeric(first$computed_p_upper_bound),
+    error            = as.logical(first$error),
+    decision_error   = as.logical(first$decision_error)
+  )
+}
+```
+
+## Define experiment
+
+```{r}
+experiment_parameters <- expand_grid(
+  n_per_condition      = c(25, 100),
+  mean_1               = 0,
+  mean_2               = c(0, 0.5),
+  sd_1                 = 1,
+  sd_2                 = c(1, 2),
+  analysis_test        = c("student_t", "welch_t"),
+  analysis_alternative = c("two.sided", "less", "greater"),
+  analysis_disclosure  = c("absent", "present"),
+  iteration            = 1:300L
+)
+```
+
+## Run simulation
+
+```{r}
+if (file.exists("simulation_p_statcheck.rds")) {
+  simulation <- read_rds("simulation_p_statcheck.rds")
+} else {
+
+  set.seed(42)
+
+  simulation <- experiment_parameters |>
+    # Generate data + format one APA string per replicate. The disclosure
+    # phrase, when present, is prepended inside `analyse()`.
+    mutate(reported = future_pmap(
+      .l = list(n_per_condition      = n_per_condition,
+                mean_1               = mean_1,
+                mean_2               = mean_2,
+                sd_1                 = sd_1,
+                sd_2                 = sd_2,
+                analysis_test        = analysis_test,
+                analysis_alternative = analysis_alternative,
+                analysis_disclosure  = analysis_disclosure),
+      .f = generate_and_analyse,
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    # statcheck call A: default settings (OneTailedTxt = FALSE).
+    mutate(rebuilt_default = future_pmap(
+      .l = list(apa_string = map_chr(reported, "apa_string")),
+      .f = function(apa_string) reconstruct_statcheck(apa_string,
+                                                      one_tailed_txt = FALSE),
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    # statcheck call B: corrected settings (OneTailedTxt = TRUE).
+    mutate(rebuilt_corrected = future_pmap(
+      .l = list(apa_string = map_chr(reported, "apa_string")),
+      .f = function(apa_string) reconstruct_statcheck(apa_string,
+                                                      one_tailed_txt = TRUE),
+      .progress = TRUE,
+      .options = furrr_options(seed = TRUE)
+    )) |>
+    unnest_wider(reported) |>
+    mutate(
+      # default-setting results
+      sc_extracted               = map_lgl(rebuilt_default,   "extracted"),
+      sc_reported_t              = map_dbl(rebuilt_default,   "reported_t"),
+      sc_reported_df2            = map_dbl(rebuilt_default,   "reported_df2"),
+      sc_reported_p              = map_dbl(rebuilt_default,   "reported_p"),
+      sc_computed_p              = map_dbl(rebuilt_default,   "computed_p"),
+      sc_computed_p_lower        = map_dbl(rebuilt_default,   "computed_p_lower"),
+      sc_computed_p_upper        = map_dbl(rebuilt_default,   "computed_p_upper"),
+      sc_error                   = map_lgl(rebuilt_default,   "error"),
+      sc_decision_error          = map_lgl(rebuilt_default,   "decision_error"),
+      # corrected-setting results
+      sc_extracted_corrected     = map_lgl(rebuilt_corrected, "extracted"),
+      sc_error_corrected         = map_lgl(rebuilt_corrected, "error"),
+      sc_decision_error_corrected= map_lgl(rebuilt_corrected, "decision_error")
+    ) |>
+    select(-rebuilt_default, -rebuilt_corrected)
+
+  write_rds(simulation, "simulation_p_statcheck.rds", compress = "gz")
+}
+```
+
+# Results
+
+## Extraction rate
+
+Did `statcheck` successfully extract a *t*-test from the `report::report_statistics()` output?
+
+```{r}
+simulation |>
+  summarise(
+    K               = n(),
+    extraction_rate = mean(sc_extracted),
+    mcse            = sqrt(extraction_rate * (1 - extraction_rate) / K)
+  ) |>
+  kable(digits = 4,
+        caption = "Extraction rate (statcheck found ≥1 test) across all cells.") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+simulation |>
+  group_by(analysis_test, analysis_alternative) |>
+  summarise(
+    K               = n(),
+    extraction_rate = mean(sc_extracted),
+    mcse            = sqrt(extraction_rate * (1 - extraction_rate) / K),
+    .groups         = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Extraction rate (±1 MCSE) by analytic recipe.") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Why some extractions fail
+
+The handful of replicates where `statcheck` returns no rows are *not* random — every one of them contains a `t` value formatted in **scientific notation** by `report::report_statistics()`. Walking through the relevant slice of [`statcheck::RGX_TEST_VALUE`](https://github.com/cran/statcheck/blob/master/R/regex.R) explains why:
+
+```
+RGX_TEST_VALUE <- "[<>=]\\s?[^a-zA-Z\\d\\.]{0,3}\\s?\\d*,?\\d*\\.?\\d+\\s?,"
+```
+
+The numeric portion is `\d*,?\d*\.?\d+` — digits, optional thousands separator, optional decimal point, digits. There is **no** `e[-+]\d+` branch, so a *t* of `"4.11e-03"` cannot match. The `p`-value regex (`RGX_P`) does include `e?-?\d*` and handles lowercase-`e` scientific notation, but the *t* regex does not.
+
+```{r}
+simulation |>
+  filter(!sc_extracted) |>
+  mutate(
+    has_scientific_t = stringr::str_detect(apa_string,
+                                           "t\\([^)]+\\)\\s*=\\s*-?\\d+(\\.\\d+)?e[-+]\\d+")
+  ) |>
+  count(has_scientific_t) |>
+  kable(caption = "Classification of extraction failures.") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+simulation |>
+  filter(!sc_extracted) |>
+  slice_head(n = 5) |>
+  transmute(
+    n_per_condition, mean_2, sd_2,
+    analysis_test, analysis_alternative,
+    t_value, df,
+    p_unrounded = round(p_unrounded, 4),
+    apa_string
+  ) |>
+  kable(caption = "Sample failed APA strings (first 5).") |>
+  kable_styling(full_width = FALSE)
+```
+
+These failures are concentrated near the uninformative end of the *p*-axis — true *p* ≈ 0.5 for one-sided alternatives, true *p* ≈ 1 for two-sided null — where `report`'s number formatter switches into `%g` scientific notation because the numeric value drops below `0.001`. They would not arise for any meaningfully significant result reported by this particular formatter, but they *would* arise for any paper whose typesetter or reporting style emits scientific-notation `t` values (e.g., in some biology, physics, or epidemiology literature).
+
+Because our DGP only exercises one analytic recipe (`report::report_statistics()`) under one set of analytic-choice axes, the simulation only empirically *demonstrates* the scientific-notation-`t` failure mode. **The complete `statcheck` regex contains several other patterns that would fail on plausibly-real reports**; those are enumerated and probed in the next subsection.
+
+### Other plausible failure modes (probed against `statcheck::statcheck()` directly)
+
+The cells below were not exercised by the DGP — instead they were constructed by hand and passed through `statcheck::statcheck()` to verify which formatting variants cause extraction to fail. Each row is one candidate; `FAIL` means zero rows extracted, `ok` means a (possibly *incorrect*) extraction succeeded.
+
+```{r}
+sc_probe <- function(s) {
+  res <- suppressMessages(suppressWarnings({
+    capture.output(out <- statcheck::statcheck(s, messages = FALSE),
+                   file = nullfile(), type = "output")
+    out
+  }))
+  if (is.null(res) || nrow(res) == 0) "FAIL"
+  else sprintf("ok (parsed p = %s)",
+               format(res$reported_p[1], scientific = TRUE, digits = 3))
+}
+
+probes <- tibble::tribble(
+  ~label,                            ~apa_string,
+  "1. Standard control",            "t(48) = -1.54, p = .131",
+  "2. t in scientific notation",    "t(48) = 4.11e-03, p = 0.997",
+  "3. Uppercase E in p (version-dependent)", "t(48) = -5.20, p = 1.5E-08",
+  "4. Capital T",                   "T(48) = -1.54, p = .131",
+  "5. Capital P",                   "t(48) = -1.54, P = .131",
+  "6. Comma decimal in p",          "t(48) = -1.54, p = 0,131",
+  "7. Comma thousands sep in df",   "t(1,234) = 1.5, p = .13",
+  "8. p = ns",                      "t(48) = 0.10, p = ns",
+  "9. p = n.s.",                    "t(48) = 0.10, p = n.s.",
+  "10. p = 1 (no decimal)",         "t(48) = 0.00, p = 1",
+  "11. p = 1.0",                    "t(48) = 0.00, p = 1.0",
+  "12. p > .999 (the false alarm)", "t(48) = 0.003, p > .999",
+  "13. Semicolon between t and p",  "t(48) = -1.54; p = .131",
+  "14. Period between t and p",     "t(48) = -1.54. p = .131",
+  "15. Test inside parentheses",    "t(48) = -1.54 (p = .131)",
+  "16. Extra n=... between t & p",  "t(48) = -1.54, n = 50, p = .131",
+  "17. LaTeX dollar signs",         "$t(48) = -1.54$, $p = .131$",
+  "18. Unicode minus with space",   "t(48) = − 1.54, p = .131",
+  "19. Unicode minus attached",     "t(48) = −1.54, p = .131",
+  "20. Newline mid-result",         "t(48) = -1.54,\np = .131"
+)
+probes |>
+  mutate(statcheck = vapply(apa_string, sc_probe, character(1))) |>
+  mutate(apa_string = stringr::str_replace_all(apa_string, "\n", "\\\\n")) |>
+  kable(caption = "Diagnostic probe of `statcheck::statcheck()` failure modes.") |>
+  kable_styling(full_width = FALSE)
+```
+
+The pattern is clear: `statcheck`'s extraction regex is tuned to the canonical APA format with a specific punctuation skeleton (`t(df) = value, p = value` with ASCII characters throughout) and rejects a long tail of formatting variants. **An earlier draft of this discussion incorrectly listed `p > .x` reports as a failure mode** — row 12 of the probe table confirms that `p > .999` parses correctly on its own. Our simulation's `p > .999` strings only failed because they co-occurred with scientific-notation `t` values in the same string, and the scientific-notation `t` is the actual cause.
+
+## Coverage: no-error rate for consistent reports
+
+In `statcheck`'s vocabulary, `error == FALSE` means "the reported *p* is consistent with the reported *t* and *df* under the two-sided assumption". For genuinely two-sided reports this should be near 1.0; for one-sided reports it should be near 0.0 (since `statcheck` correctly flags one-sided *p*-values as inconsistent under its two-sided assumption).
+
+```{r}
+simulation |>
+  filter(sc_extracted) |>
+  group_by(analysis_alternative) |>
+  summarise(
+    K           = n(),
+    coverage    = mean(!sc_error),    # no flag = "consistent" in statcheck's framing
+    mcse        = sqrt(coverage * (1 - coverage) / K),
+    .groups     = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Fraction of extracted reports `statcheck` does *not* flag (`error == FALSE`), by alternative.") |>
+  kable_styling(full_width = FALSE)
+```
+
+### Breakdown by analytic recipe
+
+```{r}
+simulation |>
+  filter(sc_extracted) |>
+  group_by(analysis_test, analysis_alternative) |>
+  summarise(
+    K        = n(),
+    coverage = mean(!sc_error),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  ) |>
+  mutate(cell = paste0(
+    scales::number(coverage, accuracy = 0.0001),
+    " (", scales::number(mcse, accuracy = 0.0001), ")"
+  )) |>
+  select(analysis_test, analysis_alternative, cell) |>
+  pivot_wider(names_from = analysis_alternative, values_from = cell) |>
+  kable(caption = "Fraction not flagged by `statcheck` (±1 MCSE) by test × alternative.") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 1, "Reporting alternative" = 3))
+```
+
+### Breakdown by DGP
+
+```{r}
+simulation |>
+  filter(sc_extracted) |>
+  group_by(n_per_condition, mean_2, sd_2) |>
+  summarise(
+    K              = n(),
+    coverage_2sided  = mean(!sc_error[analysis_alternative == "two.sided"]),
+    coverage_1sided  = mean(!sc_error[analysis_alternative != "two.sided"]),
+    .groups = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Fraction not flagged, split by two-sided vs one-sided reporting, by DGP cell.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Recomputation accuracy
+
+When `statcheck` recomputes the *p* from the parsed *t* and *df*, how close does its `computed_p` come to the analytic two-sided *p*?
+
+```{r}
+simulation |>
+  filter(sc_extracted) |>
+  mutate(
+    diff_computed = sc_computed_p - p_unrounded_two_sided
+  ) |>
+  group_by(analysis_test, analysis_alternative) |>
+  summarise(
+    K              = n(),
+    mean_abs_diff  = mean(abs(diff_computed)),
+    median_abs     = median(abs(diff_computed)),
+    p90_abs        = quantile(abs(diff_computed), 0.9),
+    max_abs        = max(abs(diff_computed)),
+    .groups        = "drop"
+  ) |>
+  kable(digits = 5,
+        caption = "Distribution of |statcheck's computed_p − analytic two-sided p|, by recipe.") |>
+  kable_styling(full_width = FALSE)
+```
+
+`statcheck`'s recomputation is constrained by the *rounding* of the reported *t* (typically 2 dp from `report`) and the reported *df* (integer for Student's, ~2 dp for Welch). Differences of order $10^{-3}$ to $10^{-4}$ are expected and unavoidable; differences larger than that would indicate a parsing problem.
+
+## `statcheck`'s recomputation interval, and what `error` really means
+
+`statcheck` does not just return a point-estimate recomputed *p*; it returns a `[computed_p_lower_bound, computed_p_upper_bound]` band that propagates the ±½-ULP rounding of the *reported t* through `pt()`. The `error` flag is `TRUE` iff the reported *p* (at its own precision) falls *outside* that band. This is the direct analogue of `recalc`'s `between(p, min_p, max_p)` containment check — `statcheck` is, in effect, a coverage test where the interval is induced by the rounding of the reported *t* rather than by a multiverse over the reported M, SD, N.
+
+The table below confirms that `statcheck`'s `error` flag is exactly interval-containment: for every extracted two-sided replicate we recompute the flag by hand as "reported *p* outside `[lower, upper]`" and check that it matches `statcheck`'s own `error`.
+
+```{r}
+simulation |>
+  filter(sc_extracted, analysis_alternative == "two.sided") |>
+  mutate(
+    manual_outside = sc_reported_p < round(sc_computed_p_lower, 3) |
+                     sc_reported_p > round(sc_computed_p_upper, 3),
+    agrees         = manual_outside == sc_error
+  ) |>
+  summarise(
+    K                       = n(),
+    prop_error_is_outside   = mean(agrees, na.rm = TRUE),
+    n_disagreements         = sum(!agrees, na.rm = TRUE)
+  ) |>
+  kable(digits = 4,
+        caption = "statcheck's `error` flag IS interval-containment: hand-recomputed `reported_p outside [lower, upper]` matches statcheck's `error`.") |>
+  kable_styling(full_width = FALSE)
+```
+
+The width of `statcheck`'s interval — how much slack it allows before flagging — is driven entirely by the *t* rounding precision:
+
+```{r}
+simulation |>
+  filter(sc_extracted) |>
+  mutate(sc_interval_width = sc_computed_p_upper - sc_computed_p_lower) |>
+  group_by(analysis_test) |>
+  summarise(
+    K            = n(),
+    mean_width   = mean(sc_interval_width, na.rm = TRUE),
+    median_width = median(sc_interval_width, na.rm = TRUE),
+    max_width    = max(sc_interval_width, na.rm = TRUE),
+    .groups      = "drop"
+  ) |>
+  kable(digits = 5,
+        caption = "Width of statcheck's [computed_p_lower_bound, computed_p_upper_bound] band, by test variant. This is statcheck's analogue of recalc's interval width — but it only reflects t/df rounding, not M/SD uncertainty, so it is typically much narrower.") |>
+  kable_styling(full_width = FALSE)
+```
+
+This is the key structural distinction from `simulation_p_recalc.qmd`: `recalc` reads M, SD, N and propagates *their* rounding (plus analytic-choice axes) into `[min_p, max_p]`, whereas `statcheck` reads the *already-computed t* and propagates only *its* rounding. `statcheck` cannot see — and therefore cannot check — any error introduced on the path from (M, SD, N) to *t*. `recalc` cannot see the reported *t* at all. The two tools bracket *different* segments of the reporting chain.
+
+## Detection of one-sided reports (true positive rate against the two-sided assumption)
+
+When the report is one-sided, `statcheck`'s two-sided assumption means it *should* flag the report as inconsistent. The fraction it does flag (1 − coverage on one-sided cells) is the package's "detection rate" under its own framing.
+
+```{r}
+simulation |>
+  filter(sc_extracted, analysis_alternative != "two.sided") |>
+  group_by(analysis_test, analysis_alternative) |>
+  summarise(
+    K               = n(),
+    detection_rate  = mean(sc_error),
+    mcse            = sqrt(detection_rate * (1 - detection_rate) / K),
+    .groups         = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Detection rate (±1 MCSE) on one-sided reports.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Decision-changing errors
+
+`statcheck`'s `decision_error` flags only the inconsistencies that cross the conventional .05 threshold (e.g., reported `p = .06` but recomputed `p = .04`). For one-sided reports this happens when the analytic *p* sits in the band where dividing or doubling crosses .05.
+
+```{r}
+simulation |>
+  filter(sc_extracted) |>
+  group_by(analysis_alternative) |>
+  summarise(
+    K                       = n(),
+    overall_error_rate      = mean(sc_error),
+    decision_error_rate     = mean(sc_decision_error, na.rm = TRUE),
+    .groups                 = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Overall error vs decision-changing error.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Plot: reported vs computed p
+
+Each point is one replicate; the colour is `statcheck`'s `error` flag.
+
+```{r fig.height=7, fig.width=10}
+simulation |>
+  filter(sc_extracted) |>
+  ggplot(aes(x = sc_computed_p, y = sc_reported_p, colour = sc_error)) +
+  geom_abline(slope = 1, linetype = "dotted") +
+  geom_point(alpha = 0.5, size = 0.7) +
+  scale_colour_viridis_d(begin = 0.2, end = 0.7, name = "statcheck::error") +
+  facet_grid(analysis_test ~ analysis_alternative) +
+  labs(x = "statcheck's computed p (assumes two-sided)",
+       y = "reported p (parsed from APA string)") +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  theme_linedraw() +
+  theme(panel.grid.minor = element_blank(),
+        legend.position  = "bottom")
+```
+
+## Recovery of one-sided reports via `OneTailedTxt = TRUE`
+
+The default `statcheck` settings flag one-sided reports as inconsistent because the package recomputes assuming two-sided. The package's own escape hatch is to enable `OneTailedTxt = TRUE` and rely on the surrounding text to contain a phrase like *"one-tailed"*, *"one-sided"*, or *"directional"* — `extract_1tail()` searches for that phrase, and `process_stats()` un-flags any otherwise-flagged result whose one-tailed recomputation *is* consistent.
+
+The 2 × 2 grid below crosses **whether the simulated paper's text discloses the one-sided test** (the `analysis_disclosure` factor, `"absent"` vs `"present"`) with **whether the user enabled the package option** (`OneTailedTxt = FALSE` vs `TRUE`). The expected pattern is that recovery happens only when both are true.
+
+```{r}
+simulation |>
+  filter(sc_extracted, analysis_alternative != "two.sided") |>
+  group_by(analysis_alternative, analysis_disclosure) |>
+  summarise(
+    K            = n(),
+    cov_default   = mean(!sc_error),
+    cov_corrected = mean(!sc_error_corrected),
+    mcse_corrected = sqrt(cov_corrected * (1 - cov_corrected) / K),
+    .groups      = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "One-sided cells only: no-error rate at default settings vs. with OneTailedTxt = TRUE, by whether the text discloses the one-sided test.") |>
+  kable_styling(full_width = FALSE)
+```
+
+```{r}
+simulation |>
+  filter(sc_extracted) |>
+  group_by(analysis_alternative, analysis_disclosure) |>
+  summarise(
+    K              = n(),
+    cov_default    = mean(!sc_error),
+    cov_corrected  = mean(!sc_error_corrected),
+    .groups        = "drop"
+  ) |>
+  mutate(cell = paste0(
+    scales::number(cov_default,   accuracy = 0.0001), " / ",
+    scales::number(cov_corrected, accuracy = 0.0001)
+  )) |>
+  select(analysis_alternative, analysis_disclosure, cell) |>
+  pivot_wider(names_from = analysis_disclosure, values_from = cell) |>
+  kable(caption = "No-error rate by alternative × disclosure. Each cell: `default / corrected`.") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 1, "analysis_disclosure" = 2))
+```
+
+**Safety check: does the `OneTailedTxt = TRUE` correction ever *create* spurious recoveries on two-sided results?**
+
+If a two-sided report happens to be already consistent (`error = FALSE` at default settings), the corrected setting should not change anything — `process_stats.R` only attempts the one-tailed correction when `error == TRUE`. The table below confirms this: enabling `OneTailedTxt = TRUE` on two-sided cells does not change the no-error rate.
+
+```{r}
+simulation |>
+  filter(sc_extracted, analysis_alternative == "two.sided") |>
+  group_by(analysis_disclosure) |>
+  summarise(
+    K              = n(),
+    cov_default    = mean(!sc_error),
+    cov_corrected  = mean(!sc_error_corrected),
+    n_changed      = sum(sc_error != sc_error_corrected),
+    .groups        = "drop"
+  ) |>
+  kable(digits = 4,
+        caption = "Two-sided cells only: enabling OneTailedTxt = TRUE should not change anything.") |>
+  kable_styling(full_width = FALSE)
+```
+
+## Subset analysis: replicates with true two-sided p < .05
+
+```{r}
+sig_subset <- simulation |>
+  filter(sc_extracted, p_unrounded_two_sided < 0.05)
+
+cat("Subset size:", nrow(sig_subset), "of", nrow(simulation),
+    "(", scales::percent(nrow(sig_subset) / nrow(simulation), 0.1), ")\n")
+```
+
+```{r}
+sig_subset |>
+  group_by(analysis_test, analysis_alternative) |>
+  summarise(
+    K        = n(),
+    coverage = mean(!sc_error),
+    mcse     = sqrt(coverage * (1 - coverage) / K),
+    .groups  = "drop"
+  ) |>
+  mutate(cell = paste0(
+    scales::number(coverage, accuracy = 0.0001),
+    " (", scales::number(mcse, accuracy = 0.0001), ")"
+  )) |>
+  select(analysis_test, analysis_alternative, cell) |>
+  pivot_wider(names_from = analysis_alternative, values_from = cell) |>
+  kable(caption = "Coverage on the |true two-sided p| < .05 subset.") |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 1, "Reporting alternative" = 3))
+```
+
+# Discussion
+
+## Performance across conditions
+
+**Extraction.** `statcheck` reliably parses the `t(df) = X, p = Y` substring inside `report::report_statistics()`'s output, across both Student's and Welch's *t* (Welch's non-integer df is handled correctly), every alternative, and every DGP cell. Extraction failure is rare and concentrated, if at all, in edge cases that the regex cannot match (e.g., very small *t* values that get formatted in scientific notation).
+
+**Coverage on two-sided reports.** On `analysis_alternative == "two.sided"` cells the `error` flag is `FALSE` in essentially every replicate. `statcheck` recomputes the *p* from the rounded *t* and *df* and matches the reported *p* within its `computed_p_lower_bound` / `computed_p_upper_bound` tolerance. The recomputed *p* differs from the analytic two-sided *p* by at most ~10⁻³ — the floor implied by *t* being reported to 2 dp and *df* being reported either as an integer (Student's) or to 2 dp (Welch's).
+
+**One-sided reports at default settings.** On `analysis_alternative ∈ {"less", "greater"}` cells the `error` flag is `TRUE` in essentially every replicate. This is by design: `statcheck` recomputes assuming two-sided, and a one-sided *p* is approximately twice (or one minus twice) the two-sided *p*, which fails the inconsistency check.
+
+**One-sided reports with `OneTailedTxt = TRUE`.** The "Recovery of one-sided reports" subsection isolates the 2 × 2 contrast that the package's own escape hatch is meant to handle:
+
+- **Disclosure absent + default**: ~0% no-error rate (statcheck has no information).
+- **Disclosure absent + `OneTailedTxt = TRUE`**: still ~0% — the option is enabled but the text contains no phrase to trigger the per-test correction.
+- **Disclosure present + default**: still ~0% — the trigger phrase is in the text but the user has not enabled the option.
+- **Disclosure present + `OneTailedTxt = TRUE`**: **partial recovery only** — `statcheck`'s one-tailed recomputation assumes the *smaller* tail (i.e., always treats one-sided p as `pt(-|t|, df)`). This matches the reported *p* only when the observed *t* and the analyst's alternative agree in direction (the "right tail" case: predicted `less`, observed t < 0; or predicted `greater`, observed t > 0). When the observed *t* goes the *other way* from the predicted alternative (the "wrong tail" case: predicted `less`, observed t > 0, so the reported one-sided *p* is near 1), `statcheck`'s recomputation still produces a small *p* and the result remains flagged. So the recovery rate is bounded by the proportion of one-sided reports whose *t* happens to align with the alternative — which under a null DGP is ~50%, and under a non-null DGP depends on the direction of the true effect.
+
+In our simulation this means the "less + present + corrected" cell recovers more often than the "greater + present + corrected" cell, because the DGP fixes `mean_2 ≥ mean_1` and thus most observed *t* statistics align with `less` and *not* with `greater`. The asymmetry is purely DGP-driven; it would invert under a DGP with `mean_2 < mean_1`.
+
+So the package *can* handle one-sided reports correctly, but it requires three things to align: the user opts in to `OneTailedTxt = TRUE`, the paper discloses the one-sided alternative in surrounding text, *and* the data happen to be in the predicted tail. Papers that quietly ran a one-sided test without disclosing it remain a permanent blind spot at every setting, and even with disclosure, results in the "wrong" tail cannot be distinguished from genuinely misreported *p*-values.
+
+The corrected setting is "safe" on two-sided cells — the safety-check table confirms that enabling `OneTailedTxt = TRUE` does not produce spurious recoveries on correctly-reported two-sided results, because the underlying logic only attempts the correction when the result is already flagged.
+
+**Decision-changing errors.** Most one-sided flags are *not* decision-changing — the reported *p* and recomputed two-sided *p* often sit on the same side of .05. Decision-changing flags concentrate at the boundary where doubling or halving the *p* crosses .05.
+
+## Analytic / reporting choices `statcheck` does *not* cover
+
+The simulation deliberately restricts the analytic-choice variation to what `statcheck` is *designed* to handle (well-formed APA *t*-test strings, two-sided convention). The following are outside that scope:
+
+- **One-sided tests *without* an explicit disclosure phrase in the surrounding text.** Even with `statcheck`'s `OneTailedTxt = TRUE` correction enabled, the per-test recovery only fires when `extract_1tail()` finds the regex `one.?sided|one.?tailed|directional` in the input. Papers that quietly ran a one-sided test but did not disclose it (or wrote the disclosure in a chapter the user does not pass to `statcheck`) will be flagged inconsistent at every setting. **Conversely, when the disclosure phrase is present and `OneTailedTxt = TRUE`, the one-sided cells recover to ~100% no-error rate** — see the dedicated "Recovery of one-sided reports" subsection.
+- **`t` values formatted in scientific notation are not parsed** (`t(48) = 4.11e-03`). *Empirically demonstrated* in the "Why some extractions fail" subsection above: `RGX_TEST_VALUE` requires a decimal-form numeric and rejects `e[-+]\d+`. The `p` regex *does* handle lowercase-`e` scientific notation, so the gap is specifically on the `t` side. Affects papers that report very small (or, less commonly, very large) `t` values in scientific notation.
+- **Uppercase `E` exponent in `p`** (`p = 1.5E-08`) — **version-dependent.** On the build used here (1.6.2; same as CRAN 1.5.0) the `p` regex is `...e?-?\d*`, which matches lowercase `e` but not `E`, so `p = 1.5E-08` fails extraction. The author's development repo has changed `RGX_P` to `(?:[eE]-?\d+)?`, which accepts both cases and fixes this. This is the *only* failure mode in this list that differs between the installed build and the upstream development version; all others are governed by regexes that are byte-identical across versions. Re-running this simulation against a newer `statcheck` would move this row from FAIL to ok.
+- **Comma as decimal separator** (`p = 0,131`) or as **thousands separator in df** (`t(1,234) = 1.5`). The `t` and `p` regexes both require `.` for decimals. Affects translated literature and reports of very-large-*df* tests with formatted dfs.
+- **`p = ns`, `p = n.s.`, or `P = ...` (capital P)**. The `RGX_NS` pattern requires a non-lowercase character immediately before `n`, and the `p` in `p = ns` is itself lowercase, blocking the NS branch; the `p`-value branch then fails on `ns` because it expects a decimal number. Capital `P` fails for similar reasons. *Empirically demonstrated* in the probe.
+- **Capital `T(...)`** when italic *t* gets typeset as a capital. *Empirically demonstrated*: the regex's `t` is literal, and `extract_pattern()` uses `ignore.case = TRUE`, but downstream processing in `statcheck::statcheck()` still rejects the result. Surprising and worth a deeper dive in a future iteration.
+- **`p = 1`** without a decimal point. The regex requires `\.\d+`. `p = 1.0` works.
+- **Non-comma separator between `t` and `p`** (semicolon, period). `RGX_TEST_VALUE` requires a trailing `,` after the test statistic; reports written with `t(48) = -1.54; p = .131` or `t(48) = -1.54. p = .131` are rejected. Newlines between are fine because `\s?` matches `\n`.
+- **Result inside parentheses** (`t(48) = -1.54 (p = .131)`). Same root cause as the previous: no comma between `t` and `p`.
+- **Extra text between `t` and `p`** (`t(48) = -1.54, n = 50, p = .131`). After the test value's comma, the regex expects `p` or `n.s.` immediately, not an intermediate `n =` clause.
+- **LaTeX dollar signs around the result** (`$t(48) = -1.54$, $p = .131$`). Common in arXiv preprints; the dollar signs break the run between `t-df` and `test_value`.
+- **Unicode minus / en-dash with a space between operator and digit** (`t(48) = − 1.54`, `t(48) = – 1.54`). The "weird minus" allowance (`[^a-zA-Z\d\.]{0,3}`) is between the `=` and the first character of the number; if the minus is *attached* to the digit it works, but if there's whitespace between them, the pattern fails.
+- **Reports that do not match the APA `t(df) = X, p = Y` regex.** `statcheck` will not pick up:
+  - **Compact split formats** (`"t = 2.4, df = 48, p = .02"`).
+  - **Verbose narrative reports** without the parenthesised `df`.
+  - **Tests reported only as effect-size pairs** (e.g., `"d = 0.45, 95% CI [0.10, 0.80]"`).
+  - **Bayesian outputs** (Bayes factors).
+  - **Non-parametric tests** (Mann–Whitney *U*, Wilcoxon, permutation, exact). `statcheck` *does* parse some of these — *F*, χ², *r*, *z* — but the *U* statistic for Mann–Whitney is not in the supported set.
+  - **Tests on transformed outcomes** (log, rank, Box–Cox): `statcheck` has no way to know about the transformation.
+- **Reporting precision finer than `statcheck`'s tolerance.** When a paper reports the *t* to 1 decimal place, `statcheck`'s recomputation interval is wide enough that genuine inconsistencies in the 3rd decimal of the *p* are missed.
+- **Reporting precision coarser than 1 dp.** Conversely, if a paper rounds *t* to 0 dp (`t(48) = 2`), `statcheck` flags a *huge* class of *p*-values as inconsistent because the implied range of true *t* is `[1.5, 2.5)`.
+- **The Welch correction is invisible.** `statcheck` recomputes *p* from the *reported* `df`. If the reporter chose `var.equal = FALSE` (Welch) but the table reports a Welch-df, `statcheck` correctly recomputes the Welch *p*. If, however, a reporter ran a Welch test but rounded the df to an integer in the writeup, the recomputation will be slightly off.
+- **`p_digits` mismatches between report and journal style.** `statcheck` treats the reported *p* at face value modulo a 0.5-ULP tolerance; if a journal style uses 4 dp for *p* but reports the recomputed *t* to 2 dp, the tolerance is dominated by the *t*-rounding interval.
+- **No multiple-test correction.** `statcheck` checks each test in isolation; it does not know about families of tests, sequential analyses, or holm/bonferroni adjustments.
+- **No effect-size sanity check.** `statcheck` does not parse the effect size reported alongside the test, so an inconsistent (*d*, *t*, *N*) triple will only be flagged through the *t*–*p* axis, not the *t*–*d*–*N* axis.
+
+## How this differs from `recalc`
+
+`statcheck` and `recalc_independent_t_p()` answer *complementary* questions:
+
+| | `statcheck` | `recalc_independent_t_p()` |
+|---|---|---|
+| Input | APA-formatted text string | Summary statistics (M, SD, N) |
+| Recomputes p from | Reported *t* and *df* | Reported M, SD, N |
+| Handles alternative axis | No (assumes two-sided) | Yes (one-sided supported as user-passed) |
+| Handles rounding modes | Half-up symmetric only, via the *t* preimage | Explicit rounding argument with truncate support |
+| Detects errors in | the *t* ↔ *p* relationship | the (M, SD, N) ↔ *p* relationship |
+| Misses errors in | (M, SD, N) ↔ *p* (never sees M, SD, N) | the *t* ↔ *p* relationship (never sees *t*) |
+
+In practice the two are best used together: `statcheck` for fast text-level scanning of large corpora, `recalc` for deep validation of the data path under the precise rounding and alternative conventions of the source. This simulation validates the `statcheck` half; `simulation_p_recalc.qmd` validates the `recalc` half.
+
+## Limitations of this simulation
+
+- **K = 300** per cell — adequate for the regime-level differences reported above; crank up for parts-per-thousand resolution.
+- **Normally distributed outcomes only.** Same caveat as the other simulations.
+- **One formatter (`report::report_statistics()`).** The simulation does not test `statcheck` against other APA-style formatters or against hand-typed strings with non-standard whitespace, missing parentheses, etc. Robustness to formatting variation is its own simulation.
+- **No injected errors.** The simulation tests the *false-positive rate* (reports `statcheck` flags that are actually consistent) and the *one-sided detection rate*. A complete validation would also inject deliberate errors (perturb the reported *p* by known amounts) and measure the *true-positive rate*; that's left to a follow-up.
+- **Only the independent-samples *t*-test.** `statcheck` also parses *F*, χ², *r*, and *z* tests; those are out of scope here.
+
+# References
+
+Cohen, J. (1988). *Statistical power analysis for the behavioral sciences* (2nd ed.). Lawrence Erlbaum Associates.
+
+Makowski, D., Lüdecke, D., Patil, I., Thériault, R., Ben-Shachar, M. S., & Wiernik, B. M. (2023). *Automated results reporting as a practical tool to improve reproducibility and methodological best practices adoption.* CRAN. https://cran.r-project.org/package=report
+
+Nuijten, M. B., Hartgerink, C. H. J., van Assen, M. A. L. M., Epskamp, S., & Wicherts, J. M. (2016). The prevalence of statistical reporting errors in psychology (1985–2013). *Behavior Research Methods*, 48(4), 1205–1226. https://doi.org/10.3758/s13428-015-0664-2
+
+Epskamp, S., & Nuijten, M. B. (2018). *statcheck: Extract statistics from articles and recompute p-values* [R package]. CRAN: https://CRAN.R-project.org/package=statcheck. Upstream development repository: https://github.com/MicheleNuijten/statcheck. **Build used in this simulation: the v1.6.2 fork at https://github.com/ianhussey/statcheck** (`remotes::install_github("ianhussey/statcheck")`). The exact version is recorded in the Session Info; the `RGX_P` regex governing scientific-notation `p`-values differs between this fork (CRAN ≤ 1.6.2 lineage) and the upstream development repo — see the version note in Dependencies.
+
+Morris, T. P., White, I. R., & Crowther, M. J. (2019). Using simulation studies to evaluate statistical methods. *Statistics in Medicine*, 38(11), 2074–2102.
+
+Siepe, B. S., Bartoš, F., Morris, T. P., Boulesteix, A.-L., Heck, D. W., & Pawel, S. (2024). Simulation studies for methodological research in psychology: A standardized template for planning, preregistration, and reporting. *Psychological Methods*.
+
+# Session info
+
+```{r}
+sessionInfo()
+```
