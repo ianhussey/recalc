@@ -19,6 +19,7 @@ recalc_independent_t(
   p_operator = "equals",
   p_methods = NULL,
   alternative = "two.sided",
+  mu = 0,
   d = NULL,
   d_ci_lower = NULL,
   d_ci_upper = NULL,
@@ -37,8 +38,11 @@ recalc_independent_t(
 help pages for full documentation.}
 }
 \value{
-A list with elements \code{reproduced} (one row, combining the
-d and p summaries), \code{d_results}, and \code{p_results}.
+A list with elements \code{reproduced} (one row, combining the d and
+p summaries, where \code{d_inbounds} / \code{p_inbounds} are the default
+union decisions and \code{d_inbounds_hull} / \code{p_inbounds_hull} the
+convex-hull fallbacks), \code{d_results}, \code{p_results},
+\code{d_method_intervals}, and \code{p_method_intervals}.
 }
 \description{
 Convenience wrapper that calls both \code{\link{recalc_independent_t_p}}

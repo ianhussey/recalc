@@ -56,7 +56,15 @@ by the Wald CI methods.}
 \item{alpha}{Numeric. CI significance level. Default 0.05.}
 }
 \value{
-A list with elements \code{reproduced} and \code{d_results}.
+A list with elements \code{reproduced}, \code{d_results}, and
+\code{method_intervals}. In \code{reproduced}, \code{d_inbounds} is the
+\strong{default, gap-aware union decision} for the point estimate;
+\code{d_inbounds_hull} keeps the convex-hull decision for legibility. The
+hull bounds (\code{min_d}, \code{max_d}, and rounded versions) are retained,
+plus \code{n_method_intervals}, \code{covered_width}, \code{hull_width},
+and \code{covered_fraction}. A "method" here is a combination of the
+denominator formula, Hedges correction, direction, and SD interpretation
+(the CI-only choices do not move the point estimate).
 }
 \description{
 Explores the multiverse of standardised-mean-difference effect sizes and

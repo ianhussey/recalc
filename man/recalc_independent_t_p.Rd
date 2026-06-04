@@ -21,6 +21,7 @@ recalc_independent_t_p(
   p_methods = NULL,
   alternative = "two.sided",
   direction = c("m1_minus_m2", "m2_minus_m1", "both"),
+  mu = 0,
   include_se_sd_confusion = FALSE
 )
 }
@@ -57,13 +58,27 @@ iterates the multiverse over all of them.}
 \item{direction}{Character. One of \code{"m1_minus_m2"} (default),
 \code{"m2_minus_m1"}, \code{"both"}.}
 
+\item{mu}{Numeric. The null value for the mean difference, i.e. the
+hypothesised \eqn{\mu_1 - \mu_2}. Default \code{0} (the usual test of no
+difference). A non-zero value gives \eqn{t = (\text{difference} - \mu)/SE}
+for non-inferiority / equivalence / TOST-style reports where the disclosed
+null is a margin rather than zero. A single finite number.}
+
 \item{include_se_sd_confusion}{Logical. Default FALSE.}
 }
 \value{
-A list with elements \code{reproduced} (one-row summary of whether
-the reported \emph{p} falls in the multiverse range, given \code{p_operator})
-and \code{p_results} (long-format data frame with \code{p_unrounded} for
-each combination of analytic choices).
+A list with elements \code{reproduced}, \code{p_results}, and
+\code{method_intervals}. In \code{reproduced}, \code{p_inbounds} is the
+\strong{default, gap-aware union decision} (whether the reported \emph{p} falls
+inside the union of the per-method intervals rather than merely their
+convex hull); \code{p_inbounds_hull} keeps the convex-hull decision for
+legibility (always at least as permissive). The hull bounds (\code{min_p},
+\code{max_p}, and rounded versions) are retained, plus
+\code{n_method_intervals}, \code{covered_width}, \code{hull_width}, and
+\code{covered_fraction = covered_width / hull_width} (how much of the hull
+is actually reproducible; small means mostly gap). \code{method_intervals}
+gives the per-method \code{[p_min, p_max]}. Here a "method" is a
+combination of test variant, alternative, direction, and SD interpretation.
 }
 \description{
 Explores the multiverse of \emph{p}-values for an independent-samples t-test

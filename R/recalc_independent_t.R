@@ -48,15 +48,28 @@
 #'   iterates the multiverse over all of them.
 #' @param direction Character. One of \code{"m1_minus_m2"} (default),
 #'   \code{"m2_minus_m1"}, \code{"both"}.
+#' @param mu Numeric. The null value for the mean difference, i.e. the
+#'   hypothesised \eqn{\mu_1 - \mu_2}. Default \code{0} (the usual test of no
+#'   difference). A non-zero value gives \eqn{t = (\text{difference} - \mu)/SE}
+#'   for non-inferiority / equivalence / TOST-style reports where the disclosed
+#'   null is a margin rather than zero. A single finite number.
 #' @param include_se_sd_confusion Logical. Default FALSE.
 #'
-#' @return A list with elements \code{reproduced} (one-row summary of whether
-#'   the reported *p* falls in the multiverse range, given \code{p_operator})
-#'   and \code{p_results} (long-format data frame with \code{p_unrounded} for
-#'   each combination of analytic choices).
+#' @return A list with elements \code{reproduced}, \code{p_results}, and
+#'   \code{method_intervals}. In \code{reproduced}, \code{p_inbounds} is the
+#'   \strong{default, gap-aware union decision} (whether the reported *p* falls
+#'   inside the union of the per-method intervals rather than merely their
+#'   convex hull); \code{p_inbounds_hull} keeps the convex-hull decision for
+#'   legibility (always at least as permissive). The hull bounds (\code{min_p},
+#'   \code{max_p}, and rounded versions) are retained, plus
+#'   \code{n_method_intervals}, \code{covered_width}, \code{hull_width}, and
+#'   \code{covered_fraction = covered_width / hull_width} (how much of the hull
+#'   is actually reproducible; small means mostly gap). \code{method_intervals}
+#'   gives the per-method \code{[p_min, p_max]}. Here a "method" is a
+#'   combination of test variant, alternative, direction, and SD interpretation.
 #'
 #' @importFrom stats pt qt qnorm uniroot
-#' @importFrom dplyr summarise mutate case_when between bind_cols select
+#' @importFrom dplyr summarise mutate case_when between bind_cols select rename
 #' @importFrom tibble tibble
 #' @export
 recalc_independent_t_p <- function(
@@ -71,6 +84,7 @@ recalc_independent_t_p <- function(
     p_methods = NULL,
     alternative = "two.sided",
     direction = c("m1_minus_m2", "m2_minus_m1", "both"),
+    mu = 0,
     include_se_sd_confusion = FALSE
 ) {
   direction  <- match.arg(direction)
@@ -80,6 +94,11 @@ recalc_independent_t_p <- function(
   m_digits  <- as.integer(m_digits)
   sd_digits <- as.integer(sd_digits)
   rounding  <- match.arg(rounding, .recalc_rounding_choices)
+
+  if (length(mu) != 1L || !is.finite(mu)) {
+    stop("'mu' must be a single finite numeric value (the null mean difference).")
+  }
+  mu <- as.numeric(mu)
 
   alternative <- .validate_alternative(alternative)
   p_methods   <- .validate_methods(p_methods, c("student_t", "welch_t"), "p_methods")
@@ -102,15 +121,29 @@ recalc_independent_t_p <- function(
     m1, m2, sd1, sd2, n1, n2,
     m_digits, sd_digits, rounding,
     p_methods, alternative, direction,
-    include_se_sd_confusion
+    include_se_sd_confusion, mu
   )
 
   reproduced_out <- .reproduced_p_summary(p_results, p_num, p_operator,
                                           p_digits = p_digits, rounding = rounding)
 
+  # Sharper, gap-aware bounds (the default). A "method" here is a combination of
+  # the discrete analytic choices (test variant, alternative, direction, SD
+  # interpretation); within each, the input-rounding grid gives an interval.
+  # `p_inbounds` is the union decision; `p_inbounds_hull` keeps the convex hull.
+  method_intervals <- .method_intervals(
+    p_results, "p_unrounded",
+    c("p_method", "alternative", "direction", "sd_interpretation"),
+    p_digits, rounding
+  )
+  applied <- .apply_union_default(reproduced_out, method_intervals, p_num,
+                                  p_operator, p_digits,
+                                  inbounds_col = "p_inbounds", value_prefix = "p")
+
   list(
-    reproduced = reproduced_out,
-    p_results  = p_results
+    reproduced       = applied$reproduced,
+    p_results        = p_results,
+    method_intervals = applied$method_intervals
   )
 }
 
@@ -202,10 +235,18 @@ recalc_independent_t_p <- function(
 #'   by the Wald CI methods.
 #' @param alpha Numeric. CI significance level. Default 0.05.
 #'
-#' @return A list with elements \code{reproduced} and \code{d_results}.
+#' @return A list with elements \code{reproduced}, \code{d_results}, and
+#'   \code{method_intervals}. In \code{reproduced}, \code{d_inbounds} is the
+#'   \strong{default, gap-aware union decision} for the point estimate;
+#'   \code{d_inbounds_hull} keeps the convex-hull decision for legibility. The
+#'   hull bounds (\code{min_d}, \code{max_d}, and rounded versions) are retained,
+#'   plus \code{n_method_intervals}, \code{covered_width}, \code{hull_width},
+#'   and \code{covered_fraction}. A "method" here is a combination of the
+#'   denominator formula, Hedges correction, direction, and SD interpretation
+#'   (the CI-only choices do not move the point estimate).
 #'
 #' @importFrom stats pt qt qnorm uniroot
-#' @importFrom dplyr summarise mutate case_when between bind_cols select
+#' @importFrom dplyr summarise mutate case_when between bind_cols select rename
 #' @importFrom tibble tibble
 #' @export
 recalc_independent_t_d <- function(
@@ -270,9 +311,24 @@ recalc_independent_t_d <- function(
     d_digits = d_digits, rounding = rounding
   )
 
+  # Sharper, gap-aware bounds for the point estimate (the default). A "method"
+  # is a combination of the discrete choices that change d itself (denominator
+  # formula, Hedges correction, direction, SD interpretation); the CI-only
+  # choices do not move the point estimate. `d_inbounds` is the union decision;
+  # `d_inbounds_hull` keeps the convex hull.
+  method_intervals <- .method_intervals(
+    d_results, "d_unrounded",
+    c("d_formula", "hedges_correction", "direction", "sd_interpretation"),
+    d_digits, rounding
+  )
+  applied <- .apply_union_default(reproduced_out, method_intervals, d_num,
+                                  "equals", d_digits,
+                                  inbounds_col = "d_inbounds", value_prefix = "d")
+
   list(
-    reproduced = reproduced_out,
-    d_results  = d_results
+    reproduced       = applied$reproduced,
+    d_results        = d_results,
+    method_intervals = applied$method_intervals
   )
 }
 
@@ -287,8 +343,11 @@ recalc_independent_t_d <- function(
 #' @param ... All arguments accepted by either child function. See those
 #'   help pages for full documentation.
 #'
-#' @return A list with elements \code{reproduced} (one row, combining the
-#'   d and p summaries), \code{d_results}, and \code{p_results}.
+#' @return A list with elements \code{reproduced} (one row, combining the d and
+#'   p summaries, where \code{d_inbounds} / \code{p_inbounds} are the default
+#'   union decisions and \code{d_inbounds_hull} / \code{p_inbounds_hull} the
+#'   convex-hull fallbacks), \code{d_results}, \code{p_results},
+#'   \code{d_method_intervals}, and \code{p_method_intervals}.
 #'
 #' @export
 recalc_independent_t <- function(
@@ -301,6 +360,7 @@ recalc_independent_t <- function(
     p_operator = "equals",
     p_methods = NULL,
     alternative = "two.sided",
+    mu = 0,
     d = NULL,
     d_ci_lower = NULL,
     d_ci_upper = NULL,
@@ -321,6 +381,7 @@ recalc_independent_t <- function(
     rounding = rounding,
     p = p, p_digits = p_digits, p_operator = p_operator,
     p_methods = p_methods, alternative = alternative,
+    mu = mu,
     direction = direction,
     include_se_sd_confusion = include_se_sd_confusion
   )
@@ -340,16 +401,24 @@ recalc_independent_t <- function(
 
   reproduced_out <- dplyr::bind_cols(
     res_d$reproduced |>
-      dplyr::select(d, min_d, max_d, min_d_rounded, max_d_rounded, d_inbounds),
+      dplyr::select(d, min_d, max_d, min_d_rounded, max_d_rounded,
+                    d_inbounds, d_inbounds_hull),
     res_p$reproduced |>
       dplyr::select(p_operator, p, min_p, max_p,
-                    min_p_rounded, max_p_rounded, p_inbounds)
+                    min_p_rounded, max_p_rounded, p_inbounds, p_inbounds_hull)
   )
 
+  # Carry the union-region "covered fraction" with d_/p_ prefixes (both families
+  # have identically-named descriptor columns, so prefix to avoid a clash).
+  reproduced_out$d_covered_fraction <- res_d$reproduced$covered_fraction
+  reproduced_out$p_covered_fraction <- res_p$reproduced$covered_fraction
+
   list(
-    reproduced = reproduced_out,
-    d_results  = res_d$d_results,
-    p_results  = res_p$p_results
+    reproduced         = reproduced_out,
+    d_results          = res_d$d_results,
+    p_results          = res_p$p_results,
+    d_method_intervals = res_d$method_intervals,
+    p_method_intervals = res_p$method_intervals
   )
 }
 
@@ -742,7 +811,7 @@ plot_multiverse_p <- function(res) {
     m1, m2, sd1, sd2, n1, n2,
     m_digits, sd_digits, rounding,
     p_methods, alternative, direction,
-    include_se_sd_confusion
+    include_se_sd_confusion, mu = 0
 ) {
   g <- .build_msd_grid(m1, m2, sd1, sd2, m_digits, sd_digits, rounding)
   dir_modes <- if (direction == "both") c("m1_minus_m2", "m2_minus_m1") else direction
@@ -772,8 +841,10 @@ plot_multiverse_p <- function(res) {
 
       for (dir_mode in dir_modes) {
         sign_factor <- if (dir_mode == "m1_minus_m2") 1 else -1
-        t_s <- stat_s$t * sign_factor
-        t_w <- stat_w$t * sign_factor
+        # t = (signed difference - mu) / se. With stat$t = (m1-m2)/se this is
+        # stat$t * sign_factor - mu/se (mu = 0 reduces to the usual statistic).
+        t_s <- stat_s$t * sign_factor - mu / stat_s$se
+        t_w <- stat_w$t * sign_factor - mu / stat_w$se
 
         for (p_method in p_methods) {
           tt <- if (p_method == "student_t") t_s else t_w
