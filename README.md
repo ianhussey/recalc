@@ -12,7 +12,7 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21439896.svg)](https://doi.org/10.5281/zenodo.21439896)
 <!-- badges: end -->
 
-`recalc` is a forensic meta-science R package for conducitng trustworthiness assessments on reported rounded summary statistics using recalculation checks. 
+`recalc` is a forensic meta-science R package for conducting trustworthiness assessments on reported rounded summary statistics using recalculation checks. 
 
 It recalculates *p*-values and standardised effect sizes (e.g. Cohen's *d*) from reported summary and test statistics, taking into account (a) the rounding of the inputs and outputs and (b) the analytic choices a paper usually leaves unstated (e.g. Student's vs Welch's *t*; whether reported SEs may have been reported as SDs).
 
