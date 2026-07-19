@@ -22,7 +22,7 @@ Description: Forensic meta-science tools that recalculate statistical results
     chi-squared tests, regression recovered from a correlation matrix, mediation
     analysis, coefficient alpha, and whole-versus-subgroup descriptive
     consistency.
-URL: https://github.com/ianhussey/recalc
+URL: https://doi.org/10.5281/zenodo.21439896
 BugReports: https://github.com/ianhussey/recalc/issues
 License: MIT + file LICENSE
 Encoding: UTF-8
