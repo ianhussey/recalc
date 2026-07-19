@@ -12,25 +12,15 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21439896.svg)](https://doi.org/10.5281/zenodo.21439896)
 <!-- badges: end -->
 
-`recalc` is a forensic meta-science R package. It recalculates *p*-values and
-standardised effect sizes (e.g. Cohen's *d*) from reported summary and test
-statistics, taking into account (a) the rounding of the inputs and outputs and
-(b) the analytic choices a paper usually leaves unstated (e.g. Student's vs
-Welch's *t*; whether reported SEs may have been reported as SDs).
+`recalc` is a forensic meta-science R package for conducitng trustworthiness assessments on reported rounded summary statistics using recalculation checks. 
+
+It recalculates *p*-values and standardised effect sizes (e.g. Cohen's *d*) from reported summary and test statistics, taking into account (a) the rounding of the inputs and outputs and (b) the analytic choices a paper usually leaves unstated (e.g. Student's vs Welch's *t*; whether reported SEs may have been reported as SDs).
 
 ## The idea
 
-A reported statistical result is not a single number. It was computed from
-inputs that are rounded, and via an analysis whose choices a paper rarely
-states in full. So a reported result is compatible with a *range* of
-recalculated values, not one.
+A reported statistical result is not a single number. It was computed from inputs that are rounded, and via an analysis whose choices a paper rarely states in full. So a reported result is compatible with a *range* of recalculated values, not one.
 
-`recalc` recomputes the result across the multiverse of those choices — the
-rounding of every input and output, Student's vs Welch's *t*, one- vs two-sided
-tests, SD/SE confusion, and so on — and reports the resulting interval and
-whether the value printed in the paper falls inside it. A result that cannot be
-reproduced under *any* defensible choice is thereby distinguished from one that
-merely depends on an unstated convention.
+`recalc` recomputes the result across the multiverse of those choices — the rounding of every input and output, Student's vs Welch's *t*, one- vs two-sided tests, SD/SE confusion, and so on — and reports the resulting interval and whether the value printed in the paper falls inside it. A result that cannot be reproduced under *any* defensible choice is thereby distinguished from one that merely depends on an unstated convention.
 
 As a recalculation method it is conceptually related to
 [statcheck](https://statcheck.io/). It was inspired by:
@@ -53,10 +43,7 @@ See the vignette (`vignette("recalc")`) for a worked introduction.
 
 ### Independent-samples *t*-test
 
-Give the reported group means, SDs, and *N*s (with the number of decimals each
-was reported to). The function returns the range of *p*-values and Cohen's *d*
-values compatible with those inputs, and checks the reported *p* and *d*
-against it.
+Give the reported group means, SDs, and *N*s (with the number of decimals each was reported to). The function returns the range of *p*-values and Cohen's *d* values compatible with those inputs, and checks the reported *p* and *d* against it.
 
 ``` r
 library(recalc)
@@ -76,9 +63,7 @@ plot_multiverse_p(res)  # every recalculated p against the reported one
 plot_multiverse_d(res)
 ```
 
-Setting `include_se_sd_confusion = TRUE` adds a branch to the multiverse in
-which the reported SDs are reinterpreted as SEs — a common source of
-irreproducible *t*-tests.
+Setting `include_se_sd_confusion = TRUE` adds a branch to the multiverse in which the reported SDs are reinterpreted as SEs — a common source of irreproducible *t*-tests.
 
 ### Contingency tables
 
@@ -122,26 +107,16 @@ recalc_chisq(counts = counts, p = 0.002, p_digits = 3)$reproduced
 
 ## Related projects
 
-- Mark Bolland's [`reappraised`](https://reappraised.shinyapps.io/check_p_vals_cont/)
-  R package and Shiny app aim to do the same as this package, with different
-  degrees of analytic flexibility.
-- Different versions of between-groups Cohen's *d*:
-  <https://rpubs.com/metinbulus/welch>
-- Different versions of within-subjects Cohen's *d*:
-  <https://github.com/ianhussey/versions-of-cohens-d>
-- Extracting pre-post correlations from summary statistics:
-  <https://matthewbjane.quarto.pub/pre-post-correlations/>
-- Lisa DeBruine's [`faux`](https://github.com/debruine/faux) package has some
-  error-detection functions.
-- Lisa DeBruine's [`within`](https://github.com/debruine/within) repo assesses
-  the plausibility of a within-subject *t*-test by showing the range of possible
-  between-timepoint correlations given the reported results.
+- Mark Bolland's [`reappraised`](https://reappraised.shinyapps.io/check_p_vals_cont/) R package and Shiny app aim to do the same as this package, with different degrees of analytic flexibility.
+- Different versions of between-groups Cohen's *d*: <https://rpubs.com/metinbulus/welch>
+- Different versions of within-subjects Cohen's *d*: <https://github.com/ianhussey/versions-of-cohens-d>
+- Extracting pre-post correlations from summary statistics <https://matthewbjane.quarto.pub/pre-post-correlations/>
+- Lisa DeBruine's [`faux`](https://github.com/debruine/faux) package has some error-detection functions.
+- Lisa DeBruine's [`within`](https://github.com/debruine/within) repo assesses the plausibility of a within-subject *t*-test by showing the range of possible between-timepoint correlations given the reported results.
 
 ## Suggested citation
 
-Hussey, I. (2026). *recalc: Recalculate statistical results from reported
-summary and test statistics.* [Computer software].
-<https://github.com/ianhussey/recalc>
+Hussey, I. (2026). *recalc*: Trustworthiness assessments for summary statistics using recalculation checks. [Computer software]. <https://github.com/ianhussey/recalc>
 [doi:10.5281/zenodo.21439896](https://doi.org/10.5281/zenodo.21439896)
 
 ## License
