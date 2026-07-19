@@ -28,6 +28,8 @@ diagnose_r2_label(
 \item{n, k}{Numeric.}
 
 \item{r2_digits, betas_digits, r_y_digits, n_digits, k_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 Two-row tibble.

@@ -21,6 +21,8 @@ diagnose_p_tails(
 \item{p}{Numeric. Reported p.}
 
 \item{p_op, t_digits, df_digits, p_digits}{As in \code{recalc_p_from_t_df()}.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 Two-row tibble.

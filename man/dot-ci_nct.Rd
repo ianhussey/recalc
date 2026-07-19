@@ -11,9 +11,9 @@ Inverts the noncentral-t distribution at the observed t. Larger ncp
 shifts the distribution right, so:
 \itemize{
 \item The UPPER ncp bound (delta_upper) satisfies
-P(T_{ncp}(df) <= t_obs) = alpha/2  (lower.tail = TRUE).
+P(T_ncp(df) <= t_obs) = alpha/2  (lower.tail = TRUE).
 \item The LOWER ncp bound (delta_lower) satisfies
-P(T_{ncp}(df) >= t_obs) = alpha/2  (lower.tail = FALSE).
+P(T_ncp(df) >= t_obs) = alpha/2  (lower.tail = FALSE).
 Then d_bound = delta_bound * sqrt(1/n1 + 1/n2), and Hedges' J is applied
 to both bounds.
 }

@@ -34,8 +34,70 @@ recalc_independent_t(
 )
 }
 \arguments{
-\item{...}{All arguments accepted by either child function. See those
-help pages for full documentation.}
+\item{m1, m2}{Numeric. Group means.}
+
+\item{sd1, sd2}{Numeric. Group SDs.}
+
+\item{n1, n2}{Numeric. Group sample sizes.}
+
+\item{m_digits, sd_digits}{Integer. Number of decimal places to which the
+means / SDs were reported. Required.}
+
+\item{rounding}{One of \code{"either"} (default), \code{"half_up"},
+\code{"bankers"}, \code{"truncate"}. See \code{\link{recalc_rounding}}.}
+
+\item{p}{Numeric. Reported p-value to compare against (optional).}
+
+\item{p_digits}{Integer. Number of decimal places the reported p uses.
+Required if \code{p} is non-NULL.}
+
+\item{p_operator}{Character. Relationship between the reported p and the
+actual calculated value. One of \code{"equals"}, \code{"less_than"},
+\code{"greater_than"}, \code{"less_than_or_equal_to"},
+\code{"greater_than_or_equal_to"}. Default \code{"equals"}.}
+
+\item{p_methods}{Character vector. Subset of \code{c("student_t",
+"welch_t")}. NULL (default) uses both.}
+
+\item{alternative}{Character vector. Subset of \code{c("two.sided",
+  "less", "greater")}. Default \code{"two.sided"}. Passing a vector
+iterates the multiverse over all of them.}
+
+\item{mu}{Numeric. The null value for the mean difference, i.e. the
+hypothesised \eqn{\mu_1 - \mu_2}. Default \code{0} (the usual test of no
+difference). A non-zero value gives \eqn{t = (\text{difference} - \mu)/SE}
+for non-inferiority / equivalence / TOST-style reports where the disclosed
+null is a margin rather than zero. A single finite number.}
+
+\item{d}{Numeric. Reported standardised effect size (optional).}
+
+\item{d_ci_lower, d_ci_upper}{Numeric. Reported CI bounds for d (optional).}
+
+\item{d_digits}{Integer. Number of decimal places d / its CI use.
+Required if \code{d} is non-NULL.}
+
+\item{d_formulas}{Character vector. Subset of \code{c("pooled_df",
+"pooled_n", "simple_avg")}. NULL (default) uses all three.}
+
+\item{hedges_correction}{Character vector. Subset of \code{c("none",
+  "approx", "exact")}. NULL (default) uses all three. Logical
+\code{TRUE}/\code{FALSE} are also accepted for back-compat
+(\code{TRUE} -> \code{c("approx", "exact")}, \code{FALSE} ->
+\code{"none"}).}
+
+\item{ci_methods}{Character vector. Subset of \code{c("wald_t", "wald_z",
+"welch_t", "nct")}. NULL (default) uses all four.}
+
+\item{se_formulas}{Character vector. Subset of \code{c("hedges_olkin",
+  "cumming", "uncorrected")}. NULL (default) uses all three. Only used
+by the Wald CI methods.}
+
+\item{alpha}{Numeric. CI significance level. Default 0.05.}
+
+\item{direction}{Character. One of \code{"m1_minus_m2"} (default),
+\code{"m2_minus_m1"}, \code{"both"}.}
+
+\item{include_se_sd_confusion}{Logical. Default FALSE.}
 }
 \value{
 A list with elements \code{reproduced} (one row, combining the d and

@@ -76,6 +76,9 @@ recalc_prepost_r <- function(sd_pre, sd_post, sd_change,
 #' change SD against the change SD a normal \eqn{r} (say 0.5) would produce.
 #'
 #' @inheritParams recalc_prepost_r
+#' @param sd_pre,sd_post Numeric. Reported pre-test and post-test SDs.
+#' @param sd_pre_digits,sd_post_digits Integer. Decimal places \code{sd_pre} /
+#'   \code{sd_post} were reported to. Required.
 #' @param r Numeric. Pre-post correlation to assume.
 #' @param r_digits Integer. Decimal places \code{r} was reported to. Required.
 #' @param sd_change Numeric. A reported change SD to check (optional).

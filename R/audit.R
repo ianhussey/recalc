@@ -46,6 +46,7 @@
 #'   predictor_names = c("AI_reliance", "override_freq")
 #' )
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 audit_regression <- function(
     # Model-level
     n = NULL, k = NULL,
@@ -231,7 +232,7 @@ audit_regression <- function(
 #' minimum interval gap. The overall conclusion accounts for diagnostic
 #' resolutions: if a main check fails but exactly one labeling interpretation
 #' (E1 / E2 / E3) is consistent with the report, the conclusion is
-#' "inconsistent as reported, but resolved by [labeling]".
+#' "inconsistent as reported, but resolved by `labeling`".
 #'
 #' @param audit Tibble returned by \code{audit_regression()}.
 #' @param verbose Logical. If TRUE (default), \code{cat()}s the report.

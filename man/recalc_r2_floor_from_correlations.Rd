@@ -18,6 +18,8 @@ recalc_r2_floor_from_correlations(
 \item{r2}{Numeric. Reported model R^2 (optional).}
 
 \item{r_y_digits, r2_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

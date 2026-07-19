@@ -25,6 +25,8 @@ recalc_ci_from_b_se(
 \item{ci}{Optional length-2 numeric \code{c(lower, upper)}.}
 
 \item{b_digits, se_digits, df_digits, ci_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 Two-row tibble.

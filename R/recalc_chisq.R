@@ -69,7 +69,7 @@
 #'   \code{n_cols}. Supply this \emph{or} the proportion arguments, not both.
 #' @param n_rows,n_cols Integer. Dimensions, required only when \code{counts}
 #'   is supplied as a flat vector.
-#' @param prop1,prop2 Numeric in [0, 1]. Reported proportion in the first
+#' @param prop1,prop2 Numeric in `[0, 1]`. Reported proportion in the first
 #'   outcome level for group 1 and group 2 (the 2x2 reconstruction route).
 #' @param n1,n2 Integer. Group totals for the 2x2 reconstruction route.
 #' @param prop_digits Integer. Number of decimal places \code{prop1}/\code{prop2}

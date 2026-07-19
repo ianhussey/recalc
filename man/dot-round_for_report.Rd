@@ -10,7 +10,7 @@
 The reported value (p or d) has already been rounded by the original
 analyst to \code{digits} decimal places under some rounding convention. For
 the \code{inbounds} comparison to be apples-to-apples, the multiverse's
-\link{min, max} must be rounded to the same precision under the same
+\verb{[min, max]} must be rounded to the same precision under the same
 convention; otherwise reported values just outside the unrounded
 multiverse but within rounding tolerance produce spurious \code{FALSE}s
 (most visible when the analytic value is within half a ULP of a

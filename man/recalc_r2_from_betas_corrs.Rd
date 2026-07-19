@@ -23,6 +23,8 @@ recalc_r2_from_betas_corrs(
 \item{r2}{Numeric. Reported model R^2 (optional).}
 
 \item{betas_digits, r_y_digits, r2_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

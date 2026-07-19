@@ -26,6 +26,8 @@ recalc_p_from_f(
 \code{"ge"}.}
 
 \item{f_digits, df1_digits, df2_digits, p_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

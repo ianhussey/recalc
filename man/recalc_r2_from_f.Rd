@@ -22,6 +22,8 @@ recalc_r2_from_f(
 \item{r2}{Numeric. Reported R^2 (optional).}
 
 \item{f_digits, n_digits, k_digits, r2_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

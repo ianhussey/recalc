@@ -11,6 +11,7 @@
 #' @examples
 #' recalc_f_from_r2(r2 = 0.41, n = 1923, k = 2, f = 665.4)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_f_from_r2 <- function(r2, n, k, f = NULL,
                              r2_digits = 2, n_digits = 0, k_digits = 0,
                              f_digits = 2, rounding = "either") {
@@ -35,6 +36,7 @@ recalc_f_from_r2 <- function(r2, n, k, f = NULL,
 #' @examples
 #' recalc_r2_from_f(f = 665.4, n = 1923, k = 2, r2 = 0.41)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_r2_from_f <- function(f, n, k, r2 = NULL,
                              f_digits = 2, n_digits = 0, k_digits = 0,
                              r2_digits = 2, rounding = "either") {
@@ -64,6 +66,7 @@ recalc_r2_from_f <- function(f, n, k, r2 = NULL,
 #' @examples
 #' recalc_p_from_f(f = 665.4, df1 = 2, df2 = 1920, p = 0.001, p_op = "lt")
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_p_from_f <- function(f, df1, df2, p = NULL, p_op = "eq",
                             f_digits = 2, df1_digits = 0,
                             df2_digits = 0, p_digits = 3, rounding = "either") {
@@ -92,6 +95,7 @@ recalc_p_from_f <- function(f, df1, df2, p = NULL, p_op = "eq",
 #' @examples
 #' recalc_adj_r2(r2 = 0.41, n = 1923, k = 2, adj_r2 = 0.41)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_adj_r2 <- function(r2, n, k, adj_r2 = NULL,
                           r2_digits = 2, n_digits = 0, k_digits = 0,
                           adj_r2_digits = 2, rounding = "either") {
@@ -120,6 +124,7 @@ recalc_adj_r2 <- function(r2, n, k, adj_r2 = NULL,
 #' recalc_r2_from_betas_corrs(betas = c(-0.39, 0.47),
 #'                            r_y = c(-0.53, 0.61), r2 = 0.41)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_r2_from_betas_corrs <- function(betas, r_y, r2 = NULL,
                                        betas_digits = 2, r_y_digits = 2,
                                        r2_digits = 2, rounding = "either") {
@@ -156,6 +161,7 @@ recalc_r2_from_betas_corrs <- function(betas, r_y, r2 = NULL,
 #' @examples
 #' recalc_r2_from_blocks(delta_r2 = c(0.18, 0.23), r2 = 0.41)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_r2_from_blocks <- function(delta_r2, r2 = NULL,
                                   delta_r2_digits = 2, r2_digits = 2, rounding = "either") {
   k <- length(delta_r2)

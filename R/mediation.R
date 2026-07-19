@@ -105,6 +105,7 @@ require_digits <- function(...) {
 #' recalc_mediation_ab(a = 0.268, b = -0.279, ab = -0.075,
 #'                     a_digits = 3, b_digits = 3, ab_digits = 3)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_mediation_ab <- function(a, b, ab = NULL,
                                 a_digits = NULL, b_digits = NULL,
                                 ab_digits = NULL, rounding = "either") {
@@ -164,6 +165,7 @@ recalc_mediation_ab <- function(a, b, ab = NULL,
 #'                    b_digits = 3, p_b_digits = 3, p_digits = 3,
 #'                    label = "HAM-D")
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_mediation_p <- function(a, p_a, b, p_b, p = NULL,
                                a_digits = NULL, p_a_digits = NULL,
                                b_digits = NULL, p_b_digits = NULL,
@@ -254,6 +256,7 @@ recalc_mediation_p <- function(a, p_a, b, p_b, p = NULL,
 #'                  ab_digits = 3, p_digits = 3,
 #'                  label = "HAM-D")
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_mediation <- function(a, p_a, b, p_b, ab = NULL, p = NULL,
                              a_digits = NULL, p_a_digits = NULL,
                              b_digits = NULL, p_b_digits = NULL,

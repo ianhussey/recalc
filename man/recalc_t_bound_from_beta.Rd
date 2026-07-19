@@ -24,6 +24,8 @@ recalc_t_bound_from_beta(
 \item{t}{Numeric. Reported t (compared in absolute value).}
 
 \item{beta_digits, r2_digits, n_digits, k_digits, t_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble. \code{consistent} is TRUE iff |reported t| does not

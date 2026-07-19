@@ -1,0 +1,125 @@
+---
+title: "Getting started with recalc"
+output:
+  rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with recalc}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 7,
+  fig.height = 4
+)
+options(scipen = 999)
+```
+
+```{r setup}
+library(recalc)
+```
+
+## The idea
+
+A reported statistical result is not a single number. The inputs it was
+computed from are rounded, and the analysis that produced it involved choices
+that a paper usually does not state (Student's vs Welch's *t*, one- vs
+two-sided, and so on). `recalc` recomputes the result across the *multiverse* of
+those choices and reports the resulting interval, then checks whether the value
+printed in the paper falls inside it.
+
+## Independent-samples *t*-test
+
+Given the reported group means, SDs, and *N*s (with the number of decimals each
+was reported to), `recalc_independent_t()` returns the range of *p*-values and
+Cohen's *d* values compatible with those inputs, and compares them against the
+reported *p* and *d*.
+
+```{r indep-t}
+res <- recalc_independent_t(
+  m1 = 10.3, m2 = 8.7,
+  sd1 = 3.1, sd2 = 2.8,
+  n1 = 50,   n2 = 48,
+  m_digits  = 1,
+  sd_digits = 1,
+  d = 0.55, d_ci_lower = 0.20, d_ci_upper = 0.90, d_digits = 2,
+  p = 0.0024, p_digits = 4
+)
+
+res$reproduced
+```
+
+The `reproduced` row carries the key verdicts: `p_inbounds` and `d_inbounds`
+say whether the reported *p* and *d* fall inside the recalculated intervals,
+together with the (rounded) interval bounds.
+
+If you only care about one side, `recalc_independent_t_p()` and
+`recalc_independent_t_d()` return the *p*-value and effect-size multiverses on
+their own.
+
+### Visualising the multiverse
+
+`plot_multiverse_p()` and `plot_multiverse_d()` show every recalculated value
+against the reported one, so a result that is only reproducible under a narrow
+set of choices is easy to spot.
+
+```{r plots}
+plot_multiverse_p(res)
+plot_multiverse_d(res)
+```
+
+### SD / SE confusion
+
+A common source of irreproducible *t*-tests is a table that labels standard
+errors as standard deviations. Setting `include_se_sd_confusion = TRUE` adds a
+branch to the multiverse in which the reported SDs are reinterpreted as SEs and
+converted with \eqn{SD = SE\sqrt{n}}.
+
+```{r se-sd}
+res_se <- recalc_independent_t(
+  m1 = 10.3, m2 = 8.7,
+  sd1 = 3.1, sd2 = 2.8,
+  n1 = 50,   n2 = 48,
+  m_digits  = 1,
+  sd_digits = 1,
+  p = 0.0024, p_digits = 4,
+  include_se_sd_confusion = TRUE
+)
+
+res_se$reproduced[, c("p_inbounds", "min_p_rounded", "max_p_rounded")]
+```
+
+## Contingency tables
+
+`recalc_chisq()` does the same for a chi-squared / association test. Give it the
+counts (or reconstructed counts from reported proportions and group sizes) and,
+optionally, the reported *p*; it recomputes the *p*-value across test variants
+(Pearson, Yates, likelihood ratio, Fisher, and others) and checks the reported
+value against the interval.
+
+```{r chisq}
+counts <- matrix(c(30, 20,
+                   15, 35),
+                 nrow = 2, byrow = TRUE)
+
+res_chisq <- recalc_chisq(counts = counts, p = 0.002, p_digits = 3)
+
+res_chisq$reproduced[, c("p_inbounds", "min_p_rounded", "max_p_rounded")]
+```
+
+## Other checks
+
+The package includes further `recalc_*()` families, each following the same
+report-an-interval-and-check pattern:
+
+- `recalc_regression_from_cor_mat()` refits an OLS regression from a reported
+  correlation matrix and recomputes coefficients, CIs, and *p*-values.
+- `recalc_mediation()` recalculates indirect-effect estimates and *p*-values.
+- `recalc_missing_subgroup()` checks whole-sample against subgroup descriptives.
+
+See the function reference (`help(package = "recalc")`) for the full list.

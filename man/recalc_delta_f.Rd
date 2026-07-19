@@ -30,6 +30,8 @@ recalc_delta_f(
 \item{delta_f}{Numeric. Reported Delta F (optional).}
 
 \item{r2_full_digits, r2_reduced_digits, delta_k_digits, n_digits, k_full_digits, delta_f_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

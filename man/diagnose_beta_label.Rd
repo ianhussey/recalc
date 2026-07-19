@@ -31,6 +31,8 @@ labeled "beta" (or "b").}
 \item{r2}{Numeric. Reported model R^2.}
 
 \item{coef_digits, r_y_digits, sd_x_digits, sd_y_digits, r2_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 Two-row tibble: one row per interpretation.

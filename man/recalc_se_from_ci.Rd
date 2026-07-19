@@ -21,6 +21,8 @@ recalc_se_from_ci(
 \item{level}{Numeric. Default 0.95.}
 
 \item{ci_digits, df_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble. \code{reported} is NA; \code{recalculated_*} is the SE

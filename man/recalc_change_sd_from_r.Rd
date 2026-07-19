@@ -17,7 +17,12 @@ recalc_change_sd_from_r(
 )
 }
 \arguments{
+\item{sd_pre, sd_post}{Numeric. Reported pre-test and post-test SDs.}
+
 \item{r}{Numeric. Pre-post correlation to assume.}
+
+\item{sd_pre_digits, sd_post_digits}{Integer. Decimal places \code{sd_pre} /
+\code{sd_post} were reported to. Required.}
 
 \item{r_digits}{Integer. Decimal places \code{r} was reported to. Required.}
 

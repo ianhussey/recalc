@@ -27,6 +27,8 @@ recalc_p_from_t_df(
 \item{two_tailed}{Logical.}
 
 \item{t_digits, df_digits, p_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

@@ -22,6 +22,8 @@ recalc_semipartial_r2_from_t(
 \item{sr2}{Numeric. Reported squared semipartial (optional).}
 
 \item{t_digits, r2_digits, df_digits, sr2_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

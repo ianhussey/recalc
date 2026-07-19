@@ -26,6 +26,8 @@ recalc_betar_from_f(
 \item{f, n, k}{Numeric.}
 
 \item{betas_digits, r_y_digits, f_digits, n_digits, k_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

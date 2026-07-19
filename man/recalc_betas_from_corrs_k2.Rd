@@ -24,6 +24,8 @@ recalc_betas_from_corrs_k2(
 \item{betas}{Optional length-2 numeric. Reported standardized betas.}
 
 \item{r_y1_digits, r_y2_digits, r_12_digits, betas_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 Two-row tibble: one row per beta.

@@ -18,6 +18,8 @@ recalc_r2_from_blocks(
 \item{r2}{Numeric. Reported full-model R^2 (optional).}
 
 \item{delta_r2_digits, r2_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

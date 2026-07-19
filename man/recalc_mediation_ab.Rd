@@ -23,6 +23,8 @@ recalc_mediation_ab(
 value was reported to. No defaults: the caller must specify the
 precision of every value they supply. \code{ab_digits} is required only
 when \code{ab} is provided.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

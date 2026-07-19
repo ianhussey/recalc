@@ -21,7 +21,7 @@ report listing each failure with reported value, recalculated interval, and
 minimum interval gap. The overall conclusion accounts for diagnostic
 resolutions: if a main check fails but exactly one labeling interpretation
 (E1 / E2 / E3) is consistent with the report, the conclusion is
-"inconsistent as reported, but resolved by \link{labeling}".
+"inconsistent as reported, but resolved by \code{labeling}".
 }
 \examples{
 a <- audit_regression(

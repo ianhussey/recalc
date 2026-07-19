@@ -38,6 +38,8 @@ must be supplied together.}
 value was reported to. No defaults: the caller must specify the precision
 of every value they supply. \code{sd_digits} is required only when
 \code{reported_sds} and \code{overall_sd} are provided.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 Tibble with one row per derived quantity. The \code{consistent} column

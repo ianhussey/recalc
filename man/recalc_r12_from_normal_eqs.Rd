@@ -22,6 +22,8 @@ recalc_r12_from_normal_eqs(
 \item{r_y1, r_y2}{Numeric. Zero-order correlations with Y.}
 
 \item{beta1_digits, beta2_digits, r_y1_digits, r_y2_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 Two-row tibble: one row per derivation of r_12. The second row uses

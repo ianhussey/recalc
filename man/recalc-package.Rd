@@ -4,12 +4,28 @@
 \name{recalc-package}
 \alias{recalc}
 \alias{recalc-package}
-\title{recalc: Tools for Recalculation Multiverses}
+\title{recalc: Recalculate Statistical Results from Reported Summary and Test Statistics}
 \description{
-Recalculate statistical results from reported summary and test statistics.
+Forensic meta-science tools that recalculate statistical results from the
+summary and test statistics reported in a paper. Because reported numbers are
+rounded and the analysis that produced them involves choices that are often
+left unstated, a single reported result is compatible with a range of
+recalculated values rather than a single one. The \verb{recalc_*()} functions
+recompute p-values and standardised effect sizes across the multiverse of
+defensible choices (input/output rounding, Student's versus Welch's t-tests,
+one- versus two-sided tests, SD/SE confusion, and so on) and report whether
+the reported value falls inside the resulting interval.
+}
+\seealso{
+Useful entry points:
+\code{\link{recalc_independent_t}} (independent-samples t-test),
+\code{\link{recalc_chisq}} (contingency tables),
+\code{\link{recalc_regression_from_cor_mat}} (regression from a correlation
+matrix), \code{\link{recalc_mediation}} (mediation), and
+\code{\link{recalc_missing_subgroup}} (whole-vs-subgroup checks).
 }
 \author{
-\strong{Maintainer}: Ian Hussey \email{Ian.hussey@unibe.ch} (\href{https://orcid.org/0000-0001-8906-7559}{ORCID})
+\strong{Maintainer}: Ian Hussey \email{ian.hussey@unibe.ch} (\href{https://orcid.org/0000-0001-8906-7559}{ORCID})
 
 }
 \keyword{internal}

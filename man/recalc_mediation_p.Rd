@@ -53,6 +53,8 @@ element of \code{df_t}.}
 all three.}
 
 \item{label}{Optional string included as a \code{label} column.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 Tibble, one row per method \eqn{\times} reference distribution.

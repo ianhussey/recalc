@@ -93,6 +93,8 @@ where their inputs are available.}
 \item{r_y_digits, sd_x_digits, sr2_digits}{Integer.}
 
 \item{r_12_digits, delta_r2_blocks_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 Tibble of every applicable check, with an extra \code{predictor}

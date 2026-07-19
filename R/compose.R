@@ -14,6 +14,7 @@
 #' @examples
 #' recalc_se_from_ci(ci = c(-6.49, -4.20), df = 30)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_se_from_ci <- function(ci, df, level = 0.95,
                               ci_digits = 2, df_digits = 0, rounding = "either") {
   alpha <- 1 - level
@@ -44,6 +45,7 @@ recalc_se_from_ci <- function(ci, df, level = 0.95,
 #' recalc_p_model_from_r2(r2 = 0.41, n = 1923, k = 2,
 #'                        p_model = 0.001, p_op = "lt")
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_p_model_from_r2 <- function(r2, n, k, p_model = NULL, p_op = "eq",
                                    r2_digits = 2, n_digits = 0,
                                    k_digits = 0, p_model_digits = 3, rounding = "either") {

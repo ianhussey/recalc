@@ -10,6 +10,7 @@
 #' @examples
 #' recalc_t_from_b_se(b = -5.34, se = 0.56, t = -9.56)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_t_from_b_se <- function(b, se, t = NULL,
                                b_digits = 2, se_digits = 2, t_digits = 2, rounding = "either") {
   recomp <- propagate_intervals(
@@ -36,6 +37,7 @@ recalc_t_from_b_se <- function(b, se, t = NULL,
 #' @examples
 #' recalc_p_from_t_df(t = -9.56, df = 30, p = 0.001, p_op = "lt")
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_p_from_t_df <- function(t, df, p = NULL, p_op = "eq",
                                two_tailed = TRUE,
                                t_digits = 2, df_digits = 0, p_digits = 3, rounding = "either") {
@@ -68,6 +70,7 @@ recalc_p_from_t_df <- function(t, df, p = NULL, p_op = "eq",
 #' recalc_ci_from_b_se(b = -5.34, se = 0.56, df = 30,
 #'                     ci = c(-6.49, -4.20))
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_ci_from_b_se <- function(b, se, df, level = 0.95, ci = NULL,
                                 b_digits = 2, se_digits = 2,
                                 df_digits = 0, ci_digits = 2, rounding = "either") {
@@ -105,6 +108,7 @@ recalc_ci_from_b_se <- function(b, se, df, level = 0.95, ci = NULL,
 #' @examples
 #' recalc_beta_from_b(b = -5.34, sd_x = 0.98, sd_y = 6.03, beta = -0.87)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_beta_from_b <- function(b, sd_x, sd_y, beta = NULL,
                                b_digits = 2, sd_x_digits = 2,
                                sd_y_digits = 2, beta_digits = 2, rounding = "either") {
@@ -132,6 +136,7 @@ recalc_beta_from_b <- function(b, sd_x, sd_y, beta = NULL,
 #' @examples
 #' recalc_t_bound_from_beta(beta = 0.30, r2 = 0.20, n = 200, k = 3, t = 4.20)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_t_bound_from_beta <- function(beta, r2, n, k, t = NULL,
                                      beta_digits = 2, r2_digits = 2,
                                      n_digits = 0, k_digits = 0,
@@ -169,6 +174,7 @@ recalc_t_bound_from_beta <- function(beta, r2, n, k, t = NULL,
 #' @examples
 #' recalc_semipartial_r2_from_t(t = 3.50, r2 = 0.40, df = 200, sr2 = 0.037)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_semipartial_r2_from_t <- function(t, r2, df, sr2 = NULL,
                                          t_digits = 2, r2_digits = 2,
                                          df_digits = 0, sr2_digits = 3, rounding = "either") {

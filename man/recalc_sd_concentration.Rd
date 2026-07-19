@@ -21,6 +21,8 @@ recalc_sd_concentration(
 \item{n_digits, sd_digits}{Integer. Number of decimal places each value was
 reported to. No defaults: the caller must specify the precision of every
 value they supply.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble. \code{recalculated_lower} / \code{recalculated_upper} bracket the

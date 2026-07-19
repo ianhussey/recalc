@@ -340,8 +340,8 @@ recalc_independent_t_d <- function(
 #' and \code{\link{recalc_independent_t_d}} and merges their outputs into a
 #' single result list.
 #'
-#' @param ... All arguments accepted by either child function. See those
-#'   help pages for full documentation.
+#' @inheritParams recalc_independent_t_p
+#' @inheritParams recalc_independent_t_d
 #'
 #' @return A list with elements \code{reproduced} (one row, combining the d and
 #'   p summaries, where \code{d_inbounds} / \code{p_inbounds} are the default
@@ -758,9 +758,9 @@ plot_multiverse_p <- function(res) {
 #' Inverts the noncentral-t distribution at the observed t. Larger ncp
 #' shifts the distribution right, so:
 #'   - The UPPER ncp bound (delta_upper) satisfies
-#'     P(T_{ncp}(df) <= t_obs) = alpha/2  (lower.tail = TRUE).
+#'     P(T_ncp(df) <= t_obs) = alpha/2  (lower.tail = TRUE).
 #'   - The LOWER ncp bound (delta_lower) satisfies
-#'     P(T_{ncp}(df) >= t_obs) = alpha/2  (lower.tail = FALSE).
+#'     P(T_ncp(df) >= t_obs) = alpha/2  (lower.tail = FALSE).
 #' Then d_bound = delta_bound * sqrt(1/n1 + 1/n2), and Hedges' J is applied
 #' to both bounds.
 #' @keywords internal
@@ -1036,7 +1036,7 @@ plot_multiverse_p <- function(res) {
 #' The reported value (p or d) has already been rounded by the original
 #' analyst to `digits` decimal places under some rounding convention. For
 #' the `inbounds` comparison to be apples-to-apples, the multiverse's
-#' [min, max] must be rounded to the same precision under the same
+#' `[min, max]` must be rounded to the same precision under the same
 #' convention; otherwise reported values just outside the unrounded
 #' multiverse but within rounding tolerance produce spurious `FALSE`s
 #' (most visible when the analytic value is within half a ULP of a

@@ -15,6 +15,7 @@
 #' recalc_r12_from_normal_eqs(beta1 = -0.39, beta2 = 0.47,
 #'                            r_y1 = -0.53, r_y2 = 0.61)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_r12_from_normal_eqs <- function(beta1, beta2, r_y1, r_y2,
                                        beta1_digits = 2, beta2_digits = 2,
                                        r_y1_digits = 2, r_y2_digits = 2, rounding = "either") {
@@ -57,6 +58,7 @@ recalc_r12_from_normal_eqs <- function(beta1, beta2, r_y1, r_y2,
 #' recalc_betas_from_corrs_k2(r_y1 = -0.53, r_y2 = 0.61, r_12 = -0.45,
 #'                            betas = c(-0.39, 0.47))
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_betas_from_corrs_k2 <- function(r_y1, r_y2, r_12, betas = NULL,
                                        r_y1_digits = 2, r_y2_digits = 2,
                                        r_12_digits = 2, betas_digits = 2, rounding = "either") {
@@ -98,6 +100,7 @@ recalc_betas_from_corrs_k2 <- function(r_y1, r_y2, r_12, betas = NULL,
 #' @examples
 #' recalc_r2_floor_from_correlations(r_y = c(-0.53, 0.61), r2 = 0.41)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_r2_floor_from_correlations <- function(r_y, r2 = NULL,
                                               r_y_digits = 2, r2_digits = 2, rounding = "either") {
   k <- length(r_y)
@@ -130,6 +133,7 @@ recalc_r2_floor_from_correlations <- function(r_y, r2 = NULL,
 #' recalc_delta_f(r2_full = 0.41, r2_reduced = 0.18, delta_k = 1,
 #'               n = 1923, k_full = 2, delta_f = 750.1)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_delta_f <- function(r2_full, r2_reduced, delta_k, n, k_full,
                            delta_f = NULL,
                            r2_full_digits = 2, r2_reduced_digits = 2,
@@ -166,6 +170,7 @@ recalc_delta_f <- function(r2_full, r2_reduced, delta_k, n, k_full,
 #' recalc_betar_from_f(betas = c(-0.39, 0.47), r_y = c(-0.53, 0.61),
 #'                    f = 665.4, n = 1923, k = 2)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_betar_from_f <- function(betas, r_y, f, n, k,
                                 betas_digits = 2, r_y_digits = 2,
                                 f_digits = 2, n_digits = 0, k_digits = 0, rounding = "either") {

@@ -56,6 +56,8 @@ the Sobel rows; see \code{recalc_mediation_p()}.}
 all three.}
 
 \item{label}{Optional string included as a \code{label} column.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 Tibble: one M1 row plus one M2 row per method \eqn{\times}

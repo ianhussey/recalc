@@ -22,6 +22,8 @@ recalc_beta_from_b(
 \item{beta}{Numeric.}
 
 \item{b_digits, sd_x_digits, sd_y_digits, beta_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

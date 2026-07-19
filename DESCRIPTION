@@ -1,27 +1,47 @@
 Package: recalc
-Title: Recalculate statistical results from reported summary and test statistics
-Version: 0.6
+Title: Recalculate Statistical Results from Reported Summary and Test Statistics
+Version: 0.6.0
 Authors@R: c(
-    person("Ian", "Hussey", , "Ian.hussey@unibe.ch", role = c("aut", "cre"),
+    person("Ian", "Hussey", , "ian.hussey@unibe.ch", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-8906-7559"))
   )
-Description: Recalculate statistical results from reported summary and test statistics.
+Description: Forensic meta-science tools that recalculate statistical results
+    from the summary and test statistics reported in a paper. Reported numbers
+    are rounded, and the analysis that produced them involves choices that are
+    often left unstated, so a single reported result is compatible with a range
+    of recalculated values rather than a single one. Given reported group means,
+    standard deviations, and sample sizes -- or test statistics, correlation
+    matrices, and regression coefficients -- the package recomputes p-values and
+    standardised effect sizes (such as Cohen's d) across the multiverse of
+    defensible choices: the rounding of each input and output, Student's versus
+    Welch's t-tests, one- versus two-sided tests, and whether reported standard
+    errors may have been reported as standard deviations. It returns the interval
+    of recalculated values and whether the reported result falls inside it, so a
+    result that cannot be reproduced under any defensible choice is distinguished
+    from one that merely depends on an unstated convention. Related checks cover
+    chi-squared tests, regression recovered from a correlation matrix, mediation
+    analysis, coefficient alpha, and whole-versus-subgroup descriptive
+    consistency.
+URL: https://github.com/ianhussey/recalc
+BugReports: https://github.com/ianhussey/recalc/issues
 License: MIT + file LICENSE
 Encoding: UTF-8
+Language: en-GB
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
-Depends: 
+Depends:
     R (>= 4.1.0)
 Imports:
     dplyr,
-    tibble,
     ggplot2,
     ggstance,
+    roundwork,
     scales,
-    roundwork
+    tibble
 Suggests:
-    devtools,
-    roxygen2
+    knitr,
+    rmarkdown,
+    spelling,
+    testthat (>= 3.0.0)
 VignetteBuilder: knitr
-BuildVignettes: true
 Config/testthat/edition: 3

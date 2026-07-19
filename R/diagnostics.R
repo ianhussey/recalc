@@ -28,6 +28,7 @@
 #'   sd_x_digits = 1, sd_y_digits = 1
 #' )
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 diagnose_beta_label <- function(coef_reported, r_y, sd_x, sd_y, r2,
                                 coef_digits = 2, r_y_digits = 2,
                                 sd_x_digits = 1, sd_y_digits = 1,
@@ -90,6 +91,7 @@ diagnose_beta_label <- function(coef_reported, r_y, sd_x, sd_y, r2,
 #'   n = 1923, k = 2
 #' )
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 diagnose_r2_label <- function(r2_reported, betas, r_y, n, k,
                               r2_digits = 2, betas_digits = 2,
                               r_y_digits = 2, n_digits = 0, k_digits = 0, rounding = "either") {
@@ -152,6 +154,7 @@ diagnose_r2_label <- function(r2_reported, betas, r_y, n, k,
 #' @examples
 #' diagnose_p_tails(t = 1.85, df = 200, p = 0.033)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 diagnose_p_tails <- function(t, df, p, p_op = "eq",
                              t_digits = 2, df_digits = 0, p_digits = 3, rounding = "either") {
   one <- recalc_p_from_t_df(t, df, p = p, p_op = p_op, two_tailed = FALSE,

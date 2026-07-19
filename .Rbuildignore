@@ -1,3 +1,23 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^\.Rhistory$
+^\.DS_Store$
+.*\.DS_Store$
+^\.git$
+^\.gitignore$
+^\.gitattributes$
 ^\.github$
+^apps$
+^dev$
+^validation$
+^www$
+^build\.R$
+^cran-comments\.md$
+^CRAN-SUBMISSION$
+^LICENSE\.md$
+^doc$
+^Meta$
+^vignettes/.*\.html$
+^vignettes/.*\.qmd$
+^vignettes/.*\ old\..*$
+^vignettes/independent_t_test_from_summary_stats\.Rmd$

@@ -25,6 +25,8 @@ recalc_alpha_from_cor_sd(
 decimal places each value was reported to. No defaults: the caller must
 specify the precision of every value they supply. \code{alpha_digits} is
 required only when \code{alpha} is provided.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

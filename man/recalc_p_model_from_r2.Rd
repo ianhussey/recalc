@@ -26,6 +26,8 @@ recalc_p_model_from_r2(
 \code{"ge"}.}
 
 \item{r2_digits, n_digits, k_digits, p_model_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

@@ -35,6 +35,7 @@
 #'   n_digits = 0, mean_digits = 2, sd_digits = 2
 #' )
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_total_from_subgroups <- function(subgroup_ns, subgroup_means,
                                         subgroup_sds = NULL,
                                         overall_n = NULL, overall_mean = NULL,
@@ -172,6 +173,7 @@ recalc_total_from_subgroups <- function(subgroup_ns, subgroup_means,
 #'   n_digits = 0, mean_digits = 2, sd_digits = 2
 #' )
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_missing_subgroup <- function(reported_ns, reported_means,
                                     reported_sds = NULL,
                                     overall_n, overall_mean,
@@ -364,6 +366,7 @@ recalc_missing_subgroup <- function(reported_ns, reported_means,
 #'                         subgroup_sds = c(2.40, 2.40, 2.40, 2.40),
 #'                         n_digits = 0, sd_digits = 2)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_sd_concentration <- function(subgroup_ns, subgroup_sds,
                                     n_digits = NULL, sd_digits = NULL, rounding = "either") {
   require_digits(n_digits = n_digits, sd_digits = sd_digits)

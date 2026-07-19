@@ -30,6 +30,7 @@
 #'                          cor_mat_digits = 2, sd_vector_digits = 2,
 #'                          alpha_digits = 2)
 #' @export
+#' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_alpha_from_cor_sd <- function(cor_mat, sd_vector, alpha = NULL,
                                      cor_mat_digits = NULL,
                                      sd_vector_digits = NULL,

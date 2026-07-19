@@ -20,6 +20,8 @@ recalc_t_from_b_se(
 \item{t}{Numeric. Reported t (optional).}
 
 \item{b_digits, se_digits, t_digits}{Integer.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 One-row tibble.

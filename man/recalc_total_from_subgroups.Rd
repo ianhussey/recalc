@@ -31,6 +31,8 @@ the SD row is omitted).}
 value was reported to. No defaults: the caller must specify the precision
 of every value they supply. \code{sd_digits} is required only when
 \code{subgroup_sds} is provided.}
+
+\item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
 \value{
 Tibble with one row per checked quantity.

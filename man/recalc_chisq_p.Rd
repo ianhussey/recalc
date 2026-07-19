@@ -31,7 +31,7 @@ numeric vector in row-major order together with \code{n_rows} and
 \item{n_rows, n_cols}{Integer. Dimensions, required only when \code{counts}
 is supplied as a flat vector.}
 
-\item{prop1, prop2}{Numeric in \link{0, 1}. Reported proportion in the first
+\item{prop1, prop2}{Numeric in \verb{[0, 1]}. Reported proportion in the first
 outcome level for group 1 and group 2 (the 2x2 reconstruction route).}
 
 \item{n1, n2}{Integer. Group totals for the 2x2 reconstruction route.}

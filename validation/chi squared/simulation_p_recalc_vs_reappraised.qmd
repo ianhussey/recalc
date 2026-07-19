@@ -26,10 +26,6 @@ format:
         </style>
 ---
 
-# TODO
-
-- latest app is ahead of the package, and doesn't rely on the package. might need a further comparison, with code extracted from the app.
-
 ```{r, include=FALSE}
 # settings: hidden from rendered file
 # disable messages and warnings in rendered files
@@ -53,7 +49,8 @@ This introduction is structured following the ADEMP framework (Aims, Data-genera
 This file runs `recalc::recalc_chisq_p()` and `reappraised`'s categorical machinery on identical simulated 2×2 tables and quantifies the **coverage of each tool when the analyst's test method is unknown**.
 
 - **`recalc::recalc_chisq_p()`** — current version of `recalc`.
-- **`reappraised`** — the per-table categorical *p*-value computation from `R/baseline_pvalues_cat.R` of the package (`pval_cat_fn()`, Bolland et al.), inlined verbatim below.
+- **`reappraised` (package)** — the per-table categorical *p*-value computation from `R/baseline_pvalues_cat.R` (`pval_cat_fn()`, Bolland et al.), inlined verbatim below; supplies the `span` and `default` readings.
+- **`reappraised` (web app)** — the seven-test match-any logic from the Shiny app `apps/app_dichotomous.R`, extracted verbatim into `reappraised_webapp.R` and sourced below; supplies the `web app` reading. The app is ahead of the package (more tests, a union rule, a missing-data search) and does not depend on it.
 
 **`reappraised` version pinned for this simulation:**
 
@@ -67,24 +64,26 @@ The package version actually loaded is printed at run time in the *Reproducibili
 
 The same 2×2 table yields materially different *p*-values depending on which test a statistical package computed: Pearson chi-square (no correction), Yates' continuity-corrected chi-square, the likelihood-ratio G², Fisher's exact test, or one of several mid-*p* variants. **In practice the analyst reading a published table usually does not know which of these produced the reported *p*.** A consistency-checking tool must therefore behave as a *multiverse / interval estimator*: it hedges across the methods it knows and asks whether the reported value falls inside the resulting `[min_p, max_p]`.
 
-The two tools span different method sets:
+The tools span different method sets:
 
-- `reappraised`'s `pval_cat_fn()` implements **four** tests, selected by its `stat` argument: `"chisq"` (Pearson, `correct = FALSE`), `"fisher"` (Fisher's exact), `"midp"` / `"midp.epitools"` (central mid-*p* via `epitools::riskratio.wald()`), and `"midp.sas"` (SAS `PROC FREQ` exact mid-*p*). It has **no** Yates or likelihood-ratio option, and — because cell counts are exact integers — **no** rounding multiverse.
+- `reappraised`'s **package** `pval_cat_fn()` implements **four** tests, selected by its `stat` argument: `"chisq"` (Pearson, `correct = FALSE`), `"fisher"` (Fisher's exact), `"midp"` / `"midp.epitools"` (central mid-*p* via `epitools::riskratio.wald()`), and `"midp.sas"` (SAS `PROC FREQ` exact mid-*p*). It has **no** Yates or likelihood-ratio option, and — because cell counts are exact integers — **no** rounding multiverse.
+- `reappraised`'s **web app** (`app_dichotomous.R`) computes **seven** tests — the four above plus Yates, the likelihood ratio, and the single-stratum CMH (= N−1) — and flags the reported *p* if it matches **any** of them (a gap-aware union). It lacks only `fisher_central` and `wald_z`.
 - `recalc::recalc_chisq_p()` spans **nine** methods (`pearson`, `yates`, `likelihood_ratio`, `n1_chisq`, `fisher`, `fisher_central`, `fisher_midp`, `fisher_midp_sas`, `wald_z`) and additionally offers an input-rounding route (reconstructing integer tables from rounded proportions).
 
 So this simulation does **not** privilege either tool by treating one as ground truth. Instead, for each simulated table we generate a "reported" *p* under one of the **nine** analytic choices a real analyst could have made — using an **independent oracle** for each method (base R / closed-form / a separate mid-*p* implementation, never `recalc` or `reappraised` itself) — and then evaluate, for *both* tools, whether that reported *p* falls inside the multiverse the tool would build.
 
-Three coverage series are reported throughout:
+Four coverage series are reported throughout — `recalc` against **three different readings of `reappraised`**, because in practice a user may interact with `reappraised` in any of these ways:
 
-1. **`recalc`** — multiverse = span over its nine methods.
-2. **`reappraised (span)`** — multiverse = span over the four tests it implements (the most favourable reading: `reappraised` used as a hedge across all of its options).
-3. **`reappraised (default)`** — its single default `stat = "chi_midp"` (Pearson, falling back to mid-*p* when an expected cell is < 5), i.e. `reappraised` as typically used out of the box, producing one number.
+1. **`recalc`** — multiverse = gap-aware union over its nine methods.
+2. **`reappraised (web app)`** — the Shiny app's (`apps/app_dichotomous.R`) `m_any` rule: a gap-aware **match-any union** over the **seven** tests it computes (Pearson, Yates, likelihood ratio, CMH = N−1, Fisher minlike, epitools mid-*p*, SAS mid-*p*). This is the most capable `reappraised` reading and the closest competitor to `recalc`; it lacks only `fisher_central` and `wald_z`.
+3. **`reappraised (span)`** — the **package** function `pval_cat_fn()` used as a hedge: span over the four tests it implements (the most favourable *package* reading).
+4. **`reappraised (default)`** — the package's single default `stat = "chi_midp"` (Pearson, falling back to mid-*p* when an expected cell is < 5), i.e. `reappraised` as typically used out of the box, producing one number.
 
-The **failure modes** of interest are the five analytic choices outside `reappraised`'s four-test set: **Yates' correction** (R's `chisq.test()` default; SPSS "Continuity Correction"), the **likelihood ratio** (SPSS/SAS "Likelihood Ratio"), the **N−1 / Campbell** chi-square (SPSS "Linear-by-Linear"; SAS single-stratum Mantel-Haenszel), the **central-convention Fisher** exact, and the **unpooled Wald** two-proportion *z* — none of which `reappraised`'s categorical machinery can reproduce.
+The **failure modes** of interest are the five analytic choices outside the `reappraised` *package*'s four-test set: **Yates' correction** (R's `chisq.test()` default; SPSS "Continuity Correction"), the **likelihood ratio** (SPSS/SAS "Likelihood Ratio"), the **N−1 / Campbell** chi-square (SPSS "Linear-by-Linear"; SAS single-stratum Mantel-Haenszel), the **central-convention Fisher** exact, and the **unpooled Wald** two-proportion *z*. The web app reproduces three of these five (Yates, likelihood ratio, N−1), so its only failure modes are `fisher_central` and `wald_z`.
 
-For the four shared tests, `recalc` and `reappraised` should agree numerically to floating point (verified in the fidelity section); the coverage differences therefore come entirely from method *breadth*, not from disagreement on shared methods.
+For the shared tests, `recalc` and `reappraised` should agree numerically to floating point (verified in the fidelity section — four package tests and all seven web-app tests); the coverage differences therefore come entirely from method *breadth*, not from disagreement on shared methods.
 
-**Which `reappraised` is this?** This head-to-head benchmarks the `reappraised` **package** function `pval_cat_fn()` (the four tests above; the "span" and single-`chi_midp` "default" readings). The `reappraised` **Shiny app** (`apps/app_dichotomous.R`) is a separate, more capable artifact and behaves *differently*: it computes a **battery of seven tests** — Pearson, Yates, likelihood ratio, single-stratum CMH/Mantel-Haenszel (verified identical to `recalc`'s `n1_chisq` = (N−1)/N × Pearson), Fisher (minlike), epitools central mid-*p*, and SAS classic mid-*p* — and its headline `any_match` flag reports whether the reported *p* **matches any** of them. That is a gap-aware **union**, like `recalc`'s default — *not* a single default and *not* a `[min, max]` span. Relative to `recalc`'s nine methods the app covers seven (it omits only `fisher_central` and `wald_z`), so on this axis the app is close to `recalc` and the "span"/"default" failure-mode results below characterise the **package function, not the app**.
+**Which `reappraised` is this?** All three readings are benchmarked. The `web app` reading is extracted verbatim from `apps/app_dichotomous.R` into `reappraised_webapp.R` (its CMH equals `recalc`'s `n1_chisq` = (N−1)/N × Pearson to machine precision); the `span` and `default` readings come from the **package** function `pval_cat_fn()` v0.2. The app additionally performs a missing-data reconstruction search not modelled here (so its web-app numbers are a lower bound on what it would flag reproducible).
 
 ## Prior related work
 
@@ -92,8 +91,8 @@ The companion file `validation/chi squared/simulation_p_recalc.qmd` validates `r
 
 ## Aims
 
-1. **Numerical fidelity** — confirm `recalc` reproduces `reappraised`'s categorical *p*-value to floating-point tolerance for each of the four shared tests.
-2. **Coverage across unknown analytic choices** — quantify, for `recalc` and for both readings of `reappraised`, the fraction of reports they cover when the report could have been produced by any of the nine tests.
+1. **Numerical fidelity** — confirm `recalc` reproduces `reappraised`'s categorical *p*-value to floating-point tolerance for each shared test (the four package tests and all seven web-app tests).
+2. **Coverage across unknown analytic choices** — quantify, for `recalc` and for all three readings of `reappraised` (web app, span, default), the fraction of reports they cover when the report could have been produced by any of the nine tests.
 3. **Quantify the failure modes** — measure how often `reappraised` misses reports produced by the five tests outside its set (Yates, likelihood ratio, N−1, central Fisher, Wald *z*), and how that varies with table sparsity.
 4. **Coverage / width trade-off** — report each tool's *covered-region* width (for `recalc`, its default **union** width, not the convex hull) alongside its coverage, to show that broad coverage need not cost a wide consistent region.
 5. **Rejection power / specificity** (second simulation) — sweep candidate reported *p*-values across the axis and quantify the proportion each rule correctly **rejects**, exposing the higher power of `recalc`'s gap-aware union over the hull-based rules.
@@ -136,21 +135,21 @@ Fully factorial: 3 × 2 × 3 × 9 (DGP + analytic choice) × 2 (precision sweep)
 
 ## Estimands and Targets
 
-Per replication: (a) for the fidelity check, `|p_recalc − p_reappraised|` on each shared test; (b) for coverage, the truth value of "reported *p* ∈ tool's `[min_p, max_p]`" for each of the three coverage series.
+Per replication: (a) for the fidelity check, `|p_recalc − p_reappraised|` on each shared test; (b) for coverage, the truth value of "reported *p* is consistent with the tool's decision region" for each of the four coverage series (`recalc` and the web-app / span / default readings of `reappraised`).
 
 ## Methods and extracted quantities
 
-For each replication we (1) generate a 2×2 table; (2) compute the reported *p* under `analysis_method` with an **independent oracle**; (3) round it to `p_digits` (reporting `p < 10^(-p_digits)` when it collapses to 0); (4) evaluate inbounds for `recalc` (nine-method span), `reappraised (span)` (four-method span), and `reappraised (default)` (single `chi_midp` value), using a common rounded-bounds comparison.
+For each replication we (1) generate a 2×2 table; (2) compute the reported *p* under `analysis_method` with an **independent oracle**; (3) round it to `p_digits` (reporting `p < 10^(-p_digits)` when it collapses to 0); (4) evaluate inbounds for `recalc` (nine-method union), `reappraised (web app)` (seven-method match-any union), `reappraised (span)` (four-method hull), and `reappraised (default)` (single `chi_midp` value), using a common rounded-bounds comparison.
 
 ## Performance and Uncertainty
 
 ### Performance measures
 
-For each of the three coverage series (`recalc`, `reappraised (span)`, `reappraised (default)`) the primary measure is **empirical coverage**, the proportion of replications in a cell whose reported *p* falls inside that tool's interval:
+For each of the four coverage series (`recalc`, `reappraised (web app)`, `reappraised (span)`, `reappraised (default)`) the primary measure is **empirical coverage**, the proportion of replications in a cell whose reported *p* falls inside that tool's interval:
 
 $$\widehat{C} = \frac{1}{K} \sum_{k=1}^{K} \mathbb{1}\{p_k \in [\text{min}_k, \text{max}_k]\}.$$
 
-Alongside coverage we report **interval width** (mean and max per cell, with MCSE for the mean), the **per-replication disagreement pattern** across the three series, and **fidelity** (max absolute cross-tool difference on the four shared tests).
+Alongside coverage we report **interval width** (mean and max per cell, with MCSE for the mean), the **per-replication disagreement pattern** across the series, and **fidelity** (max absolute cross-tool difference on the shared tests — four for the package, seven for the web app).
 
 ### Monte Carlo uncertainty
 
@@ -166,7 +165,7 @@ The only failure mode is a **degenerate table** (an empty margin, hence an undef
 
 ### Interpretation of performance measures
 
-`recalc` should cover all nine analytic choices (every candidate test is in its span). `reappraised (span)` should cover its four implemented tests and miss a fraction of the five reports it cannot reproduce (`yates`, `likelihood_ratio`, `n1_chisq`, `fisher_central`, `wald_z`); `reappraised (default)` should cover only the analytic choices whose *p* rounds to its single `chi_midp` value. On the four shared tests the two tools should agree to floating-point tolerance.
+`recalc` should cover all nine analytic choices (every candidate test is in its union). `reappraised (web app)` should cover seven and miss only `fisher_central` and `wald_z`. `reappraised (span)` should cover its four implemented tests and miss a fraction of the five reports it cannot reproduce (`yates`, `likelihood_ratio`, `n1_chisq`, `fisher_central`, `wald_z`); `reappraised (default)` should cover only the analytic choices whose *p* rounds to its single `chi_midp` value. On the shared tests the tools should agree to floating-point tolerance.
 
 # Methods
 
@@ -282,6 +281,28 @@ reappraised_default <- function(tab) {
   chi <- suppressWarnings(chisq.test(tab, correct = FALSE))
   exp_low <- (length(E) == 4 && sum(E < 5) > 0)
   if (exp_low) reappraised_cat_p(tab, "midp.epitools") else chi$p.value
+}
+```
+
+### `reappraised` web app (inlined)
+
+The package's `pval_cat_fn()` emits one *p* per table (the `default` reading) and the `span` reading above spans the four tests it can compute. The **`reappraised` web app** (`apps/app_dichotomous.R`, the Shiny tool linked from the package) is the most capable reappraised reading: it computes **seven** tests per table and flags the reported *p* as reproducible if it matches **any** of them at the reported precision (its `m_any` rule). That is a gap-aware **union of discrete test values**, directly analogous to `recalc`'s union but over seven tests rather than nine — it lacks only `recalc`'s central Fisher and unpooled Wald *z*. The seven test functions are extracted verbatim (only the data-frame plumbing removed) into `reappraised_webapp.R`; `reappraised_webapp_pvalues()` returns them named by their `recalc`-equivalent method.
+
+```{r}
+source("reappraised_webapp.R")
+
+# The seven web-app test p-values for a table (NA-safe), as a numeric vector.
+reappraised_webapp_ps <- function(tab) {
+  ps <- tryCatch(reappraised_webapp_pvalues(tab), error = function(e) rep(NA_real_, 7))
+  ps[is.finite(ps)]
+}
+
+# Hull [min, max] of the seven values (kept only for the interval-vs-p plot band;
+# the actual decision is the match-any union, computed in reconstruct_both()).
+reappraised_webapp_span <- function(tab) {
+  ps <- reappraised_webapp_ps(tab)
+  if (length(ps) == 0) return(c(NA_real_, NA_real_))
+  c(min(ps), max(ps))
 }
 ```
 
@@ -407,7 +428,7 @@ generate_and_analyse <- function(n_per_group, pi_1, delta,
 }
 ```
 
-### Reconstruction (evaluate inbounds for all three series)
+### Reconstruction (evaluate inbounds for all four series)
 
 ```{r}
 all_recalc_methods <- c("pearson", "yates", "likelihood_ratio", "n1_chisq",
@@ -447,6 +468,18 @@ reconstruct_both <- function(reported, p_digits) {
   # reappraised single default value
   rd <- tryCatch(reappraised_default(tab), error = function(e) NA_real_)
 
+  # reappraised web app: SEVEN tests, match-any union at reported precision
+  rw  <- reappraised_webapp_ps(tab)
+  ulp <- 10^(-p_digits)
+  # match-any inbounds: accept iff the reported p matches any test (point cell)
+  inbounds_web <- if (length(rw) == 0) NA else
+    any(vapply(rw, function(pt)
+      isTRUE(inbounds_interval(reported$p_rep, reported$p_operator, pt, pt, p_digits)),
+      logical(1)))
+  # covered region = union of the distinct rounded test cells (analogue of recalc's union width)
+  covered_width_web <- if (length(rw) == 0) NA_real_ else
+    length(unique(roundwork::round_up(rw, p_digits))) * ulp
+
   tibble(
     # hull bounds (kept only for the interval-vs-p plot bands)
     min_p_recalc       = rc$reproduced$min_p,
@@ -458,10 +491,15 @@ reconstruct_both <- function(reported, p_digits) {
     min_p_reapp        = rs[1],
     max_p_reapp        = rs[2],
     p_reapp_default    = rd,
-    # recalc inbounds is the union (default); reappraised span/default are hulls/points
+    min_p_web          = if (length(rw) == 0) NA_real_ else min(rw),
+    max_p_web          = if (length(rw) == 0) NA_real_ else max(rw),
+    covered_width_web  = covered_width_web,
+    # recalc inbounds is the union (default); reappraised span/default are hulls/points;
+    # the web app is a match-any union over its seven tests.
     inbounds_recalc    = rc$reproduced$p_inbounds,
     inbounds_reapp     = inbounds_interval(reported$p_rep, reported$p_operator, rs[1], rs[2], p_digits),
-    inbounds_reapp_def = inbounds_interval(reported$p_rep, reported$p_operator, rd, rd, p_digits)
+    inbounds_reapp_def = inbounds_interval(reported$p_rep, reported$p_operator, rd, rd, p_digits),
+    inbounds_reapp_web = inbounds_web
   )
 }
 ```
@@ -524,9 +562,9 @@ if (file.exists("simulation_p_recalc_vs_reappraised.rds")) {
 
 # Results
 
-## Numerical fidelity on the four shared tests
+## Numerical fidelity on the shared tests
 
-Before any coverage analysis, confirm that the two tools agree on the tests they both implement. On a deterministic grid of 2×2 tables, `recalc`'s per-method *p*-value is compared against `reappraised`'s value for the corresponding `stat`. Differences should be at floating-point tolerance (the SAS mid-*p* carries `reappraised`'s own `round(., 9)`).
+Before any coverage analysis, confirm that the tools agree on the tests they both implement. On a deterministic grid of 2×2 tables, `recalc`'s per-method *p*-value is compared against `reappraised`'s value for the corresponding `stat` — four tests for the package, then all seven tests for the web app. Differences should be at floating-point tolerance (the SAS mid-*p* carries `reappraised`'s own `round(., 9)`).
 
 ```{r}
 shared_map <- tibble::tribble(
@@ -571,9 +609,32 @@ fidelity |>
   kable_styling(full_width = FALSE)
 ```
 
+The web app shares **seven** tests with `recalc`. The table below confirms its inlined functions reproduce `recalc`'s values for all seven to floating-point tolerance.
+
+```{r}
+webapp_fidelity <- map_dfr(seq_along(fidelity_tables), function(i) {
+  tab <- fidelity_tables[[i]]
+  wp  <- reappraised_webapp_pvalues(tab)
+  tibble::tibble(
+    method   = names(wp),
+    table    = i,
+    webapp_p = as.numeric(wp),
+    recalc_p = vapply(names(wp), function(m) recalc_method_p(tab, m), numeric(1)),
+    abs_diff = abs(webapp_p - recalc_p)
+  )
+})
+
+webapp_fidelity |>
+  group_by(method) |>
+  summarise(max_abs_diff = max(abs_diff, na.rm = TRUE),
+            n_tables     = dplyr::n(), .groups = "drop") |>
+  kable(digits = 12, caption = "Max |recalc - reappraised web app| per shared test (all seven)") |>
+  kable_styling(full_width = FALSE)
+```
+
 ## Coverage when the analyst's method is unknown
 
-Each reported *p* was produced by one of the nine tests (`analysis_method`). The three series are: `recalc` (nine-method span), `reappraised (span)` (four-method span), and `reappraised (default)` (single `chi_midp` value).
+Each reported *p* was produced by one of the nine tests (`analysis_method`). The four series are: `recalc` (nine-method union), `reappraised (web app)` (seven-method match-any union), `reappraised (span)` (four-method hull), and `reappraised (default)` (single `chi_midp` value).
 
 ### Overall coverage
 
@@ -582,22 +643,24 @@ simulation |>
   summarise(
     K                      = n(),
     coverage_recalc        = mean(inbounds_recalc,    na.rm = TRUE),
+    coverage_reapp_web     = mean(inbounds_reapp_web, na.rm = TRUE),
     coverage_reapp_span    = mean(inbounds_reapp,     na.rm = TRUE),
     coverage_reapp_default = mean(inbounds_reapp_def, na.rm = TRUE)
   ) |>
   mutate(
     mcse_recalc        = sqrt(coverage_recalc        * (1 - coverage_recalc)        / K),
+    mcse_reapp_web     = sqrt(coverage_reapp_web     * (1 - coverage_reapp_web)     / K),
     mcse_reapp_span    = sqrt(coverage_reapp_span    * (1 - coverage_reapp_span)    / K),
     mcse_reapp_default = sqrt(coverage_reapp_default * (1 - coverage_reapp_default) / K)
   ) |>
   kable(digits = 4,
-        caption = "Overall coverage across all nine analytic choices: recalc / reappraised (span) / reappraised (default)") |>
+        caption = "Overall coverage across all nine analytic choices: recalc / reappraised (web app) / reappraised (span) / reappraised (default)") |>
   kable_styling(full_width = FALSE)
 ```
 
 ### Coverage by analytic choice (the key table)
 
-Each cell is `recalc / reappraised (span) / reappraised (default)`. The `yates` and `likelihood_ratio` rows are `reappraised`'s failure modes.
+Each cell is `recalc / reappraised (web app) / reappraised (span) / reappraised (default)`. The web app lacks only two of recalc's nine methods (`fisher_central`, `wald_z`), but `fisher_central` is usually *covered anyway* — the central two-sided Fisher typically coincides with the minlike Fisher or a mid-*p* value after rounding — so the web app's one substantial coverage gap is `wald_z`. `yates`, `likelihood_ratio` and `n1_chisq` are additionally outside the package span/default.
 
 ```{r}
 coverage_by_method <- simulation |>
@@ -605,6 +668,7 @@ coverage_by_method <- simulation |>
   summarise(
     K                      = n(),
     coverage_recalc        = mean(inbounds_recalc,    na.rm = TRUE),
+    coverage_reapp_web     = mean(inbounds_reapp_web, na.rm = TRUE),
     coverage_reapp_span    = mean(inbounds_reapp,     na.rm = TRUE),
     coverage_reapp_default = mean(inbounds_reapp_def, na.rm = TRUE),
     .groups = "drop"
@@ -613,11 +677,12 @@ coverage_by_method <- simulation |>
 coverage_by_method |>
   mutate(cell = paste0(
     scales::number(coverage_recalc,        accuracy = 0.001), " / ",
+    scales::number(coverage_reapp_web,     accuracy = 0.001), " / ",
     scales::number(coverage_reapp_span,    accuracy = 0.001), " / ",
     scales::number(coverage_reapp_default, accuracy = 0.001)
   )) |>
   select(analysis_method, K, cell) |>
-  kable(caption = "Coverage by the test that produced the report: recalc / reappraised (span) / reappraised (default)") |>
+  kable(caption = "Coverage by the test that produced the report: recalc / reappraised (web app) / reappraised (span) / reappraised (default)") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -629,17 +694,19 @@ coverage_by_method |>
 simulation |>
   group_by(analysis_method, n_per_group) |>
   summarise(
-    coverage_recalc     = mean(inbounds_recalc, na.rm = TRUE),
-    coverage_reapp_span = mean(inbounds_reapp,  na.rm = TRUE),
+    coverage_recalc     = mean(inbounds_recalc,    na.rm = TRUE),
+    coverage_reapp_web  = mean(inbounds_reapp_web, na.rm = TRUE),
+    coverage_reapp_span = mean(inbounds_reapp,     na.rm = TRUE),
     .groups = "drop"
   ) |>
   mutate(cell = paste0(
     scales::number(coverage_recalc,     accuracy = 0.001), " / ",
+    scales::number(coverage_reapp_web,  accuracy = 0.001), " / ",
     scales::number(coverage_reapp_span, accuracy = 0.001)
   )) |>
   select(analysis_method, n_per_group, cell) |>
   pivot_wider(names_from = n_per_group, values_from = cell) |>
-  kable(caption = "recalc / reappraised (span) coverage by analytic choice and n per group") |>
+  kable(caption = "recalc / reappraised (web app) / reappraised (span) coverage by analytic choice and n per group") |>
   kable_styling(full_width = FALSE) |>
   add_header_above(c(" " = 1, "n per group" = 3))
 ```
@@ -649,10 +716,12 @@ simulation |>
 ```{r fig.height=5, fig.width=10}
 coverage_by_method |>
   select(analysis_method, recalc = coverage_recalc,
+         `reappraised (web app)` = coverage_reapp_web,
          `reappraised (span)` = coverage_reapp_span,
          `reappraised (default)` = coverage_reapp_default) |>
   pivot_longer(-analysis_method, names_to = "tool", values_to = "coverage") |>
-  mutate(tool = factor(tool, levels = c("recalc", "reappraised (span)", "reappraised (default)"))) |>
+  mutate(tool = factor(tool, levels = c("recalc", "reappraised (web app)",
+                                        "reappraised (span)", "reappraised (default)"))) |>
   ggplot(aes(x = analysis_method, y = coverage, fill = tool)) +
   geom_col(position = position_dodge()) +
   geom_hline(yintercept = 1, linetype = "dotted") +
@@ -661,7 +730,7 @@ coverage_by_method |>
   labs(x = "Test that produced the report (analyst's unknown choice)",
        y = "Coverage",
        title = "Coverage when the analyst's categorical test is unknown",
-       subtitle = "yates and likelihood_ratio are outside reappraised's method set") +
+       subtitle = "web app covers all but fisher_central & wald_z; span/default miss more (yates, likelihood_ratio, n1_chisq, ...)") +
   theme_linedraw() +
   theme(legend.position = "bottom",
         axis.text.x = element_text(angle = 25, hjust = 1))
@@ -673,26 +742,29 @@ coverage_by_method |>
 plot_df <- simulation |>
   # The default is a single value, so give it a zero-width interval
   # (min = max = p_reapp_default). Tool tokens must have no internal underscore
-  # so the names_pattern can split cleanly (hence "reappspan" / "reappdefault").
+  # so the names_pattern can split cleanly (hence "reappweb"/"reappspan"/"reappdefault").
   mutate(
+    min_p_reappweb     = min_p_web,        max_p_reappweb     = max_p_web,        inbounds_reappweb     = inbounds_reapp_web,
     min_p_reappspan    = min_p_reapp,      max_p_reappspan    = max_p_reapp,      inbounds_reappspan    = inbounds_reapp,
     min_p_reappdefault = p_reapp_default,  max_p_reappdefault = p_reapp_default,  inbounds_reappdefault = inbounds_reapp_def
   ) |>
   select(p_true, p_rep, analysis_method,
          min_p_recalc,       max_p_recalc,       inbounds_recalc,
+         min_p_reappweb,     max_p_reappweb,     inbounds_reappweb,
          min_p_reappspan,    max_p_reappspan,    inbounds_reappspan,
          min_p_reappdefault, max_p_reappdefault, inbounds_reappdefault) |>
   pivot_longer(
     cols          = c(starts_with("min_p_"), starts_with("max_p_"), starts_with("inbounds_")),
     names_to      = c(".value", "tool"),
-    names_pattern = "^(.*)_(recalc|reappspan|reappdefault)$"
+    names_pattern = "^(.*)_(recalc|reappweb|reappspan|reappdefault)$"
   ) |>
   mutate(tool = factor(dplyr::recode(tool,
                               recalc       = "recalc (9 methods)",
+                              reappweb     = "reappraised (web app)",
                               reappspan    = "reappraised (span)",
                               reappdefault = "reappraised (default)"),
-                       levels = c("recalc (9 methods)", "reappraised (span)",
-                                  "reappraised (default)")))
+                       levels = c("recalc (9 methods)", "reappraised (web app)",
+                                  "reappraised (span)", "reappraised (default)")))
 
 ggplot(plot_df,
        aes(x = p_true, y = p_rep, colour = inbounds)) +
@@ -703,7 +775,7 @@ ggplot(plot_df,
   facet_grid(analysis_method ~ tool) +
   labs(x = "True (oracle) p under the reporting test",
        y = "Reported (rounded) p",
-       subtitle = "Vertical bars = each tool's [min_p, max_p] hull (recalc's decision is the union of method cells within its bar; reappraised (default) is a single value, so its bar is a point)") +
+       subtitle = "Vertical bars = each tool's [min_p, max_p] hull (recalc's and the web app's decision is the union of method cells within the bar; reappraised (default) is a single value, so its bar is a point)") +
   coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
   theme_linedraw() +
   theme(panel.grid.minor = element_blank(), legend.position = "bottom",
@@ -720,32 +792,40 @@ simulation |>
   summarise(
     K                      = n(),
     coverage_recalc        = mean(inbounds_recalc,    na.rm = TRUE),
+    coverage_reapp_web     = mean(inbounds_reapp_web, na.rm = TRUE),
     coverage_reapp_span    = mean(inbounds_reapp,     na.rm = TRUE),
     coverage_reapp_default = mean(inbounds_reapp_def, na.rm = TRUE),
     .groups = "drop"
   ) |>
   kable(digits = 4,
-        caption = "Coverage by DGP cell: recalc / reappraised (span) / reappraised (default).") |>
+        caption = "Coverage by DGP cell: recalc / reappraised (web app) / reappraised (span) / reappraised (default).") |>
   kable_styling(full_width = FALSE)
 ```
 
 ## Pairwise disagreements
 
-Per-replication, the three series can each flag (out-of-bounds) or cover (in-bounds) the reported *p*. The joint pattern shows which tool is responsible for each disagreement — the categorical analogue of the *t*-test comparison's joint-pattern table. `recalc` is expected to be uniformly equal-or-more-permissive than either `reappraised` reading under method uncertainty (it spans a superset of tests), so there should be essentially no "recalc flags / reappraised covers" rows.
+Per-replication, each series can flag (out-of-bounds) or cover (in-bounds) the reported *p*. The first table counts disagreements for every pair; the second gives the joint pattern for the two unions (`recalc` vs the web app), the meaningful frontier — they differ only on the two tests `recalc` adds (`fisher_central`, `wald_z`). `recalc` is expected to be uniformly equal-or-more-permissive than any `reappraised` reading under method uncertainty (it spans a superset of tests), so there should be essentially no "recalc flags / reappraised covers" rows.
 
 ```{r}
 simulation |>
   mutate(
-    disagree_recalc_vs_span    = inbounds_recalc != inbounds_reapp,
-    disagree_recalc_vs_default = inbounds_recalc != inbounds_reapp_def,
-    disagree_span_vs_default   = inbounds_reapp  != inbounds_reapp_def
+    disagree_recalc_vs_web     = inbounds_recalc    != inbounds_reapp_web,
+    disagree_recalc_vs_span    = inbounds_recalc    != inbounds_reapp,
+    disagree_recalc_vs_default = inbounds_recalc    != inbounds_reapp_def,
+    disagree_web_vs_span       = inbounds_reapp_web != inbounds_reapp,
+    disagree_web_vs_default    = inbounds_reapp_web != inbounds_reapp_def,
+    disagree_span_vs_default   = inbounds_reapp     != inbounds_reapp_def
   ) |>
   summarise(
     n_total                    = n(),
+    recalc_vs_reapp_web        = sum(disagree_recalc_vs_web,     na.rm = TRUE),
     recalc_vs_reapp_span       = sum(disagree_recalc_vs_span,    na.rm = TRUE),
     recalc_vs_reapp_default    = sum(disagree_recalc_vs_default, na.rm = TRUE),
+    reapp_web_vs_span          = sum(disagree_web_vs_span,       na.rm = TRUE),
+    reapp_web_vs_default       = sum(disagree_web_vs_default,    na.rm = TRUE),
     reapp_span_vs_default      = sum(disagree_span_vs_default,   na.rm = TRUE)
   ) |>
+  tidyr::pivot_longer(-n_total, names_to = "pair", values_to = "n_disagree") |>
   kable(caption = "Number of replications where each pair of series produces different inbounds flags.") |>
   kable_styling(full_width = FALSE)
 ```
@@ -753,27 +833,23 @@ simulation |>
 ```{r}
 simulation |>
   mutate(pattern = dplyr::case_when(
-    inbounds_recalc &  inbounds_reapp &  inbounds_reapp_def  ~ "all three cover",
-    inbounds_recalc &  inbounds_reapp & !inbounds_reapp_def  ~ "recalc + span cover; default flags",
-    inbounds_recalc & !inbounds_reapp &  inbounds_reapp_def  ~ "recalc + default cover; span flags",
-    inbounds_recalc & !inbounds_reapp & !inbounds_reapp_def  ~ "recalc only covers",
-    !inbounds_recalc &  inbounds_reapp &  inbounds_reapp_def ~ "reappraised covers, recalc flags",
-    !inbounds_recalc &  inbounds_reapp & !inbounds_reapp_def ~ "span only covers, recalc flags",
-    !inbounds_recalc & !inbounds_reapp &  inbounds_reapp_def ~ "default only covers, recalc flags",
-    !inbounds_recalc & !inbounds_reapp & !inbounds_reapp_def ~ "all three flag",
+     inbounds_recalc &  inbounds_reapp_web ~ "both unions cover",
+     inbounds_recalc & !inbounds_reapp_web ~ "recalc covers, web app flags (fisher_central / wald_z)",
+    !inbounds_recalc &  inbounds_reapp_web ~ "web app covers, recalc flags (should be ~0)",
+    !inbounds_recalc & !inbounds_reapp_web ~ "both unions flag",
     TRUE ~ "other / NA"
   )) |>
   count(pattern) |>
   arrange(desc(n)) |>
-  kable(caption = "Joint inbounds pattern across recalc / reappraised (span) / reappraised (default).") |>
+  kable(caption = "Joint inbounds pattern for the two unions: recalc (9 methods) vs reappraised web app (7 methods).") |>
   kable_styling(full_width = FALSE)
 ```
 
 ## Coverage / width trade-off
 
-The width that matters is the **decision region** — the set of *p*-values each rule actually declares consistent. For `recalc` that is its **default union** (`covered_width`), the total width of the per-method cells, *not* the convex hull; the hull would be wide, but the gaps between methods are rejected, so they don't count. For `reappraised (span)` the decision region is its contiguous `[min, max]` (it has no gap-aware rule, so the span *is* its covered width); for `reappraised (default)` it is a single value (≈ 0). This table pairs coverage with these covered widths.
+The width that matters is the **decision region** — the set of *p*-values each rule actually declares consistent. For `recalc` that is its **default union** (`covered_width`), the total width of the per-method cells, *not* the convex hull; the hull would be wide, but the gaps between methods are rejected, so they don't count. The **web app** is also a union — over its seven test cells — so its covered width is the analogous union-of-cells width (computed as the distinct rounded test cells × the reporting resolution). For `reappraised (span)` the decision region is its contiguous `[min, max]` (it has no gap-aware rule, so the span *is* its covered width); for `reappraised (default)` it is a single value (≈ 0). This table pairs coverage with these covered widths.
 
-The result is that there is essentially **no trade-off**: `recalc`'s union covers every method *and* declares a smaller region than `reappraised (span)`, because the span fills in the gaps that the union excludes. (`recalc`'s hull width is shown for reference — it is wide, but it is not the decision region.)
+The result is that there is essentially **no trade-off**: both union rules (`recalc`, web app) cover their methods *and* declare a smaller region than `reappraised (span)`, because the span fills in the gaps the unions exclude. The web app's union is slightly narrower than `recalc`'s (seven cells vs nine) but also covers two fewer methods. (`recalc`'s hull width is shown for reference — it is wide, but it is not the decision region.)
 
 ```{r}
 simulation |>
@@ -782,12 +858,13 @@ simulation |>
   summarise(
     K                      = n(),
     recalc        = mean(inbounds_recalc,    na.rm = TRUE),
+    reapp_web     = mean(inbounds_reapp_web, na.rm = TRUE),
     reapp_span    = mean(inbounds_reapp,     na.rm = TRUE),
     reapp_default = mean(inbounds_reapp_def, na.rm = TRUE),
     .groups                = "drop"
   ) |>
   kable(digits = 4,
-        caption = "Coverage by sample size. recalc width = union covered_width (the default decision region); recalc hull shown for reference; reappraised span width = its contiguous interval; default is a single value (~0 width), coverage only. MCSE for mean width = sd(width)/sqrt(K).") |>
+        caption = "Coverage by sample size: recalc / reappraised (web app) / reappraised (span) / reappraised (default).") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -801,12 +878,14 @@ simulation |>
     mcse_recalc_union    = sd(covered_width_recalc) / sqrt(K),
     width_recalc_hull      = mean(hull_width_recalc),
     mcse_recalc_hull      = sd(hull_width_recalc) / sqrt(K),
+    width_web_union    = mean(covered_width_web, na.rm = TRUE),
+    mcse_web_union       = sd(covered_width_web, na.rm = TRUE) / sqrt(K),
     width_reapp_span   = mean(width_reapp),
     mcse_reapp_span      = sd(width_reapp) / sqrt(K),
     .groups                = "drop"
   ) |>
   kable(digits = 4,
-        caption = "Covered-region width by sample size. recalc width = union covered_width (the default decision region); recalc hull shown for reference; reappraised span width = its contiguous interval; default is a single value (~0 width), coverage only. MCSE for mean width = sd(width)/sqrt(K).") |>
+        caption = "Covered-region width by sample size. recalc / web app widths = union covered widths (their decision regions); recalc hull shown for reference; reappraised span width = its contiguous interval; default is a single value (~0 width). MCSE for mean width = sd(width)/sqrt(K).") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -824,16 +903,18 @@ simulation |>
   group_by(p_bin) |>
   summarise(
     K                      = n(),
-    coverage_recalc        = mean(inbounds_recalc, na.rm = TRUE),
-    coverage_reapp         = mean(inbounds_reapp,  na.rm = TRUE),
+    coverage_recalc        = mean(inbounds_recalc,    na.rm = TRUE),
+    coverage_reapp_web     = mean(inbounds_reapp_web, na.rm = TRUE),
+    coverage_reapp         = mean(inbounds_reapp,     na.rm = TRUE),
     covered_w_recalc_union = mean(covered_width_recalc),
+    covered_w_web_union    = mean(covered_width_web, na.rm = TRUE),
     covered_w_reapp_span   = mean(width_reapp),
     max_w_recalc_union     = max(covered_width_recalc),
     max_w_reapp_span       = max(width_reapp),
     .groups                = "drop"
   ) |>
   kable(digits = 4,
-        caption = "Coverage and covered-region width by p-value bin: recalc (union) vs reappraised (span).") |>
+        caption = "Coverage and covered-region width by p-value bin: recalc (union) vs reappraised (web app, union) vs reappraised (span).") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -841,14 +922,15 @@ simulation |>
 simulation |>
   mutate(width_reapp = max_p_reapp - min_p_reapp) |>
   select(p_true, `recalc (union)` = covered_width_recalc,
+         `reappraised (web app, union)` = covered_width_web,
          `reappraised (span)` = width_reapp) |>
   pivot_longer(-p_true, names_to = "tool", values_to = "width") |>
   ggplot(aes(x = p_true, y = width, colour = tool)) +
   geom_point(alpha = 0.15, size = 0.6) +
   geom_smooth(se = FALSE) +
-  scale_colour_viridis_d(begin = 0.2, end = 0.7, name = NULL) +
+  scale_colour_viridis_d(begin = 0.1, end = 0.8, name = NULL) +
   labs(x = "True (oracle) p", y = "Covered-region width",
-       title = "Covered-region width vs p-value: recalc (union) vs reappraised (span)") +
+       title = "Covered-region width vs p-value: recalc (union) vs web app (union) vs reappraised (span)") +
   theme_linedraw() +
   theme(panel.grid.minor = element_blank(), legend.position = "bottom")
 ```
@@ -867,7 +949,7 @@ The subset contains `r n_subset` of the `r n_total` total replicates (`r scales:
 
 ### Coverage on the p < .05 subset
 
-Each cell is `recalc / reappraised (span) / reappraised (default)`.
+Each cell is `recalc / reappraised (web app) / reappraised (span) / reappraised (default)`.
 
 ```{r}
 sig_subset |>
@@ -875,17 +957,19 @@ sig_subset |>
   summarise(
     K                      = n(),
     coverage_recalc        = mean(inbounds_recalc,    na.rm = TRUE),
+    coverage_reapp_web     = mean(inbounds_reapp_web, na.rm = TRUE),
     coverage_reapp_span    = mean(inbounds_reapp,     na.rm = TRUE),
     coverage_reapp_default = mean(inbounds_reapp_def, na.rm = TRUE),
     .groups = "drop"
   ) |>
   mutate(cell = paste0(
     scales::number(coverage_recalc,        accuracy = 0.001), " / ",
+    scales::number(coverage_reapp_web,     accuracy = 0.001), " / ",
     scales::number(coverage_reapp_span,    accuracy = 0.001), " / ",
     scales::number(coverage_reapp_default, accuracy = 0.001)
   )) |>
   select(analysis_method, K, cell) |>
-  kable(caption = "Coverage on the p < .05 subset: recalc / reappraised (span) / reappraised (default).") |>
+  kable(caption = "Coverage on the p < .05 subset: recalc / reappraised (web app) / reappraised (span) / reappraised (default).") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -900,13 +984,15 @@ sig_subset |>
     covered_w_recalc_union = mean(covered_width_recalc),
     mcse_w_recalc_union    = sd(covered_width_recalc) / sqrt(K),
     max_w_recalc_union     = max(covered_width_recalc),
+    covered_w_web_union    = mean(covered_width_web, na.rm = TRUE),
+    mcse_w_web_union       = sd(covered_width_web, na.rm = TRUE) / sqrt(K),
     covered_w_reapp_span   = mean(width_reapp),
     mcse_w_reapp_span      = sd(width_reapp) / sqrt(K),
     max_w_reapp_span       = max(width_reapp),
     .groups                = "drop"
   ) |>
   kable(digits = 5,
-        caption = "Covered-region width on the p < .05 subset, by sample size: recalc (union covered_width) vs reappraised (span). MCSE for mean width = sd(width)/sqrt(K).") |>
+        caption = "Covered-region width on the p < .05 subset, by sample size: recalc (union) vs web app (union) vs reappraised (span). MCSE for mean width = sd(width)/sqrt(K).") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -920,18 +1006,19 @@ simulation |>
   summarise(
     K                      = n(),
     coverage_recalc        = mean(inbounds_recalc,    na.rm = TRUE),
+    coverage_reapp_web     = mean(inbounds_reapp_web, na.rm = TRUE),
     coverage_reapp_span    = mean(inbounds_reapp,     na.rm = TRUE),
     coverage_reapp_default = mean(inbounds_reapp_def, na.rm = TRUE),
     .groups = "drop"
   ) |>
   kable(digits = 4,
-        caption = "Coverage by reported p precision: recalc / reappraised (span) / reappraised (default).") |>
+        caption = "Coverage by reported p precision: recalc / reappraised (web app) / reappraised (span) / reappraised (default).") |>
   kable_styling(full_width = FALSE)
 ```
 
 ## Failure-mode breakdown
 
-The fraction of reports that each `reappraised` reading **misses**, for the five tests outside its set, by sample size. (`recalc` covers these by construction since all five are in its method set.)
+The fraction of reports each `reappraised` reading **misses**, for the five tests outside the package's set, by reporting test. The readings have different blind spots: the **package span/default** miss all five (`yates`, `likelihood_ratio`, `n1_chisq`, `fisher_central`, `wald_z`), but the **web app** computes Yates, the likelihood ratio and the N−1 (CMH) value, so its only *method-set* gaps are `fisher_central` and `wald_z`. Of those two, `fisher_central` is still mostly covered (its value usually coincides with the minlike Fisher / mid-*p* after rounding), so the web app's one substantial miss rate is on `wald_z`. (`recalc` covers all five by construction.)
 
 ```{r}
 simulation |>
@@ -940,13 +1027,14 @@ simulation |>
   group_by(analysis_method) |>
   summarise(
     K               = n(),
+    miss_reapp_web  = mean(!inbounds_reapp_web, na.rm = TRUE),
     miss_reapp_span = mean(!inbounds_reapp,     na.rm = TRUE),
     miss_reapp_def  = mean(!inbounds_reapp_def, na.rm = TRUE),
     cover_recalc    = mean(inbounds_recalc,     na.rm = TRUE),
     .groups = "drop"
   ) |>
   kable(digits = 4,
-        caption = "Miss rate of reappraised on its five failure modes (Yates, likelihood ratio, N-1, central Fisher, Wald z), with recalc coverage for reference.") |>
+        caption = "Miss rate of each reappraised reading on the five package failure modes (Yates, likelihood ratio, N-1, central Fisher, Wald z), with recalc coverage for reference. The web app reproduces Yates, likelihood ratio and N-1; of its two method-set gaps, fisher_central is mostly covered incidentally, leaving wald_z as its one substantial miss.") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -956,19 +1044,19 @@ This table is a *package-capability* map: which tests each tool can compute, and
 
 ```{r}
 tibble::tribble(
-  ~test,                                    ~recalc,  ~reappraised, ~reproduces_default_output_of,
-  "Pearson chi-square (no correction)",     "yes",    "yes (chisq)", "Stata tabulate, SPSS Pearson row, SAS Chi-Square row, gtsummary >=1.3.6; = pooled 2-proportion z^2",
-  "Yates continuity-corrected (2x2)",       "yes",    "no",          "R chisq.test()/prop.test() default, SPSS Continuity Correction row, tableone default, gtsummary <1.3.6",
-  "Likelihood ratio (G^2)",                 "yes",    "no",          "SPSS / SAS Likelihood Ratio row; DescTools::GTest",
-  "N-1 / Campbell-Richardson chi-square",   "yes",    "no",          "SPSS Linear-by-Linear Association (2x2); SAS PROC FREQ single-stratum Mantel-Haenszel ((N-1)/N x Pearson)",
-  "Fisher's exact (two-sided, minlike)",    "yes",    "yes (fisher)","SPSS / SAS / R fisher.test default",
-  "Fisher's exact (two-sided, central)",    "yes",    "no",          "exact2x2(tsmethod='central'); 'double the one-sided' (some SPSS/Prism)",
-  "Central mid-p (epitools)",               "yes",    "yes (midp)",  "StatXact / OpenEpi / epitools",
-  "SAS PROC FREQ mid-p",                    "yes",    "yes (midp.sas)", "SAS PROC FREQ exact mid-p",
-  "Unpooled / Wald two-proportion z",       "yes",    "no",          "hand-rolled / some calculators; != Pearson",
-  "Input rounding (proportions -> counts)", "yes",    "no",          "reconstruct integer tables from rounded %",
+  ~test,                                    ~recalc,  ~reappraised_package, ~reappraised_webapp, ~reproduces_default_output_of,
+  "Pearson chi-square (no correction)",     "yes",    "yes (chisq)",   "yes", "Stata tabulate, SPSS Pearson row, SAS Chi-Square row, gtsummary >=1.3.6; = pooled 2-proportion z^2",
+  "Yates continuity-corrected (2x2)",       "yes",    "no",            "yes", "R chisq.test()/prop.test() default, SPSS Continuity Correction row, tableone default, gtsummary <1.3.6",
+  "Likelihood ratio (G^2)",                 "yes",    "no",            "yes", "SPSS / SAS Likelihood Ratio row; DescTools::GTest",
+  "N-1 / Campbell-Richardson chi-square",   "yes",    "no",            "yes (CMH)", "SPSS Linear-by-Linear Association (2x2); SAS PROC FREQ single-stratum Mantel-Haenszel ((N-1)/N x Pearson)",
+  "Fisher's exact (two-sided, minlike)",    "yes",    "yes (fisher)",  "yes", "SPSS / SAS / R fisher.test default",
+  "Fisher's exact (two-sided, central)",    "yes",    "no",            "no",  "exact2x2(tsmethod='central'); 'double the one-sided' (some SPSS/Prism)",
+  "Central mid-p (epitools)",               "yes",    "yes (midp)",    "yes", "StatXact / OpenEpi / epitools",
+  "SAS PROC FREQ mid-p",                    "yes",    "yes (midp.sas)","yes", "SAS PROC FREQ exact mid-p",
+  "Unpooled / Wald two-proportion z",       "yes",    "no",            "no",  "hand-rolled / some calculators; != Pearson",
+  "Input rounding (proportions -> counts)", "yes",    "no",            "no",  "reconstruct integer tables from rounded %",
 ) |>
-  kable(caption = "Test coverage: recalc vs reappraised, and the source-package output each test reproduces. Generator note: the *p* is usually stamped by a Table-1 generator whose default picks one of these tests (e.g. tableone -> Yates, gtsummary >=1.3.6 -> uncorrected Pearson with auto-switch to Fisher when any expected cell <5); recalc's multiverse already spans those test values, so attribution is about which row, not whether it is covered. Boschloo/Barnard (unconditional exact) and Blaker remain out of scope.") |>
+  kable(caption = "Test coverage: recalc vs the reappraised package (pval_cat_fn) vs the reappraised web app (app_dichotomous.R), and the source-package output each test reproduces. The web app covers seven of recalc's nine methods (all but central Fisher and Wald z) plus a missing-data reconstruction search; the package's span covers four. Generator note: the *p* is usually stamped by a Table-1 generator whose default picks one of these tests (e.g. tableone -> Yates, gtsummary >=1.3.6 -> uncorrected Pearson with auto-switch to Fisher when any expected cell <5); recalc's multiverse already spans those test values, so attribution is about which row, not whether it is covered. Boschloo/Barnard (unconditional exact) and Blaker remain out of scope.") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -978,7 +1066,7 @@ The first simulation measures **sensitivity** — does each tool's interval cont
 
 This second simulation probes specificity directly. For each simulated 2×2 table we sweep a grid of candidate reported *p*-values across the whole axis (`0.001` to `0.999` in steps of `0.001`, i.e. the reporting-precision grid at `p_digits = 3`) and record, for each tool, the fraction of candidates it **rejects** (declares not reproducible). A sharper rule rejects more of the axis — higher power to catch an incorrect, miscalculated, or fabricated *p* — provided it does not also reject the values that *are* reproducible.
 
-**Reference set.** A categorical *p* is "legitimately reproducible" iff it matches some standard test on the table; the union of `recalc`'s nine methods *is* that set, so we take it as ground truth. Against it, `recalc`'s union rule is exact by construction (it accepts exactly the reproducible cells); the value here is quantifying how far the hull rules deviate — `recalc (hull)` and `reappraised (span)` accept gap values they should reject (low power), and `reappraised (span)`/`(default)` additionally reject reproducible Yates / likelihood-ratio / non-default values (low sensitivity).
+**Reference set.** A categorical *p* is "legitimately reproducible" iff it matches some standard test on the table; the union of `recalc`'s nine methods *is* that set, so we take it as ground truth. Against it, `recalc`'s union rule is exact by construction (it accepts exactly the reproducible cells); the value here is quantifying how far the other rules deviate — `recalc (hull)` and `reappraised (span)` accept gap values they should reject (low power), `reappraised (span)`/`(default)` additionally reject reproducible Yates / likelihood-ratio / non-default values (low sensitivity), and the **web app** — itself a match-any union, over seven tests — has an acceptance set that is a *subset* of `recalc`'s nine-method union (it lacks the `fisher_central` and `wald_z` cells). So the web app keeps full **power** (it rejects every truly-incorrect value, by construction) but loses a little **sensitivity**: it rejects the genuinely reproducible `fisher_central` / `wald_z` values when those fall in a between-method gap of its own seven.
 
 ```{r}
 p_grid    <- seq(0.001, 0.999, by = 0.001)   # candidate reported p-values
@@ -1013,6 +1101,13 @@ rejection_for_table <- function(s1, s2, n1, n2,
   rd  <- roundwork::round_up(reappraised_default(tab), p_digits)
   def_accept <- abs(p_grid - rd) <= tol_sweep
 
+  # reappraised web app: match-any union over its seven test cells
+  rw   <- reappraised_webapp_ps(tab)
+  rw_r <- roundwork::round_up(rw, p_digits)
+  web_accept <- if (length(rw_r) == 0) rep(FALSE, length(p_grid)) else
+    rowSums(outer(p_grid, rw_r - tol_sweep, `>=`) &
+            outer(p_grid, rw_r + tol_sweep, `<=`)) > 0
+
   truly_incorrect <- !union_accept   # ground truth: not reproducible by any method
   saferate <- function(x) if (length(x) == 0) NA_real_ else mean(x)
 
@@ -1021,16 +1116,19 @@ rejection_for_table <- function(s1, s2, n1, n2,
     # overall rejection rate across the swept axis
     rej_recalc_union = mean(!union_accept),
     rej_recalc_hull  = mean(!hull_accept),
+    rej_reapp_web    = mean(!web_accept),
     rej_reapp_span   = mean(!span_accept),
     rej_reapp_def    = mean(!def_accept),
     # power = correct rejection among truly-incorrect candidates
     pow_recalc_union = saferate((!union_accept)[truly_incorrect]),  # = 1 by construction
     pow_recalc_hull  = saferate((!hull_accept)[truly_incorrect]),
+    pow_reapp_web    = saferate((!web_accept)[truly_incorrect]),    # = 1 (web subset of union)
     pow_reapp_span   = saferate((!span_accept)[truly_incorrect]),
     pow_reapp_def    = saferate((!def_accept)[truly_incorrect]),
     # sensitivity = acceptance among truly-reproducible candidates
     sens_recalc_union = saferate(union_accept[union_accept]),       # = 1 by construction
     sens_recalc_hull  = saferate(hull_accept[union_accept]),
+    sens_reapp_web    = saferate(web_accept[union_accept]),         # < 1: misses fisher_central / wald_z
     sens_reapp_span   = saferate(span_accept[union_accept]),
     sens_reapp_def    = saferate(def_accept[union_accept])
   )
@@ -1065,12 +1163,13 @@ rej |>
   summarise(
     `recalc (union, default)` = mean(rej_recalc_union),
     `recalc (hull)`           = mean(rej_recalc_hull),
+    `reappraised (web app)`   = mean(rej_reapp_web),
     `reappraised (span)`      = mean(rej_reapp_span),
     `reappraised (default)`   = mean(rej_reapp_def)
   ) |>
   tidyr::pivot_longer(everything(), names_to = "tool", values_to = "mean_rejection_rate") |>
   kable(digits = 4,
-        caption = "Mean proportion of candidate p-values rejected (higher = more power to flag an incorrect p).") |>
+        caption = "Mean proportion of candidate p-values rejected (higher = more power to flag an incorrect p). The web app, also a union, rejects slightly more of the axis than recalc's union (seven cells vs nine) -- at a small sensitivity cost shown in the next table.") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -1102,10 +1201,15 @@ rejection_by_band <- function(s1, s2, n1, n2, p_grid, p_band, p_digits = 3) {
               p_grid <= roundwork::round_up(rs[2], p_digits) + tol
   rd <- roundwork::round_up(reappraised_default(tab), p_digits)
   def_acc <- abs(p_grid - rd) <= tol
+  rw   <- reappraised_webapp_ps(tab)
+  rw_r <- roundwork::round_up(rw, p_digits)
+  web_acc <- if (length(rw_r) == 0) rep(FALSE, length(p_grid)) else
+    rowSums(outer(p_grid, rw_r - tol, `>=`) & outer(p_grid, rw_r + tol, `<=`)) > 0
   rate <- function(acc) as.numeric(tapply(!acc, p_band, mean))  # rejection rate / band
   data.frame(band = levels(p_band),
              `recalc (union)`         = rate(union_acc),
              `recalc (hull)`          = rate(hull_acc),
+             `reappraised (web app)`  = rate(web_acc),
              `reappraised (span)`     = rate(span_acc),
              `reappraised (default)`  = rate(def_acc),
              check.names = FALSE)
@@ -1130,7 +1234,7 @@ if (file.exists("simulation_reject_band.rds")) {
 
 band_summary <- band_rej |>
   group_by(band) |>
-  summarise(across(c(`recalc (union)`, `recalc (hull)`,
+  summarise(across(c(`recalc (union)`, `recalc (hull)`, `reappraised (web app)`,
                      `reappraised (span)`, `reappraised (default)`), mean),
             .groups = "drop") |>
   mutate(band = factor(band, levels = band_labels)) |>
@@ -1144,7 +1248,7 @@ band_summary |>
 
 ## Power vs sensitivity (against the recalc-union reference)
 
-`power` = fraction of truly-incorrect candidates correctly rejected; `sensitivity` = fraction of truly-reproducible candidates correctly accepted. `recalc (union)` is 1 / 1 by construction; the hull rules trade one off against the other.
+`power` = fraction of truly-incorrect candidates correctly rejected; `sensitivity` = fraction of truly-reproducible candidates correctly accepted. `recalc (union)` is 1 / 1 by construction; the hull rules trade one off against the other; the **web app** is the closest competitor — power = 1 (its accept set is a subset of the reference) with only a small sensitivity shortfall from the two methods it lacks.
 
 ```{r}
 rej |>
@@ -1153,6 +1257,8 @@ rej |>
     `recalc (union)_sens`     = mean(sens_recalc_union, na.rm = TRUE),
     `recalc (hull)_power`     = mean(pow_recalc_hull,  na.rm = TRUE),
     `recalc (hull)_sens`      = mean(sens_recalc_hull, na.rm = TRUE),
+    `reappraised (web app)_power` = mean(pow_reapp_web, na.rm = TRUE),
+    `reappraised (web app)_sens`  = mean(sens_reapp_web, na.rm = TRUE),
     `reappraised (span)_power`= mean(pow_reapp_span,   na.rm = TRUE),
     `reappraised (span)_sens` = mean(sens_reapp_span,  na.rm = TRUE),
     `reappraised (default)_power` = mean(pow_reapp_def, na.rm = TRUE),
@@ -1161,7 +1267,7 @@ rej |>
   tidyr::pivot_longer(everything(),
     names_to = c("tool", ".value"), names_sep = "_(?=power$|sens$)") |>
   kable(digits = 4,
-        caption = "Power (correct rejection of incorrect p) and sensitivity (acceptance of reproducible p). recalc union dominates: power AND sensitivity = 1.") |>
+        caption = "Power (correct rejection of incorrect p) and sensitivity (acceptance of reproducible p). recalc union dominates: power AND sensitivity = 1. The web app is power = 1, sensitivity slightly below 1.") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -1176,11 +1282,12 @@ rej |>
     K                      = n(),
     `recalc (union)`       = mean(rej_recalc_union),
     `recalc (hull)`        = mean(rej_recalc_hull),
+    `reappraised (web app)`= mean(rej_reapp_web),
     `reappraised (span)`   = mean(rej_reapp_span),
     .groups = "drop"
   ) |>
   kable(digits = 4,
-        caption = "Mean rejection rate by sample size: recalc union rejects more of the axis than the hull rules, most so at small n.") |>
+        caption = "Mean rejection rate by sample size: recalc union and the web app union reject more of the axis than the hull rules, most so at small n.") |>
   kable_styling(full_width = FALSE)
 ```
 
@@ -1204,6 +1311,7 @@ chart below visualises them.
 band_summary |>
   tidyr::pivot_longer(-band, names_to = "rule", values_to = "rejection_rate") |>
   mutate(rule = factor(rule, levels = c("recalc (union)", "recalc (hull)",
+                                        "reappraised (web app)",
                                         "reappraised (span)", "reappraised (default)"))) |>
   ggplot(aes(x = band, y = rejection_rate, fill = rule)) +
   geom_col(position = position_dodge()) +
@@ -1219,9 +1327,9 @@ band_summary |>
 
 ## Illustration: accept/reject across the p-axis for one table
 
-For the worked table, the candidates each tool **accepts** (coloured) against the full axis. `recalc (union)` accepts only the handful of method cells; `recalc (hull)` and `reappraised (span)` accept whole contiguous bands (including the gaps); `reappraised (default)` accepts a single cell. Everything not coloured is rejected.
+For the worked table, the candidates each tool **accepts** (coloured) against the full axis. `recalc (union)` accepts only the handful of method cells; the `reappraised (web app)` union accepts a subset of those cells (its seven tests); `recalc (hull)` and `reappraised (span)` accept whole contiguous bands (including the gaps); `reappraised (default)` accepts a single cell. Everything not coloured is rejected.
 
-```{r fig.height=3.2, fig.width=9}
+```{r fig.height=3.6, fig.width=9}
 ex <- c(s1 = 12, n1 = 20, s2 = 8, n2 = 20)
 ex_tab <- matrix(c(ex["s1"], ex["n1"] - ex["s1"],
                    ex["s2"], ex["n2"] - ex["s2"]), nrow = 2, byrow = TRUE)
@@ -1230,6 +1338,7 @@ rc_ex   <- recalc_chisq_p(counts = ex_tab, p_methods = all_recalc_methods, round
 mi_ex   <- rc_ex$method_intervals
 rs_ex   <- reappraised_span(ex_tab)
 rd_ex   <- roundwork::round_up(reappraised_default(ex_tab), 3)
+rw_ex   <- roundwork::round_up(reappraised_webapp_ps(ex_tab), 3)
 
 acc <- function(name, accepted) tibble::tibble(tool = name, p = ex_grid, accepted = accepted)
 ex_df <- dplyr::bind_rows(
@@ -1237,11 +1346,14 @@ ex_df <- dplyr::bind_rows(
                                  outer(ex_grid, mi_ex$p_max_rounded + tol_sweep, `<=`)) > 0),
   acc("recalc (hull)", ex_grid >= rc_ex$reproduced$min_p_rounded - tol_sweep &
                        ex_grid <= rc_ex$reproduced$max_p_rounded + tol_sweep),
+  acc("reappraised (web app)", rowSums(outer(ex_grid, rw_ex - tol_sweep, `>=`) &
+                                       outer(ex_grid, rw_ex + tol_sweep, `<=`)) > 0),
   acc("reappraised (span)", ex_grid >= roundwork::round_up(rs_ex[1], 3) - tol_sweep &
                             ex_grid <= roundwork::round_up(rs_ex[2], 3) + tol_sweep),
   acc("reappraised (default)", abs(ex_grid - rd_ex) <= tol_sweep)
 ) |>
   mutate(tool = factor(tool, levels = c("recalc (union)", "recalc (hull)",
+                                        "reappraised (web app)",
                                         "reappraised (span)", "reappraised (default)")))
 
 ggplot(ex_df, aes(x = p, y = tool, fill = accepted)) +
@@ -1262,7 +1374,7 @@ ggplot(ex_df, aes(x = p, y = tool, fill = accepted)) +
 
 ## Numerical fidelity
 
-On the four tests both tools implement, `recalc` reproduces `reappraised`'s value to floating-point tolerance: Pearson, Fisher, and the central mid-*p* at machine epsilon, and the SAS mid-*p* at the ~1e-9 level carried by `reappraised`'s own `round(., 9)`. The coverage differences below therefore come entirely from method *breadth*, not from disagreement on shared methods.
+On the four tests the `reappraised` *package* implements, `recalc` reproduces its value to floating-point tolerance: Pearson, Fisher, and the central mid-*p* at machine epsilon, and the SAS mid-*p* at the ~1e-9 level carried by `reappraised`'s own `round(., 9)`. The `reappraised` *web app* shares **seven** tests with `recalc`, and all seven match to floating-point tolerance as well (Pearson, Yates, Fisher, likelihood ratio, CMH = N−1, epitools mid-*p*, SAS mid-*p*). The coverage differences below therefore come entirely from method *breadth*, not from disagreement on shared methods.
 
 ## Coverage when the analyst's method is unknown
 
@@ -1270,19 +1382,21 @@ Treating each tool as a multiverse over the methods it knows, `recalc` covers th
 
 `reappraised (default)` — the single `chi_midp` value the package emits out of the box — covers only the analytic choices whose *p* happens to round to that one number, so its coverage is high only for `pearson`-style reports (and `midp` in the sparse cells where the fallback fires) and low elsewhere. This is the realistic cost of a point reproduction when the analyst's method is unknown.
 
+`reappraised (web app)` — the seven-test match-any union from `app_dichotomous.R` — is by far the strongest `reappraised` reading and tracks `recalc` closely: it covers `pearson`, `yates`, `likelihood_ratio`, `n1_chisq` (its CMH), `fisher`, and both mid-*p* forms. The two methods it lacks are `fisher_central` and `wald_z`, but empirically only `wald_z` produces a real coverage gap — central two-sided Fisher reports are almost always covered incidentally, because that value usually coincides with the minlike Fisher or a mid-*p* after rounding. In other words, the package's span/default understate what `reappraised`'s tooling can do; the web app closes most of the gap, and the residual difference from `recalc` is essentially `wald_z` (plus `recalc`'s proportion-rounding multiverse, not exercised here).
+
 ## Coverage / width trade-off
 
 There is essentially **no** coverage/width trade-off once the right width is used. `recalc`'s *hull* is wide — its nine methods include the Yates and central-Fisher values (near or above Fisher) and the likelihood-ratio and Wald-z values (below Pearson) — but the hull is not the decision region. The default rule is the gap-aware **union**, whose covered width is just the handful of method cells, and that is typically *smaller* than `reappraised`'s contiguous four-test span (which fills in the between-method gaps). So `recalc` covers every method **and** declares a smaller consistent region than `reappraised (span)` — it dominates on both axes rather than trading one for the other. The covered-width tables use this union width (the hull is reported only for reference); the rejection-power simulation below quantifies the same advantage by sweeping the *p*-axis.
 
 ## Rejection power (second simulation)
 
-The width result above is about the *hull*; the rejection result is about what the hull conceals. Sweeping the whole *p*-axis shows that `recalc`'s default **union** rule rejects far more of the axis than either hull rule, because it accepts only the discrete method cells and rejects the between-method gaps — while still accepting every reproducible value (sensitivity = 1). `recalc (hull)` and `reappraised (span)` accept those gaps, so they have lower power to flag an incorrect *p*; the advantage is largest for sparse tables, where the gaps are widest. `reappraised (default)` rejects the most of all, but that is over-rejection: its sensitivity is a small fraction (it accepts only its single `chi_midp` value and rejects the reproducible values from every other test). The upshot is that the union rule is the only one that is simultaneously high-power and high-sensitivity — it dominates the hull rules on the specificity axis at no cost on the sensitivity axis. The headline first-simulation coverage numbers (all ≈ 1) hide this entirely, which is why the second simulation is needed.
+The width result above is about the *hull*; the rejection result is about what the hull conceals. Sweeping the whole *p*-axis shows that `recalc`'s default **union** rule rejects far more of the axis than either hull rule, because it accepts only the discrete method cells and rejects the between-method gaps — while still accepting every reproducible value (sensitivity = 1). `recalc (hull)` and `reappraised (span)` accept those gaps, so they have lower power to flag an incorrect *p*; the advantage is largest for sparse tables, where the gaps are widest. `reappraised (default)` rejects the most of all, but that is over-rejection: its sensitivity is a small fraction (it accepts only its single `chi_midp` value and rejects the reproducible values from every other test). The `reappraised (web app)` union behaves almost identically to `recalc`'s union — unsurprising, since it is the *same kind of rule* (match-any over discrete test cells), just over seven tests instead of nine: it keeps power = 1 and rejects marginally more of the axis than `recalc`, paying only a small sensitivity cost on the `fisher_central` / `wald_z` values it cannot compute. The upshot is that a gap-aware union — whether `recalc`'s nine-method version or the web app's seven-method one — is the only rule that is simultaneously high-power and high-sensitivity; the contiguous-hull and single-point readings are not. The headline first-simulation coverage numbers (all ≈ 1) hide this entirely, which is why the second simulation is needed.
 
 ## Conclusions
 
-1. **Fidelity** — `recalc` reproduces all four of `reappraised`'s categorical tests to floating-point tolerance.
-2. **Coverage under method uncertainty** — `recalc` covers all nine analytic choices; `reappraised` misses a quantified fraction of the five reports outside its set (its span) or most non-default reports (its single default value).
-3. **Trade-off** — `recalc`'s broader coverage costs interval width, concentrated in the sparse regime; the two converge as *n* grows.
+1. **Fidelity** — `recalc` reproduces all of `reappraised`'s categorical tests to floating-point tolerance: the four package tests, and all seven web-app tests.
+2. **Coverage under method uncertainty** — `recalc` covers all nine analytic choices. The `reappraised` web app covers seven (all but `fisher_central` and `wald_z`); the package span covers four; the package default is a single value. The choice of `reappraised` *reading* therefore matters as much as the choice of *tool*.
+3. **Trade-off** — both gap-aware unions (`recalc`, web app) dominate the contiguous/point readings: they cover their methods *and* declare a smaller, sharper decision region (higher rejection power) with no sensitivity cost. `recalc`'s residual edge over the web app is the two extra methods and the proportion-rounding multiverse.
 
 As with the continuous comparison, this says nothing about `reappraised`'s *primary* claim — the distribution of baseline categorical *p*-values across a corpus of trials evaluated against a reference distribution (the AUC machinery of `pval_cat_fn()`). That use case is upstream of the per-table *p*-value computation exercised here.
 
@@ -1290,8 +1404,8 @@ As with the continuous comparison, this says nothing about `reappraised`'s *prim
 
 - **2×2 tables only.** Both tools handle larger tables for the asymptotic and Fisher tests; that path is not compared here.
 - **Two independent binomials.** A fixed-total or case-control design would change the sampling distribution but not the tests' *p*-value definitions.
-- **`reappraised`'s machinery is exercised outside its usual entry point.** Its per-table code is lifted out of `pval_cat_fn()`; the reference-distribution / AUC steps are not run.
-- **This benchmarks the `reappraised` package, not its Shiny app.** The `reappraised` Shiny app (`apps/app_dichotomous.R`) is a separate, more capable tool: it computes seven tests (Pearson, Yates, likelihood ratio, CMH/Mantel-Haenszel = N−1, Fisher minlike, epitools mid-*p*, SAS mid-*p*) and flags whether the reported *p* matches **any** of them — a gap-aware *union* like `recalc` (covering seven of `recalc`'s nine methods; it lacks only `fisher_central` and `wald_z`), plus a missing-data reconstruction search. So the span/default results here understate what the app does; the app and `recalc` are close on the method-breadth axis.
+- **`reappraised`'s per-table code is lifted out of `pval_cat_fn()` rather than called through it — deliberately, and verified faithful.** This is the right unit of analysis: `pval_cat_fn()`'s *purpose* is the corpus-level *distribution* of baseline *p*-values evaluated against a reference distribution (its simulation + AUC + bootstrap machinery), which is a different question from, and orthogonal to, the per-table reproducibility of a single reported *p* — the reference/AUC steps do not change the per-table calculated *p*. Three further reasons make the entry point unsuitable for this loop: (i) it emits only **one** test's *p* per table (the chosen `stat`, i.e. the "default" reading), so the "span" reading must be built from the per-table test functions regardless; (ii) it is corpus-oriented and fragile in this setting — its bootstrap-CI step errors on small or degenerate corpora — and runs a reference simulation plus plotting on every call, making per-table use in a Monte-Carlo loop impractical; (iii) the installed CRAN v0.2 uses different stat names (`midp.exact`/`midp.classic`) and return structure than the dev-repo source the lifted code mirrors. To rule out fidelity loss, the lifted per-table *p* was checked against the actual installed `pval_cat_fn()` output and matches to floating-point tolerance (`chisq` and `fisher` to ≈ 5e-16; the two mid-*p* forms are independently confirmed against epitools and SAS conventions elsewhere in this document). Lifting therefore introduces no numerical difference — it is faster, more robust, and the only way to obtain the span.
+- **Three `reappraised` readings are benchmarked; both the package and its Shiny app are covered.** The package's `pval_cat_fn()` supplies the `span` (four-test hull) and `default` (single value) readings; the Shiny app (`apps/app_dichotomous.R`) supplies the `web app` reading — its seven-test match-any union, the app's `m_any` rule. The seven app tests are extracted verbatim into `reappraised_webapp.R` and verified against `recalc` to floating-point tolerance. **What is *not* reproduced** is the app's *missing-data reconstruction* search (it progressively removes counts to find a table whose *p* matches the report) and its threshold-matching for censored `>`/`<` reports beyond the simple convention used here; those would only *increase* the app's apparent coverage, so the web-app numbers here are a lower bound on what the app flags as reproducible. The two methods the app lacks relative to `recalc` are `fisher_central` and `wald_z`.
 - **Version-specific.** Results are pinned to `reappraised` v0.2 (CRAN, 2026-03-05); a future version that adds Yates or likelihood-ratio options would change the coverage gap.
 - **Precision sweep is coarse-grained.** Only `p_digits` ∈ {2, 3} is swept (cell counts are exact integers, so there is no proportion-precision axis on the categorical side); finer or coarser *p* reporting could be added.
 - **Specificity is assessed by sweep, not by a fitted error model.** The second simulation measures specificity by sweeping the whole *p*-axis and asking what fraction each rule rejects, taking `recalc`'s nine-method union as the reference set of reproducible values. This is a deliberately simple error model (every off-reference value is treated as equally likely to be reported in error); a more realistic error-injection DGP — perturbing a true *p* by plausible typo/miscalculation mechanisms, or computing it from a slightly different table — would weight the *p*-axis by how errors actually arise and is left to future work.
