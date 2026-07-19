@@ -1,4 +1,3 @@
-
 library(roxygen2)
 #setwd("~/git/")
 #devtools::create("recalc")
@@ -6,32 +5,30 @@ setwd("~/git/recalc")
 
 devtools::document()
 
-devtools::check(vignettes = FALSE)
+devtools::check()
 
-#devtools::install(build_vignettes = TRUE)
-#vignette("recalc")
+# once you have the package updated, you can use it to build the vignettes, check the whole thing, and reinstall again
+devtools::build_vignettes()
 
-# or from github, after push
-devtools::install_github("ianhussey/recalc")
+devtools::install(build_vignettes = TRUE)
+
+# # or from github, after push
+# devtools::install_github("ianhussey/recalc")
 
 library(recalc)
 
 ?recalc
-
 vignette("recalc")
 
-detach("package:recalc", unload=TRUE)
 
-# once you have the package updated, you can use it to build the vignettes, check the whole thing, and reinstall again
-devtools::build_vignettes()
-devtools::check()
+detach("package:recalc", unload = TRUE)
+
 
 # cran checks
-# win-builder 
+# win-builder
 library(devtools)
-check_win_devel()        # emails results to the maintainer address in DESCRIPTION
+check_win_devel() # emails results to the maintainer address in DESCRIPTION
 
-# R-hub 
+# R-hub
 library(rhub)
-# rhub_setup() # one time
-rhub_check()             # v2: runs on GitHub Actions in your repo
+rhub_check() # v2: runs on GitHub Actions in your repo
