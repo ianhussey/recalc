@@ -47,17 +47,16 @@
 #'
 #' res <- one_or_two_way_between_anova(m = m, sd = sd, n = n)
 #' head(res)
-one_or_two_way_between_anova <- function(m,
-                                         sd,
-                                         n,
-                                         show.t = FALSE,
-                                         dp.p = -1,
-                                         labels = c(),
-                                         peta2_sig_level = 0.10,
-                                         F_rounding_set = c("half_up",
-                                                            "half_down",
-                                                            "bankers",
-                                                            "trunc")) {
+one_or_two_way_between_anova <- function(
+  m,
+  sd,
+  n,
+  show.t = FALSE,
+  dp.p = -1,
+  labels = c(),
+  peta2_sig_level = 0.10,
+  F_rounding_set = c("half_up", "half_down", "bankers", "trunc")
+) {
   # validate rounding methods (parallel to independent_t_test)
   allowed_F_rounding <- c("half_up", "half_down", "bankers", "trunc")
   bad_round <- setdiff(F_rounding_set, allowed_F_rounding)
@@ -65,13 +64,14 @@ one_or_two_way_between_anova <- function(m,
     stop(
       "F_rounding_set contains invalid values: ",
       paste0(bad_round, collapse = ", "),
-      "\nAllowed: ", paste0(allowed_F_rounding, collapse = ", ")
+      "\nAllowed: ",
+      paste0(allowed_F_rounding, collapse = ", ")
     )
   }
   F_rounding_set <- unique(F_rounding_set)
-  
+
   m.ok <- m
-  
+
   if (inherits(m.ok, "matrix")) {
     func <- ind_twoway_second
     useF <- c(3, 2, 4)
@@ -85,7 +85,7 @@ one_or_two_way_between_anova <- function(m,
       default_labels <- c("t")
     }
   }
-  
+
   # determine decimal places if not specified
   dp <- dp.p
   if (dp.p == -1) {
@@ -101,142 +101,142 @@ one_or_two_way_between_anova <- function(m,
       }
     }
   }
-  
+
   if (length(labels) == 0) {
     labels <- default_labels
   }
-  
+
   # nominal ANOVA table and F values (no rounding error)
   anova_tab <- func(m = m.ok, sd = sd, n = n)$anova.table
-  f.nom     <- anova_tab$F
-  
+  f.nom <- anova_tab$F
+
   # rounding error bounds on inputs
-  delta   <- (0.1^dp) / 2
+  delta <- (0.1^dp) / 2
   tiny.sd <- delta / 100
-  
+
   sd.hi <- pmax(sd - delta, tiny.sd)
   sd.lo <- pmax(sd + delta, tiny.sd)
-  
+
   f.hi <- f.nom
   f.lo <- f.nom
-  
+
   # generate all combinations of +/- delta on the means
   l <- length(m.ok)
   rawcomb <- utils::combn(rep(c(-delta, delta), l), l)
-  comb    <- rawcomb[, !duplicated(t(rawcomb))]
-  
+  comb <- rawcomb[, !duplicated(t(rawcomb))]
+
   for (i in seq_len(ncol(comb))) {
     m.adj <- m.ok + comb[, i]
-    
+
     if (all((abs(m.adj - m.adj[1])) < 1e-14)) {
       adj.f.hi <- 0
       adj.f.lo <- 0
     } else {
       adj_tab_h <- func(m = m.adj, sd = sd.hi, n = n)$anova.table
       adj_tab_l <- func(m = m.adj, sd = sd.lo, n = n)$anova.table
-      adj.f.hi  <- adj_tab_h$F
-      adj.f.lo  <- adj_tab_l$F
+      adj.f.hi <- adj_tab_h$F
+      adj.f.lo <- adj_tab_l$F
     }
-    
+
     f.hi <- pmax(f.hi, adj.f.hi)
     f.lo <- pmin(f.lo, adj.f.lo)
   }
-  
+
   if (show.t) {
     f.nom <- sqrt(f.nom)
-    f.hi  <- sqrt(f.hi)
-    f.lo  <- sqrt(f.lo)
+    f.hi <- sqrt(f.hi)
+    f.lo <- sqrt(f.lo)
   }
-  
+
   # result template
   result_df <- data.frame(
-    label      = character(),
-    F_type     = character(),
+    label = character(),
+    F_type = character(),
     F_rounding = character(),
-    F          = numeric(),
-    df1        = numeric(),
-    df2        = numeric(),
-    p          = numeric(),
-    peta2      = numeric(),
+    F = numeric(),
+    df1 = numeric(),
+    df2 = numeric(),
+    p = numeric(),
+    peta2 = numeric(),
     stringsAsFactors = FALSE
   )
-  
+
   # df_effect and df_error for each omnibus test
   df_effect_vec <- anova_tab$df[useF]
-  df_error      <- anova_tab$df[5L]  # "Within"
-  
+  df_error <- anova_tab$df[5L] # "Within"
+
   # decimal places used when rounding F (keep previous behaviour)
   fdp <- 3
-  
+
   # loop over effects (row, col, interaction or 1-way)
   for (i in seq_along(useF)) {
-    j         <- useF[i]
+    j <- useF[i]
     df_effect <- df_effect_vec[i]
-    
+
     nominal_p <- 1 - stats::pf(f.nom[j], df_effect, df_error)
-    min_p     <- 1 - stats::pf(f.lo[j],  df_effect, df_error)
-    max_p     <- 1 - stats::pf(f.hi[j],  df_effect, df_error)
-    
+    min_p <- 1 - stats::pf(f.lo[j], df_effect, df_error)
+    max_p <- 1 - stats::pf(f.hi[j], df_effect, df_error)
+
     peta2_nom <- (f.nom[j] * df_effect) /
       (f.nom[j] * df_effect + df_error)
     peta2_min <- (f.lo[j] * df_effect) /
       (f.lo[j] * df_effect + df_error)
     peta2_max <- (f.hi[j] * df_effect) /
       (f.hi[j] * df_effect + df_error)
-    
+
     # iterate over F rounding schemes (parallel to d_rounding_set in independent_t_test)
     for (F_rounding in F_rounding_set) {
       F_round_fun <- switch(
         F_rounding,
-        "half_up"   = function(x) roundwork::round_up(x,   fdp),
+        "half_up" = function(x) roundwork::round_up(x, fdp),
         "half_down" = function(x) roundwork::round_down(x, fdp),
-        "bankers"   = function(x) round(x, fdp),
-        "trunc"     = function(x) roundwork::round_trunc(x, fdp)
+        "bankers" = function(x) round(x, fdp),
+        "trunc" = function(x) roundwork::round_trunc(x, fdp)
       )
-      
+
       result_df <- rbind(
         result_df,
         data.frame(
-          label      = labels[i],
-          F_type     = "reported",
+          label = labels[i],
+          F_type = "reported",
           F_rounding = F_rounding,
-          F          = F_round_fun(f.nom[j]),
-          df1        = df_effect,
-          df2        = df_error,
-          p          = nominal_p,
-          peta2      = peta2_nom
+          F = F_round_fun(f.nom[j]),
+          df1 = df_effect,
+          df2 = df_error,
+          p = nominal_p,
+          peta2 = peta2_nom
         ),
         data.frame(
-          label      = labels[i],
-          F_type     = "min",
+          label = labels[i],
+          F_type = "min",
           F_rounding = F_rounding,
-          F          = F_round_fun(f.lo[j]),
-          df1        = df_effect,
-          df2        = df_error,
-          p          = min_p,
-          peta2      = peta2_min
+          F = F_round_fun(f.lo[j]),
+          df1 = df_effect,
+          df2 = df_error,
+          p = min_p,
+          peta2 = peta2_min
         ),
         data.frame(
-          label      = labels[i],
-          F_type     = "max",
+          label = labels[i],
+          F_type = "max",
           F_rounding = F_rounding,
-          F          = F_round_fun(f.hi[j]),
-          df1        = df_effect,
-          df2        = df_error,
-          p          = max_p,
-          peta2      = peta2_max
+          F = F_round_fun(f.hi[j]),
+          df1 = df_effect,
+          df2 = df_error,
+          p = max_p,
+          peta2 = peta2_max
         )
       )
     }
   }
-  
+
   # add CIs for partial eta-squared
   ci_df <- result_df |>
     dplyr::rowwise() |>
     dplyr::do(petasq_confint(
-      petasq    = .$peta2,
-      df1       = .$df1,
-      df2       = .$df2,
+      petasq = .$peta2,
+      df1 = .$df1,
+      df2 = .$df2,
       sig_level = peta2_sig_level
     )) |>
     dplyr::ungroup() |>
@@ -244,7 +244,7 @@ one_or_two_way_between_anova <- function(m,
       peta2_ci_lower = partial_etasq_lower,
       peta2_ci_upper = partial_etasq_upper
     )
-  
+
   dplyr::bind_cols(result_df, ci_df)
 }
 
@@ -293,10 +293,14 @@ ssd2sd <- function(n, ssd) {
 #'
 #' @return Estimated noncentrality parameter (numeric scalar).
 #' @keywords internal
-F_test_noncentrality <- function(x, df1, df2,
-                                 prob,
-                                 interval = c(0, 10000),
-                                 my_tol = 1e-06) {
+F_test_noncentrality <- function(
+  x,
+  df1,
+  df2,
+  prob,
+  interval = c(0, 10000),
+  my_tol = 1e-06
+) {
   f_root <- function(ncp) stats::pf(x, df1, df2, ncp) - prob
   stats::uniroot(f_root, interval, tol = my_tol)$root
 }
@@ -315,14 +319,16 @@ F_test_noncentrality <- function(x, df1, df2,
 #' @keywords internal
 power_f2 <- function(df1, df2, delta, sig.level = 0.05) {
   n <- df2 / (df1 + 1) + 1
-  fc <- stats::qf(p = sig.level,
-                  df1 = df1,
-                  df2 = (df1 + 1) * (n - 1),
-                  lower.tail = FALSE)
+  fc <- stats::qf(
+    p = sig.level,
+    df1 = df1,
+    df2 = (df1 + 1) * (n - 1),
+    lower.tail = FALSE
+  )
   lamda <- (delta^2) * (n * (df1 + 1))
   v <- (df1 + 1) * (n - 1)
   z1b <- (sqrt(2 * (df1 + lamda) - ((df1 + 2 * lamda) / (df1 + lamda))) -
-            sqrt((2 * v - 1) * ((df1 * fc) / v))) /
+    sqrt((2 * v - 1) * ((df1 * fc) / v))) /
     sqrt(((df1 * fc) / v) + ((df1 + 2 * lamda) / (df1 + lamda)))
   stats::pnorm(z1b)
 }
@@ -346,44 +352,48 @@ petasq_confint <- function(petasq, df1, df2, sig_level = 0.10) {
   f.value <- f2 * (df2 / df1)
   iter <- length(petasq)
   delta_lower <- delta_upper <- numeric(iter)
-  
+
   for (i in seq_len(iter)) {
     delta_lower[i] <- try(
       F_test_noncentrality(
-        f.value[i], df1[i], df2,
+        f.value[i],
+        df1[i],
+        df2,
         prob = 1 - sig_level / 2
       ),
       silent = TRUE
     )
     delta_upper[i] <- try(
       F_test_noncentrality(
-        f.value[i], df1[i], df2,
+        f.value[i],
+        df1[i],
+        df2,
         prob = sig_level / 2
       ),
       silent = TRUE
     )
   }
-  
+
   cond1 <- is.character(delta_lower)
   cond2 <- is.character(delta_upper)
-  
+
   if (cond1) {
     delta_lower[grep("Error", delta_lower)] <- 0
     delta_lower <- as.numeric(delta_lower)
   }
-  
+
   if (cond2) {
     delta_upper[grep("Error", delta_upper)] <- 0
     delta_upper <- as.numeric(delta_upper)
   }
-  
+
   lower_petasq <- delta_lower / (delta_lower + df1 + df2 + 1)
   upper_petasq <- delta_upper / (delta_upper + df1 + df2 + 1)
-  
+
   data.frame(
-    partial_etasq        = petasq,
-    partial_etasq_lower  = lower_petasq,
-    partial_etasq_upper  = upper_petasq
+    partial_etasq = petasq,
+    partial_etasq_lower = lower_petasq,
+    partial_etasq_upper = upper_petasq
   )
 }
 
@@ -414,30 +424,31 @@ petasq_confint <- function(petasq, df1, df2, sig_level = 0.10) {
 #'         and large effect sizes for each effect.}
 #' }
 #' @export
-ind_twoway_second <- function(m,
-                              sd,
-                              n,
-                              unbiased = TRUE,
-                              sig_level = 0.05,
-                              digits = 3) {
-  
+ind_twoway_second <- function(
+  m,
+  sd,
+  n,
+  unbiased = TRUE,
+  sig_level = 0.05,
+  digits = 3
+) {
   # ensure n is a matrix
   if (is.vector(n)) {
     n <- matrix(n, ncol = ncol(m), nrow = nrow(m))
   }
-  
+
   # harmonic N
   if (nlevels(as.factor(n)) == 1) {
     Nh <- sum(n)
   } else {
     Nh <- (prod(dim(m))^2) / sum(1 / n)
   }
-  
+
   # convert SSD to SD if requested
   if (!unbiased) {
     sd <- ssd2sd(n, sd)
   }
-  
+
   dfw <- (sum(n) - prod(dim(m)))
   MSw <- sum((n - 1) * sd^2) / dfw
   SSb <- Nh * svar(as.vector(m))
@@ -446,59 +457,63 @@ ind_twoway_second <- function(m,
   SSint <- SSb - SSrow - SScol
   SSw <- MSw * dfw
   SSt <- SSb + SSw
-  
+
   dfrow <- nrow(m) - 1
   dfcol <- ncol(m) - 1
   dfint <- dfrow * dfcol
   dfb <- dfrow + dfcol + dfint
-  
+
   MSrow <- SSrow / dfrow
   MScol <- SScol / dfcol
   MSint <- SSint / dfint
-  
+
   frow <- MSrow / MSw
   fcol <- MScol / MSw
   fint <- MSint / MSw
-  
+
   MSb <- SSb / dfb
   fb <- MSb / MSw
-  
+
   # p-values
   p_row <- stats::pf(q = frow, df1 = dfrow, df2 = dfw, lower.tail = FALSE)
   p_col <- stats::pf(q = fcol, df1 = dfcol, df2 = dfw, lower.tail = FALSE)
   p_int <- stats::pf(q = fint, df1 = dfint, df2 = dfw, lower.tail = FALSE)
-  p_b   <- stats::pf(q = fb,   df1 = dfb,  df2 = dfw, lower.tail = FALSE)
-  
+  p_b <- stats::pf(q = fb, df1 = dfb, df2 = dfw, lower.tail = FALSE)
+
   # ANOVA table
   anova.table <- data.frame(
-    SS = c(SSb,   SSrow, SScol, SSint, SSw,  SSt),
-    df = c(dfb,   dfrow, dfcol, dfint, dfw,  dfb + dfw),
-    MS = c(MSb,   MSrow, MScol, MSint, MSw,  NA_real_),
-    F  = c(fb,    frow,  fcol,  fint,  NA,   NA),
-    row.names = c("Between",
-                  "Between (row)",
-                  "Between (col)",
-                  "Between (row * col)",
-                  "Within",
-                  "Total")
+    SS = c(SSb, SSrow, SScol, SSint, SSw, SSt),
+    df = c(dfb, dfrow, dfcol, dfint, dfw, dfb + dfw),
+    MS = c(MSb, MSrow, MScol, MSint, MSw, NA_real_),
+    F = c(fb, frow, fcol, fint, NA, NA),
+    row.names = c(
+      "Between",
+      "Between (row)",
+      "Between (col)",
+      "Between (row * col)",
+      "Within",
+      "Total"
+    )
   )
   class(anova.table) <- c("anova", "data.frame")
-  
+
   # partial eta-squared
   petasq_row <- SSrow / (SSrow + SSw)
   petasq_col <- SScol / (SScol + SSw)
   petasq_int <- SSint / (SSint + SSw)
-  
+
   omnibus.es <- petasq_confint(
-    petasq   = c(petasq_row, petasq_col, petasq_int),
-    df1      = c(dfrow, dfcol, dfint),
-    df2      = dfw,
+    petasq = c(petasq_row, petasq_col, petasq_int),
+    df1 = c(dfrow, dfcol, dfint),
+    df2 = dfw,
     sig_level = sig_level
   )
-  rownames(omnibus.es) <- c("Between (row)",
-                            "Between (col)",
-                            "Between (row * col)")
-  
+  rownames(omnibus.es) <- c(
+    "Between (row)",
+    "Between (col)",
+    "Between (row * col)"
+  )
+
   # power for small/medium/large f
   c_delta <- c(0.1, 0.25, 0.4)
   criterion_power <- rbind(
@@ -508,11 +523,11 @@ ind_twoway_second <- function(m,
   )
   colnames(criterion_power) <- c("small", "medium", "large")
   rownames(criterion_power) <- rownames(omnibus.es)
-  
+
   list(
     anova.table = anova.table,
-    omnibus.es  = omnibus.es,
-    power       = criterion_power
+    omnibus.es = omnibus.es,
+    power = criterion_power
   )
 }
 
@@ -555,7 +570,7 @@ round_half_up_to_char <- function(x, digits = 2) {
 #' #'   reasonable defaults are constructed.
 #' #' @param peta2_sig_level Significance level for partial eta-squared confidence
 #' #'   intervals (default 0.10, giving 90\% CIs).
-#' #'   
+#' #'
 #' #' @importFrom roundwork round_up round_down
 #' #' @importFrom dplyr bind_cols rowwise do ungroup select
 #' #'
@@ -593,7 +608,7 @@ round_half_up_to_char <- function(x, digits = 2) {
 #'                                      peta2_sig_level = 0.10) {
 #'   # note: depend explicitly on janitor and dplyr
 #'   m.ok <- m
-#'   
+#'
 #'   if (inherits(m.ok, "matrix")) {
 #'     func <- ind_twoway_second
 #'     useF <- c(3, 2, 4)
@@ -607,7 +622,7 @@ round_half_up_to_char <- function(x, digits = 2) {
 #'       default_labels <- c("t")
 #'     }
 #'   }
-#'   
+#'
 #'   # determine decimal places if not specified
 #'   dp <- dp.p
 #'   if (dp.p == -1) {
@@ -623,32 +638,32 @@ round_half_up_to_char <- function(x, digits = 2) {
 #'       }
 #'     }
 #'   }
-#'   
+#'
 #'   if (length(labels) == 0) {
 #'     labels <- default_labels
 #'   }
-#'   
+#'
 #'   # nominal F values (no rounding error)
 #'   f.nom <- func(m = m.ok, sd = sd, n = n)$anova.table$F
-#'   
+#'
 #'   # rounding error bounds
 #'   delta <- (0.1^dp) / 2
 #'   tiny.sd <- delta / 100
-#'   
+#'
 #'   sd.hi <- pmax(sd - delta, tiny.sd)
 #'   sd.lo <- pmax(sd + delta, tiny.sd)
-#'   
+#'
 #'   f.hi <- f.nom
 #'   f.lo <- f.nom
-#'   
+#'
 #'   # generate all combinations of +/- delta on the means
 #'   l <- length(m.ok)
 #'   rawcomb <- utils::combn(rep(c(-delta, delta), l), l)
 #'   comb <- rawcomb[, !duplicated(t(rawcomb))]
-#'   
+#'
 #'   for (i in seq_len(ncol(comb))) {
 #'     m.adj <- m.ok + comb[, i]
-#'     
+#'
 #'     if (all((abs(m.adj - m.adj[1])) < 1e-14)) {
 #'       adj.f.hi <- 0
 #'       adj.f.lo <- 0
@@ -656,17 +671,17 @@ round_half_up_to_char <- function(x, digits = 2) {
 #'       adj.f.hi <- func(m = m.adj, sd = sd.hi, n = n)$anova.table$F
 #'       adj.f.lo <- func(m = m.adj, sd = sd.lo, n = n)$anova.table$F
 #'     }
-#'     
+#'
 #'     f.hi <- pmax(f.hi, adj.f.hi)
 #'     f.lo <- pmin(f.lo, adj.f.lo)
 #'   }
-#'   
+#'
 #'   if (show.t) {
 #'     f.nom <- sqrt(f.nom)
 #'     f.hi  <- sqrt(f.hi)
 #'     f.lo  <- sqrt(f.lo)
 #'   }
-#'   
+#'
 #'   # result template
 #'   result_df <- data.frame(
 #'     label = character(),
@@ -678,26 +693,26 @@ round_half_up_to_char <- function(x, digits = 2) {
 #'     peta2 = numeric(),
 #'     stringsAsFactors = FALSE
 #'   )
-#'   
+#'
 #'   df_effect <- nrow(m.ok) - 1
 #'   df_error  <- sum(n) - nrow(m.ok)
-#'   
+#'
 #'   fdp <- 3
-#'   
+#'
 #'   for (i in seq_along(useF)) {
 #'     j <- useF[i]
-#'     
+#'
 #'     nominal_p <- 1 - stats::pf(f.nom[j], df_effect, df_error)
 #'     min_p     <- 1 - stats::pf(f.lo[j],  df_effect, df_error)
 #'     max_p     <- 1 - stats::pf(f.hi[j],  df_effect, df_error)
-#'     
+#'
 #'     peta2_nom <- (f.nom[j] * df_effect) /
 #'       (f.nom[j] * df_effect + df_error)
 #'     peta2_min <- (f.lo[j] * df_effect) /
 #'       (f.lo[j] * df_effect + df_error)
 #'     peta2_max <- (f.hi[j] * df_effect) /
 #'       (f.hi[j] * df_effect + df_error)
-#'     
+#'
 #'     result_df <- rbind(
 #'       result_df,
 #'       data.frame(
@@ -729,7 +744,7 @@ round_half_up_to_char <- function(x, digits = 2) {
 #'       )
 #'     )
 #'   }
-#'   
+#'
 #'   # add partial eta-squared CIs
 #'   ci_df <- result_df |>
 #'     dplyr::rowwise() |>
@@ -744,6 +759,6 @@ round_half_up_to_char <- function(x, digits = 2) {
 #'       peta2_ci_lower = partial_etasq_lower,
 #'       peta2_ci_upper = partial_etasq_upper
 #'     )
-#'   
+#'
 #'   dplyr::bind_cols(result_df, ci_df)
 #' }

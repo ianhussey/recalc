@@ -1,4 +1,3 @@
-
 #' @title Multiverse of Independent Samples t-test Results (t/df)
 #'
 #' @description
@@ -52,26 +51,43 @@
 #'
 #' @export
 independent_t_test_tdf <- function(
-    t = NULL, df = NULL,
-    n1 = NULL, n2 = NULL,
-    d_est = NULL, d_ci_lower = NULL, d_ci_upper = NULL,
-    d_digits = 2,
-    p_est = NULL, p_digits = 3,
-    alpha = 0.05,
-    ci_methods     = NULL,
-    p_methods      = NULL,
-    d_rounding_set = NULL
+  t = NULL,
+  df = NULL,
+  n1 = NULL,
+  n2 = NULL,
+  d_est = NULL,
+  d_ci_lower = NULL,
+  d_ci_upper = NULL,
+  d_digits = 2,
+  p_est = NULL,
+  p_digits = 3,
+  alpha = 0.05,
+  ci_methods = NULL,
+  p_methods = NULL,
+  d_rounding_set = NULL
 ) {
-
   params <- .multiverse_validate_and_setup_tdf(
-    ci_methods, p_methods, d_rounding_set,
-    t, df, n1, n2
+    ci_methods,
+    p_methods,
+    d_rounding_set,
+    t,
+    df,
+    n1,
+    n2
   )
 
-  d_est_num      <- if (!is.null(d_est)) as.numeric(d_est) else NA_real_
-  d_ci_lower_num <- if (!is.null(d_ci_lower)) as.numeric(d_ci_lower) else NA_real_
-  d_ci_upper_num <- if (!is.null(d_ci_upper)) as.numeric(d_ci_upper) else NA_real_
-  p_est_num      <- if (!is.null(p_est)) as.numeric(p_est) else NA_real_
+  d_est_num <- if (!is.null(d_est)) as.numeric(d_est) else NA_real_
+  d_ci_lower_num <- if (!is.null(d_ci_lower)) {
+    as.numeric(d_ci_lower)
+  } else {
+    NA_real_
+  }
+  d_ci_upper_num <- if (!is.null(d_ci_upper)) {
+    as.numeric(d_ci_upper)
+  } else {
+    NA_real_
+  }
+  p_est_num <- if (!is.null(p_est)) as.numeric(p_est) else NA_real_
 
   d_results <- list()
   p_results <- list()
@@ -79,12 +95,23 @@ independent_t_test_tdf <- function(
   idx_p <- 1
 
   res_t_df <- .multiverse_from_t_df(
-    t, df, n1, n2,
-    params$ci_methods, params$p_methods, params$d_rounding_set,
-    d_digits, p_digits, alpha,
-    d_est_num, d_ci_lower_num, d_ci_upper_num, p_est_num,
+    t,
+    df,
+    n1,
+    n2,
+    params$ci_methods,
+    params$p_methods,
+    params$d_rounding_set,
+    d_digits,
+    p_digits,
+    alpha,
+    d_est_num,
+    d_ci_lower_num,
+    d_ci_upper_num,
+    p_est_num,
     have_n_for_t = params$have_n_for_t,
-    idx_d, idx_p
+    idx_d,
+    idx_p
   )
   d_results <- c(d_results, res_t_df$d_results)
   p_results <- c(p_results, res_t_df$p_results)
@@ -93,16 +120,24 @@ independent_t_test_tdf <- function(
   p_out <- if (length(p_results) > 0) do.call(rbind, p_results) else NULL
 
   if (!is.null(d_out)) {
-    d_out <- d_out[order(!d_out$match_all,
-                         !d_out$match_est,
-                         !d_out$match_ci_lower,
-                         !d_out$match_ci_upper), ]
+    d_out <- d_out[
+      order(
+        !d_out$match_all,
+        !d_out$match_est,
+        !d_out$match_ci_lower,
+        !d_out$match_ci_upper
+      ),
+    ]
   }
 
   list(
-    reproduced = if (!is.null(d_out)) any(d_out$match_all, na.rm = TRUE) else FALSE,
-    d_results  = d_out,
-    p_results  = p_out
+    reproduced = if (!is.null(d_out)) {
+      any(d_out$match_all, na.rm = TRUE)
+    } else {
+      FALSE
+    },
+    d_results = d_out,
+    p_results = p_out
   )
 }
 
@@ -110,17 +145,27 @@ independent_t_test_tdf <- function(
 
 #' @keywords internal
 .get_digits <- function(x) {
-  if (is.null(x) || length(x) == 0 || is.na(x)) return(0L)
+  if (is.null(x) || length(x) == 0 || is.na(x)) {
+    return(0L)
+  }
   sx <- sub("^-", "", as.character(x[1L]))
-  if (!grepl("\\.", sx)) return(0L)
+  if (!grepl("\\.", sx)) {
+    return(0L)
+  }
   nchar(sub("^[^.]*\\.", "", sx))
 }
 
 #' @keywords internal
 .adjust_value <- function(x, step, code) {
-  if (step == 0) return(x)
-  if (code == "minus") return(x - step)
-  if (code == "plus")  return(x + step)
+  if (step == 0) {
+    return(x)
+  }
+  if (code == "minus") {
+    return(x - step)
+  }
+  if (code == "plus") {
+    return(x + step)
+  }
   x
 }
 
@@ -130,16 +175,26 @@ independent_t_test_tdf <- function(
     withCallingHandlers(
       expr,
       warning = function(w) {
-        if (grepl("full precision may not have been achieved in 'pnt\\{final\\}'",
-                  conditionMessage(w))) {
+        if (
+          grepl(
+            "full precision may not have been achieved in 'pnt\\{final\\}'",
+            conditionMessage(w)
+          )
+        ) {
           invokeRestart("muffleWarning")
         }
       }
     )
   }
 
-  fL <- function(delta) suppress_nct_warning(pt(t_obs, df = df, ncp = delta) - alpha / 2)
-  fU <- function(delta) suppress_nct_warning(pt(t_obs, df = df, ncp = delta, lower.tail = FALSE) - alpha / 2)
+  fL <- function(delta) {
+    suppress_nct_warning(pt(t_obs, df = df, ncp = delta) - alpha / 2)
+  }
+  fU <- function(delta) {
+    suppress_nct_warning(
+      pt(t_obs, df = df, ncp = delta, lower.tail = FALSE) - alpha / 2
+    )
+  }
 
   lower <- -max_ncp
   upper <- max_ncp
@@ -149,21 +204,36 @@ independent_t_test_tdf <- function(
   if (is.na(fL_low) || is.na(fL_high) || fL_low * fL_high > 0) {
     delta_L <- NA_real_
   } else {
-    delta_L <- tryCatch(uniroot(fL, lower = lower, upper = upper)$root, error = function(e) NA_real_)
+    delta_L <- tryCatch(
+      uniroot(fL, lower = lower, upper = upper)$root,
+      error = function(e) NA_real_
+    )
   }
 
   fU_low_check <- fU(upper)
   fU_high_check <- fU(lower)
-  if (is.na(fU_low_check) || is.na(fU_high_check) || fU_low_check * fU_high_check > 0) {
+  if (
+    is.na(fU_low_check) ||
+      is.na(fU_high_check) ||
+      fU_low_check * fU_high_check > 0
+  ) {
     fU_low_rev <- fU(lower)
     fU_high_rev <- fU(upper)
-    if (is.na(fU_low_rev) || is.na(fU_high_rev) || fU_low_rev * fU_high_rev > 0) {
+    if (
+      is.na(fU_low_rev) || is.na(fU_high_rev) || fU_low_rev * fU_high_rev > 0
+    ) {
       delta_U <- NA_real_
     } else {
-      delta_U <- tryCatch(uniroot(fU, lower = lower, upper = upper)$root, error = function(e) NA_real_)
+      delta_U <- tryCatch(
+        uniroot(fU, lower = lower, upper = upper)$root,
+        error = function(e) NA_real_
+      )
     }
   } else {
-    delta_U <- tryCatch(uniroot(fU, lower = lower, upper = upper)$root, error = function(e) NA_real_)
+    delta_U <- tryCatch(
+      uniroot(fU, lower = lower, upper = upper)$root,
+      error = function(e) NA_real_
+    )
   }
 
   c(delta_L, delta_U)
@@ -171,21 +241,28 @@ independent_t_test_tdf <- function(
 
 #' @keywords internal
 .multiverse_validate_and_setup_tdf <- function(
-    ci_methods, p_methods, d_rounding_set,
-    t, df, n1, n2
+  ci_methods,
+  p_methods,
+  d_rounding_set,
+  t,
+  df,
+  n1,
+  n2
 ) {
-  allowed_ci_methods  <- c("wald_z", "wald_t", "welch_t", "welch_z", "nct")
-  allowed_p_methods   <- c("student_t", "student_z", "welch_z")
-  allowed_d_rounding  <- c("half_up", "half_down", "bankers", "trunc")
+  allowed_ci_methods <- c("wald_z", "wald_t", "welch_t", "welch_z", "nct")
+  allowed_p_methods <- c("student_t", "student_z", "welch_z")
+  allowed_d_rounding <- c("half_up", "half_down", "bankers", "trunc")
 
   check_methods <- function(input, allowed, name) {
     if (!is.null(input)) {
       bad <- setdiff(input, allowed)
       if (length(bad) > 0L) {
         stop(
-          name, " contains invalid values: ",
+          name,
+          " contains invalid values: ",
           paste0(bad, collapse = ", "),
-          "\nAllowed: ", paste0(allowed, collapse = ", ")
+          "\nAllowed: ",
+          paste0(allowed, collapse = ", ")
         )
       }
       return(input)
@@ -193,9 +270,13 @@ independent_t_test_tdf <- function(
     allowed
   }
 
-  ci_methods      <- check_methods(ci_methods,      allowed_ci_methods, "ci_methods")
-  p_methods       <- check_methods(p_methods,       allowed_p_methods,  "p_methods")
-  d_rounding_set  <- check_methods(d_rounding_set,  allowed_d_rounding, "d_rounding_set")
+  ci_methods <- check_methods(ci_methods, allowed_ci_methods, "ci_methods")
+  p_methods <- check_methods(p_methods, allowed_p_methods, "p_methods")
+  d_rounding_set <- check_methods(
+    d_rounding_set,
+    allowed_d_rounding,
+    "d_rounding_set"
+  )
 
   have_t <- !is.null(t) && !is.null(df) && !is.na(t) && !is.na(df)
   have_n_for_t <- !is.null(n1) && !is.null(n2) && !is.na(n1) && !is.na(n2)
@@ -205,8 +286,8 @@ independent_t_test_tdf <- function(
   }
 
   list(
-    ci_methods  = ci_methods,
-    p_methods   = p_methods,
+    ci_methods = ci_methods,
+    p_methods = p_methods,
     d_rounding_set = d_rounding_set,
     have_n_for_t = have_n_for_t
   )
@@ -214,64 +295,78 @@ independent_t_test_tdf <- function(
 
 #' @keywords internal
 .multiverse_from_t_df <- function(
-    t, df, n1, n2,
-    ci_methods, p_methods, d_rounding_set,
-    d_digits, p_digits, alpha,
-    d_est_num, d_ci_lower_num, d_ci_upper_num, p_est_num,
-    have_n_for_t,
-    idx_d, idx_p
+  t,
+  df,
+  n1,
+  n2,
+  ci_methods,
+  p_methods,
+  d_rounding_set,
+  d_digits,
+  p_digits,
+  alpha,
+  d_est_num,
+  d_ci_lower_num,
+  d_ci_upper_num,
+  p_est_num,
+  have_n_for_t,
+  idx_d,
+  idx_p
 ) {
   d_results <- list()
   p_results <- list()
 
-  t_val <- as.numeric(t); df_t <- as.numeric(df)
+  t_val <- as.numeric(t)
+  df_t <- as.numeric(df)
 
-  dig_t  <- .get_digits(t_val);  step_t  <- 0.5 * 10^(-dig_t)
-  dig_df <- .get_digits(df_t);   step_df <- 0.5 * 10^(-dig_df)
+  dig_t <- .get_digits(t_val)
+  step_t <- 0.5 * 10^(-dig_t)
+  dig_df <- .get_digits(df_t)
+  step_df <- 0.5 * 10^(-dig_df)
 
   adj_codes <- c("reported", "minus", "plus")
 
   for (adj_tdf in adj_codes) {
-
-    t_star  <- .adjust_value(t_val, step_t,  adj_tdf)
-    df_star <- .adjust_value(df_t,  step_df, adj_tdf)
-    if (!is.finite(df_star) || df_star <= 0) next
+    t_star <- .adjust_value(t_val, step_t, adj_tdf)
+    df_star <- .adjust_value(df_t, step_df, adj_tdf)
+    if (!is.finite(df_star) || df_star <= 0) {
+      next
+    }
 
     if (have_n_for_t) {
       direction <- "t_sign"
 
-      N    <- n1 + n2
+      N <- n1 + n2
       df_s <- n1 + n2 - 2
       fac_d <- sqrt(1 / n1 + 1 / n2)
       es_base <- t_star * fac_d
 
-      J_t    <- 1 - 3 / (4 * df_star - 1)
+      J_t <- 1 - 3 / (4 * df_star - 1)
       g_base <- J_t * es_base
 
       for (es_type in c("d", "g")) {
-
         es <- if (es_type == "d") es_base else g_base
 
         se_pooled <- sqrt(N / (n1 * n2) + es^2 / (2 * df_s))
-        se_welch  <- sqrt(N / (n1 * n2) + es^2 / (2 * df_star))
+        se_welch <- sqrt(N / (n1 * n2) + es^2 / (2 * df_star))
 
         for (ci_method in ci_methods) {
-
           if (ci_method == "nct") {
             delta_ci <- .nct_ci(t_star, df_star, alpha = alpha)
-            if (any(is.na(delta_ci))) next
+            if (any(is.na(delta_ci))) {
+              next
+            }
 
             dL_raw <- delta_ci[1] * fac_d
             dU_raw <- delta_ci[2] * fac_d
             ci_lower <- if (es_type == "d") dL_raw else J_t * dL_raw
             ci_upper <- if (es_type == "d") dU_raw else J_t * dU_raw
-
           } else {
             if (ci_method %in% c("wald_z", "wald_t")) {
-              se_use   <- se_pooled
+              se_use <- se_pooled
               df_for_t <- df_s
             } else {
-              se_use   <- se_welch
+              se_use <- se_welch
               df_for_t <- df_star
             }
 
@@ -288,47 +383,63 @@ independent_t_test_tdf <- function(
           for (d_rounding in d_rounding_set) {
             d_round_fun <- switch(
               d_rounding,
-              "half_up"   = function(x) roundwork::round_up(x,   d_digits),
+              "half_up" = function(x) roundwork::round_up(x, d_digits),
               "half_down" = function(x) roundwork::round_down(x, d_digits),
-              "bankers"   = function(x) round(x, d_digits),
-              "trunc"     = function(x) roundwork::round_trunc(x, d_digits),
+              "bankers" = function(x) round(x, d_digits),
+              "trunc" = function(x) roundwork::round_trunc(x, d_digits),
               stop("Unknown d_rounding option")
             )
 
-            est_r   <- d_round_fun(es)
+            est_r <- d_round_fun(es)
             lower_r <- d_round_fun(ci_lower)
             upper_r <- d_round_fun(ci_upper)
 
             d_results[[idx_d]] <- data.frame(
-              source              = "t_df",
-              direction           = direction,
-              es_type             = es_type,
-              ci_method           = ci_method,
-              d_rounding          = d_rounding,
-              input_adj_stats     = NA_character_,
-              input_adj_tdf       = adj_tdf,
-              sd_interpretation   = NA_character_,
-              m1_used             = NA_real_,
-              m2_used             = NA_real_,
-              sd1_used            = NA_real_,
-              sd2_used            = NA_real_,
-              t_used              = t_star,
-              df_used             = df_star,
-              es_unrounded        = es,
-              ci_lower_unrounded  = ci_lower,
-              ci_upper_unrounded  = ci_upper,
-              est_rounded         = est_r,
-              ci_lower_rounded    = lower_r,
-              ci_upper_rounded    = upper_r,
-              match_est      = if (!is.na(d_est_num))      isTRUE(all.equal(est_r,   d_est_num))      else NA,
-              match_ci_lower = if (!is.na(d_ci_lower_num)) isTRUE(all.equal(lower_r, d_ci_lower_num)) else NA,
-              match_ci_upper = if (!is.na(d_ci_upper_num)) isTRUE(all.equal(upper_r, d_ci_upper_num)) else NA,
-              match_all      = if (!any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))) {
-                est_r   == d_est_num &&
+              source = "t_df",
+              direction = direction,
+              es_type = es_type,
+              ci_method = ci_method,
+              d_rounding = d_rounding,
+              input_adj_stats = NA_character_,
+              input_adj_tdf = adj_tdf,
+              sd_interpretation = NA_character_,
+              m1_used = NA_real_,
+              m2_used = NA_real_,
+              sd1_used = NA_real_,
+              sd2_used = NA_real_,
+              t_used = t_star,
+              df_used = df_star,
+              es_unrounded = es,
+              ci_lower_unrounded = ci_lower,
+              ci_upper_unrounded = ci_upper,
+              est_rounded = est_r,
+              ci_lower_rounded = lower_r,
+              ci_upper_rounded = upper_r,
+              match_est = if (!is.na(d_est_num)) {
+                isTRUE(all.equal(est_r, d_est_num))
+              } else {
+                NA
+              },
+              match_ci_lower = if (!is.na(d_ci_lower_num)) {
+                isTRUE(all.equal(lower_r, d_ci_lower_num))
+              } else {
+                NA
+              },
+              match_ci_upper = if (!is.na(d_ci_upper_num)) {
+                isTRUE(all.equal(upper_r, d_ci_upper_num))
+              } else {
+                NA
+              },
+              match_all = if (
+                !any(is.na(c(d_est_num, d_ci_lower_num, d_ci_upper_num)))
+              ) {
+                est_r == d_est_num &&
                   lower_r == d_ci_lower_num &&
                   upper_r == d_ci_upper_num
-              } else NA,
-              stringsAsFactors    = FALSE
+              } else {
+                NA
+              },
+              stringsAsFactors = FALSE
             )
             idx_d <- idx_d + 1
           }
@@ -337,7 +448,6 @@ independent_t_test_tdf <- function(
     }
 
     for (p_method in p_methods) {
-
       t_use <- t_star
       df_use <- if (p_method %in% c("student_z", "welch_z")) Inf else df_star
 
@@ -356,24 +466,33 @@ independent_t_test_tdf <- function(
         p_rounded <- p_round_fun(p_unr)
 
         p_results[[idx_p]] <- data.frame(
-          source            = "t_df",
-          direction         = "t_sign",
-          p_method          = p_method,
-          p_rounding        = p_rounding,
-          input_adj_stats   = NA_character_,
-          input_adj_tdf     = adj_tdf,
+          source = "t_df",
+          direction = "t_sign",
+          p_method = p_method,
+          p_rounding = p_rounding,
+          input_adj_stats = NA_character_,
+          input_adj_tdf = adj_tdf,
           sd_interpretation = NA_character_,
-          t_used            = t_use,
-          df_used           = df_use,
-          p_unrounded       = p_unr,
-          p_rounded         = p_rounded,
-          match_p           = if (!is.na(p_est_num)) isTRUE(all.equal(p_rounded, p_est_num)) else NA,
-          stringsAsFactors  = FALSE
+          t_used = t_use,
+          df_used = df_use,
+          p_unrounded = p_unr,
+          p_rounded = p_rounded,
+          match_p = if (!is.na(p_est_num)) {
+            isTRUE(all.equal(p_rounded, p_est_num))
+          } else {
+            NA
+          },
+          stringsAsFactors = FALSE
         )
         idx_p <- idx_p + 1
       }
     }
   }
 
-  list(d_results = d_results, p_results = p_results, idx_d = idx_d, idx_p = idx_p)
+  list(
+    d_results = d_results,
+    p_results = p_results,
+    idx_d = idx_d,
+    idx_p = idx_p
+  )
 }

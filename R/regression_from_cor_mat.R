@@ -17,7 +17,9 @@
 #' triangle_to_cor_matrix(lower)
 #' @export
 triangle_to_cor_matrix <- function(triangle) {
-  if (is.data.frame(triangle)) triangle <- as.matrix(triangle)
+  if (is.data.frame(triangle)) {
+    triangle <- as.matrix(triangle)
+  }
   if (!is.matrix(triangle)) {
     stop("Input must be a matrix or data frame")
   }
@@ -25,8 +27,10 @@ triangle_to_cor_matrix <- function(triangle) {
     stop("Input must be square")
   }
   upper_only <- all(is.na(triangle[lower.tri(triangle)])) &&
-                all(!is.na(triangle[upper.tri(triangle)]))
-  if (upper_only) triangle <- t(triangle)
+    all(!is.na(triangle[upper.tri(triangle)]))
+  if (upper_only) {
+    triangle <- t(triangle)
+  }
   full <- matrix(0, nrow = nrow(triangle), ncol = ncol(triangle))
   full[lower.tri(full)] <- triangle[lower.tri(triangle)]
   full <- full + t(full)
@@ -104,23 +108,31 @@ triangle_to_cor_matrix <- function(triangle) {
 #'   cor_mat_digits = 2
 #' )
 #' @export
-recalc_regression_from_cor_mat <- function(formula, cor_mat, n,
-                                           sd_vector = NULL,
-                                           reported_betas = NULL,
-                                           reported_b = NULL,
-                                           cor_mat_digits = NULL,
-                                           n_digits = 0,
-                                           sd_vector_digits = NULL,
-                                           reported_betas_digits = NULL,
-                                           reported_b_digits = NULL,
-                                           level = 0.95,
-                                           rounding = "either") {
+recalc_regression_from_cor_mat <- function(
+  formula,
+  cor_mat,
+  n,
+  sd_vector = NULL,
+  reported_betas = NULL,
+  reported_b = NULL,
+  cor_mat_digits = NULL,
+  n_digits = 0,
+  sd_vector_digits = NULL,
+  reported_betas_digits = NULL,
+  reported_b_digits = NULL,
+  level = 0.95,
+  rounding = "either"
+) {
   require_digits(cor_mat_digits = cor_mat_digits)
-  if (!is.null(sd_vector)) require_digits(sd_vector_digits = sd_vector_digits)
-  if (!is.null(reported_betas))
+  if (!is.null(sd_vector)) {
+    require_digits(sd_vector_digits = sd_vector_digits)
+  }
+  if (!is.null(reported_betas)) {
     require_digits(reported_betas_digits = reported_betas_digits)
-  if (!is.null(reported_b))
+  }
+  if (!is.null(reported_b)) {
     require_digits(reported_b_digits = reported_b_digits)
+  }
   stopifnot(inherits(formula, "formula"))
   stopifnot(is.matrix(cor_mat), nrow(cor_mat) == ncol(cor_mat))
   if (is.null(rownames(cor_mat)) || is.null(colnames(cor_mat))) {
@@ -131,10 +143,12 @@ recalc_regression_from_cor_mat <- function(formula, cor_mat, n,
   }
 
   vars <- all.vars(formula)
-  y    <- vars[1]
-  xs   <- vars[-1]
-  k    <- length(xs)
-  if (k < 1L) stop("formula must include at least one predictor")
+  y <- vars[1]
+  xs <- vars[-1]
+  k <- length(xs)
+  if (k < 1L) {
+    stop("formula must include at least one predictor")
+  }
   missing_vars <- setdiff(vars, rownames(cor_mat))
   if (length(missing_vars) > 0L) {
     stop("Variables not in cor_mat: ", paste(missing_vars, collapse = ", "))
@@ -147,13 +161,22 @@ recalc_regression_from_cor_mat <- function(formula, cor_mat, n,
 
   corr_intervals <- setNames(
     lapply(seq_len(n_corr), function(i) {
-      interval_from_digits(R0[idx[i, 1], idx[i, 2]], cor_mat_digits,
-                           lo = -1, hi = 1, rounding = rounding)
+      interval_from_digits(
+        R0[idx[i, 1], idx[i, 2]],
+        cor_mat_digits,
+        lo = -1,
+        hi = 1,
+        rounding = rounding
+      )
     }),
     corr_names
   )
-  n_interval <- interval_from_digits(n, n_digits, lo = k + 2,
-                                     rounding = rounding)
+  n_interval <- interval_from_digits(
+    n,
+    n_digits,
+    lo = k + 2,
+    rounding = rounding
+  )
 
   use_sd <- !is.null(sd_vector)
   if (use_sd) {
@@ -162,14 +185,17 @@ recalc_regression_from_cor_mat <- function(formula, cor_mat, n,
     }
     missing_sd <- setdiff(vars, names(sd_vector))
     if (length(missing_sd) > 0L) {
-      stop("sd_vector missing variables: ",
-           paste(missing_sd, collapse = ", "))
+      stop("sd_vector missing variables: ", paste(missing_sd, collapse = ", "))
     }
     sd_ordered <- sd_vector[vars]
     sd_intervals <- setNames(
       lapply(seq_along(sd_ordered), function(i) {
-        interval_from_digits(sd_ordered[i], sd_vector_digits, lo = 0,
-                             rounding = rounding)
+        interval_from_digits(
+          sd_ordered[i],
+          sd_vector_digits,
+          lo = 0,
+          rounding = rounding
+        )
       }),
       paste0("sd_", seq_along(sd_ordered))
     )
@@ -183,30 +209,33 @@ recalc_regression_from_cor_mat <- function(formula, cor_mat, n,
     }
     missing_p <- setdiff(xs, names(vec))
     if (length(missing_p) > 0L) {
-      stop(label, " missing predictors: ",
-           paste(missing_p, collapse = ", "))
+      stop(label, " missing predictors: ", paste(missing_p, collapse = ", "))
     }
     vec[xs]
   }
-  if (!is.null(reported_betas))
+  if (!is.null(reported_betas)) {
     reported_betas <- validate_reported(reported_betas, "reported_betas")
+  }
   if (!is.null(reported_b)) {
     if (!use_sd) {
-      stop("reported_b requires sd_vector (b rows are only produced when ",
-           "SDs are supplied)")
+      stop(
+        "reported_b requires sd_vector (b rows are only produced when ",
+        "SDs are supplied)"
+      )
     }
     reported_b <- validate_reported(reported_b, "reported_b")
   }
 
   all_inputs <- c(corr_intervals, list(n = n_interval), sd_intervals)
-  grid <- do.call(expand.grid,
-                  c(all_inputs, list(KEEP.OUT.ATTRS = FALSE,
-                                     stringsAsFactors = FALSE)))
+  grid <- do.call(
+    expand.grid,
+    c(all_inputs, list(KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE))
+  )
   grid_mat <- as.matrix(grid)
 
-  n_quant <- if (use_sd) 7L else 4L  # Std.Beta, CI_lo, CI_hi, p (+ b, b_CI_lo, b_CI_hi)
-  n_out   <- k * n_quant
-  vals    <- matrix(NA_real_, nrow = nrow(grid_mat), ncol = n_out)
+  n_quant <- if (use_sd) 7L else 4L # Std.Beta, CI_lo, CI_hi, p (+ b, b_CI_lo, b_CI_hi)
+  n_out <- k * n_quant
+  vals <- matrix(NA_real_, nrow = nrow(grid_mat), ncol = n_out)
 
   alpha <- 1 - level
 
@@ -222,13 +251,19 @@ recalc_regression_from_cor_mat <- function(formula, cor_mat, n,
     Rxx <- R[-1, -1, drop = FALSE]
     rxy <- R[-1, 1]
     Rxx_inv <- tryCatch(solve(Rxx), error = function(e) NULL)
-    if (is.null(Rxx_inv)) next
+    if (is.null(Rxx_inv)) {
+      next
+    }
     beta <- as.numeric(Rxx_inv %*% rxy)
     r2 <- sum(beta * rxy)
     df_resid <- n_val - k - 1
-    if (df_resid <= 0 || r2 >= 1 || r2 < 0) next
+    if (df_resid <= 0 || r2 >= 1 || r2 < 0) {
+      next
+    }
     diag_inv <- diag(Rxx_inv)
-    if (any(diag_inv <= 0)) next
+    if (any(diag_inv <= 0)) {
+      next
+    }
     se_beta <- sqrt((1 - r2) / df_resid * diag_inv)
     t_crit <- stats::qt(1 - alpha / 2, df_resid)
     ci_lo <- beta - t_crit * se_beta
@@ -239,10 +274,12 @@ recalc_regression_from_cor_mat <- function(formula, cor_mat, n,
     out <- c(beta, ci_lo, ci_hi, p_val)
     if (use_sd) {
       sd_y <- row[["sd_1"]]
-      sd_x <- vapply(seq_len(k),
-                     function(i) row[[paste0("sd_", i + 1L)]],
-                     numeric(1))
-      b      <- beta  * sd_y / sd_x
+      sd_x <- vapply(
+        seq_len(k),
+        function(i) row[[paste0("sd_", i + 1L)]],
+        numeric(1)
+      )
+      b <- beta * sd_y / sd_x
       b_ci_l <- ci_lo * sd_y / sd_x
       b_ci_u <- ci_hi * sd_y / sd_x
       out <- c(out, b, b_ci_l, b_ci_u)
@@ -257,9 +294,8 @@ recalc_regression_from_cor_mat <- function(formula, cor_mat, n,
 
   # Each predictor contributes n_quant rows. For predictor i and quantity q,
   # the column index in vals is (q - 1) * k + i.
-  std_checks <- c("Std.Beta", "Std.Beta CI lower",
-                  "Std.Beta CI upper", "p")
-  b_checks   <- c("b", "b CI lower", "b CI upper")
+  std_checks <- c("Std.Beta", "Std.Beta CI lower", "Std.Beta CI upper", "p")
+  b_checks <- c("b", "b CI lower", "b CI upper")
   quant_names <- if (use_sd) c(std_checks, b_checks) else std_checks
 
   rows <- vector("list", n_out)
@@ -272,14 +308,18 @@ recalc_regression_from_cor_mat <- function(formula, cor_mat, n,
       reported_int <- c(NA_real_, NA_real_)
       if (qname == "Std.Beta" && !is.null(reported_betas)) {
         reported_value <- reported_betas[[i]]
-        reported_int <- reported_interval(reported_value,
-                                          reported_betas_digits,
-                                          rounding = rounding)
+        reported_int <- reported_interval(
+          reported_value,
+          reported_betas_digits,
+          rounding = rounding
+        )
       } else if (qname == "b" && !is.null(reported_b)) {
         reported_value <- reported_b[[i]]
-        reported_int <- reported_interval(reported_value,
-                                          reported_b_digits,
-                                          rounding = rounding)
+        reported_int <- reported_interval(
+          reported_value,
+          reported_b_digits,
+          rounding = rounding
+        )
       }
       rows[[r]] <- recalc_result(
         check = qname,
@@ -292,7 +332,10 @@ recalc_regression_from_cor_mat <- function(formula, cor_mat, n,
     }
   }
   out <- dplyr::bind_rows(rows)
-  out <- out[, c("check", "predictor", setdiff(names(out),
-                                               c("check", "predictor")))]
+  out <- out[, c(
+    "check",
+    "predictor",
+    setdiff(names(out), c("check", "predictor"))
+  )]
   tibble::as_tibble(out)
 }

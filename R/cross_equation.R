@@ -16,13 +16,23 @@
 #'                            r_y1 = -0.53, r_y2 = 0.61)
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
-recalc_r12_from_normal_eqs <- function(beta1, beta2, r_y1, r_y2,
-                                       beta1_digits = 2, beta2_digits = 2,
-                                       r_y1_digits = 2, r_y2_digits = 2, rounding = "either") {
-  inputs <- list(beta1 = interval_from_digits(beta1, beta1_digits, rounding = rounding),
-                 beta2 = interval_from_digits(beta2, beta2_digits, rounding = rounding),
-                 r_y1 = interval_from_digits(r_y1, r_y1_digits, rounding = rounding),
-                 r_y2 = interval_from_digits(r_y2, r_y2_digits, rounding = rounding))
+recalc_r12_from_normal_eqs <- function(
+  beta1,
+  beta2,
+  r_y1,
+  r_y2,
+  beta1_digits = 2,
+  beta2_digits = 2,
+  r_y1_digits = 2,
+  r_y2_digits = 2,
+  rounding = "either"
+) {
+  inputs <- list(
+    beta1 = interval_from_digits(beta1, beta1_digits, rounding = rounding),
+    beta2 = interval_from_digits(beta2, beta2_digits, rounding = rounding),
+    r_y1 = interval_from_digits(r_y1, r_y1_digits, rounding = rounding),
+    r_y2 = interval_from_digits(r_y2, r_y2_digits, rounding = rounding)
+  )
   recomp1 <- propagate_intervals(
     fn = function(beta1, beta2, r_y1, r_y2) (r_y1 - beta1) / beta2,
     inputs = inputs
@@ -32,12 +42,18 @@ recalc_r12_from_normal_eqs <- function(beta1, beta2, r_y1, r_y2,
     inputs = inputs
   )
   dplyr::bind_rows(
-    recalc_result("C1: r_12 = (r_Y1 - beta_1)/beta_2",
-                  NULL, c(NA_real_, NA_real_), recomp1),
-    recalc_result("C1: r_12 = (r_Y2 - beta_2)/beta_1",
-                  NA_real_,
-                  c(recomp1[["lower"]], recomp1[["upper"]]),
-                  recomp2)
+    recalc_result(
+      "C1: r_12 = (r_Y1 - beta_1)/beta_2",
+      NULL,
+      c(NA_real_, NA_real_),
+      recomp1
+    ),
+    recalc_result(
+      "C1: r_12 = (r_Y2 - beta_2)/beta_1",
+      NA_real_,
+      c(recomp1[["lower"]], recomp1[["upper"]]),
+      recomp2
+    )
   )
 }
 
@@ -59,12 +75,22 @@ recalc_r12_from_normal_eqs <- function(beta1, beta2, r_y1, r_y2,
 #'                            betas = c(-0.39, 0.47))
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
-recalc_betas_from_corrs_k2 <- function(r_y1, r_y2, r_12, betas = NULL,
-                                       r_y1_digits = 2, r_y2_digits = 2,
-                                       r_12_digits = 2, betas_digits = 2, rounding = "either") {
-  inputs <- list(r_y1 = interval_from_digits(r_y1, r_y1_digits, rounding = rounding),
-                 r_y2 = interval_from_digits(r_y2, r_y2_digits, rounding = rounding),
-                 r_12 = interval_from_digits(r_12, r_12_digits, rounding = rounding))
+recalc_betas_from_corrs_k2 <- function(
+  r_y1,
+  r_y2,
+  r_12,
+  betas = NULL,
+  r_y1_digits = 2,
+  r_y2_digits = 2,
+  r_12_digits = 2,
+  betas_digits = 2,
+  rounding = "either"
+) {
+  inputs <- list(
+    r_y1 = interval_from_digits(r_y1, r_y1_digits, rounding = rounding),
+    r_y2 = interval_from_digits(r_y2, r_y2_digits, rounding = rounding),
+    r_12 = interval_from_digits(r_12, r_12_digits, rounding = rounding)
+  )
   rec1 <- propagate_intervals(
     fn = function(r_y1, r_y2, r_12) (r_y1 - r_12 * r_y2) / (1 - r_12^2),
     inputs = inputs
@@ -74,16 +100,26 @@ recalc_betas_from_corrs_k2 <- function(r_y1, r_y2, r_12, betas = NULL,
     inputs = inputs
   )
   dplyr::bind_rows(
-    recalc_result("C2: beta_1 = (r_Y1 - r_12 r_Y2)/(1 - r_12^2)",
-                  if (is.null(betas)) NULL else betas[1],
-                  reported_interval(if (is.null(betas)) NULL else betas[1],
-                                    betas_digits, rounding = rounding),
-                  rec1),
-    recalc_result("C2: beta_2 = (r_Y2 - r_12 r_Y1)/(1 - r_12^2)",
-                  if (is.null(betas)) NULL else betas[2],
-                  reported_interval(if (is.null(betas)) NULL else betas[2],
-                                    betas_digits, rounding = rounding),
-                  rec2)
+    recalc_result(
+      "C2: beta_1 = (r_Y1 - r_12 r_Y2)/(1 - r_12^2)",
+      if (is.null(betas)) NULL else betas[1],
+      reported_interval(
+        if (is.null(betas)) NULL else betas[1],
+        betas_digits,
+        rounding = rounding
+      ),
+      rec1
+    ),
+    recalc_result(
+      "C2: beta_2 = (r_Y2 - r_12 r_Y1)/(1 - r_12^2)",
+      if (is.null(betas)) NULL else betas[2],
+      reported_interval(
+        if (is.null(betas)) NULL else betas[2],
+        betas_digits,
+        rounding = rounding
+      ),
+      rec2
+    )
   )
 }
 
@@ -101,15 +137,26 @@ recalc_betas_from_corrs_k2 <- function(r_y1, r_y2, r_12, betas = NULL,
 #' recalc_r2_floor_from_correlations(r_y = c(-0.53, 0.61), r2 = 0.41)
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
-recalc_r2_floor_from_correlations <- function(r_y, r2 = NULL,
-                                              r_y_digits = 2, r2_digits = 2, rounding = "either") {
+recalc_r2_floor_from_correlations <- function(
+  r_y,
+  r2 = NULL,
+  r_y_digits = 2,
+  r2_digits = 2,
+  rounding = "either"
+) {
   k <- length(r_y)
-  inputs <- setNames(lapply(r_y, interval_from_digits, r_y_digits, rounding = rounding),
-                     paste0("r", seq_len(k)))
+  inputs <- setNames(
+    lapply(r_y, interval_from_digits, r_y_digits, rounding = rounding),
+    paste0("r", seq_len(k))
+  )
   fn <- function(...) max(unlist(list(...))^2)
   recomp <- propagate_intervals(fn, inputs)
-  out <- recalc_result("C4: R^2 >= max_i r_Yi^2", r2,
-                       reported_interval(r2, r2_digits, rounding = rounding), recomp)
+  out <- recalc_result(
+    "C4: R^2 >= max_i r_Yi^2",
+    r2,
+    reported_interval(r2, r2_digits, rounding = rounding),
+    recomp
+  )
   if (!is.null(r2)) {
     r2_upper <- r2 + 0.5 * 10^(-r2_digits)
     out$consistent <- r2_upper >= recomp[["lower"]]
@@ -134,25 +181,51 @@ recalc_r2_floor_from_correlations <- function(r_y, r2 = NULL,
 #'               n = 1923, k_full = 2, delta_f = 750.1)
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
-recalc_delta_f <- function(r2_full, r2_reduced, delta_k, n, k_full,
-                           delta_f = NULL,
-                           r2_full_digits = 2, r2_reduced_digits = 2,
-                           delta_k_digits = 0, n_digits = 0,
-                           k_full_digits = 0, delta_f_digits = 2, rounding = "either") {
+recalc_delta_f <- function(
+  r2_full,
+  r2_reduced,
+  delta_k,
+  n,
+  k_full,
+  delta_f = NULL,
+  r2_full_digits = 2,
+  r2_reduced_digits = 2,
+  delta_k_digits = 0,
+  n_digits = 0,
+  k_full_digits = 0,
+  delta_f_digits = 2,
+  rounding = "either"
+) {
   recomp <- propagate_intervals(
     fn = function(r2_full, r2_reduced, delta_k, n, k_full) {
       ((r2_full - r2_reduced) / delta_k) / ((1 - r2_full) / (n - k_full - 1))
     },
-    inputs = list(r2_full = interval_from_digits(r2_full, r2_full_digits, rounding = rounding),
-                  r2_reduced = interval_from_digits(r2_reduced,
-                                                    r2_reduced_digits,
-                                                    rounding = rounding),
-                  delta_k = interval_from_digits(delta_k, delta_k_digits, rounding = rounding),
-                  n = interval_from_digits(n, n_digits, rounding = rounding),
-                  k_full = interval_from_digits(k_full, k_full_digits, rounding = rounding))
+    inputs = list(
+      r2_full = interval_from_digits(
+        r2_full,
+        r2_full_digits,
+        rounding = rounding
+      ),
+      r2_reduced = interval_from_digits(
+        r2_reduced,
+        r2_reduced_digits,
+        rounding = rounding
+      ),
+      delta_k = interval_from_digits(
+        delta_k,
+        delta_k_digits,
+        rounding = rounding
+      ),
+      n = interval_from_digits(n, n_digits, rounding = rounding),
+      k_full = interval_from_digits(k_full, k_full_digits, rounding = rounding)
+    )
   )
-  recalc_result("C5: Delta F = ((R^2_2 - R^2_1)/Dk) / ((1 - R^2_2)/(N-k_2-1))",
-                delta_f, reported_interval(delta_f, delta_f_digits, rounding = rounding), recomp)
+  recalc_result(
+    "C5: Delta F = ((R^2_2 - R^2_1)/Dk) / ((1 - R^2_2)/(N-k_2-1))",
+    delta_f,
+    reported_interval(delta_f, delta_f_digits, rounding = rounding),
+    recomp
+  )
 }
 
 #' Cross-check the beta-r decomposition against F (no R^2 needed)
@@ -171,22 +244,38 @@ recalc_delta_f <- function(r2_full, r2_reduced, delta_k, n, k_full,
 #'                    f = 665.4, n = 1923, k = 2)
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
-recalc_betar_from_f <- function(betas, r_y, f, n, k,
-                                betas_digits = 2, r_y_digits = 2,
-                                f_digits = 2, n_digits = 0, k_digits = 0, rounding = "either") {
+recalc_betar_from_f <- function(
+  betas,
+  r_y,
+  f,
+  n,
+  k,
+  betas_digits = 2,
+  r_y_digits = 2,
+  f_digits = 2,
+  n_digits = 0,
+  k_digits = 0,
+  rounding = "either"
+) {
   stopifnot(length(betas) == length(r_y))
   k_pred <- length(betas)
   rep_int <- propagate_intervals(
     fn = function(f, n, k) (f * k) / (f * k + (n - k - 1)),
-    inputs = list(f = interval_from_digits(f, f_digits, rounding = rounding),
-                  n = interval_from_digits(n, n_digits, rounding = rounding),
-                  k = interval_from_digits(k, k_digits, rounding = rounding))
+    inputs = list(
+      f = interval_from_digits(f, f_digits, rounding = rounding),
+      n = interval_from_digits(n, n_digits, rounding = rounding),
+      k = interval_from_digits(k, k_digits, rounding = rounding)
+    )
   )
   inputs <- c(
-    setNames(lapply(betas, interval_from_digits, betas_digits, rounding = rounding),
-             paste0("b", seq_len(k_pred))),
-    setNames(lapply(r_y, interval_from_digits, r_y_digits, rounding = rounding),
-             paste0("r", seq_len(k_pred)))
+    setNames(
+      lapply(betas, interval_from_digits, betas_digits, rounding = rounding),
+      paste0("b", seq_len(k_pred))
+    ),
+    setNames(
+      lapply(r_y, interval_from_digits, r_y_digits, rounding = rounding),
+      paste0("r", seq_len(k_pred))
+    )
   )
   fn <- function(...) {
     args <- list(...)
@@ -195,8 +284,10 @@ recalc_betar_from_f <- function(betas, r_y, f, n, k,
     sum(bs * rs)
   }
   recomp <- propagate_intervals(fn, inputs)
-  recalc_result("C6: sum beta_i r_Yi = Fk/(Fk + N-k-1)",
-                NA_real_,
-                c(rep_int[["lower"]], rep_int[["upper"]]),
-                recomp)
+  recalc_result(
+    "C6: sum beta_i r_Yi = Fk/(Fk + N-k-1)",
+    NA_real_,
+    c(rep_int[["lower"]], rep_int[["upper"]]),
+    recomp
+  )
 }

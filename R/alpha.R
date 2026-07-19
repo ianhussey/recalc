@@ -31,32 +31,57 @@
 #'                          alpha_digits = 2)
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
-recalc_alpha_from_cor_sd <- function(cor_mat, sd_vector, alpha = NULL,
-                                     cor_mat_digits = NULL,
-                                     sd_vector_digits = NULL,
-                                     alpha_digits = NULL, rounding = "either") {
-  require_digits(cor_mat_digits = cor_mat_digits,
-                 sd_vector_digits = sd_vector_digits)
-  if (!is.null(alpha)) require_digits(alpha_digits = alpha_digits)
+recalc_alpha_from_cor_sd <- function(
+  cor_mat,
+  sd_vector,
+  alpha = NULL,
+  cor_mat_digits = NULL,
+  sd_vector_digits = NULL,
+  alpha_digits = NULL,
+  rounding = "either"
+) {
+  require_digits(
+    cor_mat_digits = cor_mat_digits,
+    sd_vector_digits = sd_vector_digits
+  )
+  if (!is.null(alpha)) {
+    require_digits(alpha_digits = alpha_digits)
+  }
 
-  stopifnot(is.matrix(cor_mat),
-            nrow(cor_mat) == ncol(cor_mat),
-            length(sd_vector) == nrow(cor_mat))
+  stopifnot(
+    is.matrix(cor_mat),
+    nrow(cor_mat) == ncol(cor_mat),
+    length(sd_vector) == nrow(cor_mat)
+  )
   p <- length(sd_vector)
-  if (p < 2L) stop("alpha requires at least 2 items")
+  if (p < 2L) {
+    stop("alpha requires at least 2 items")
+  }
 
   s_names <- paste0("s", seq_len(p))
   idx <- which(upper.tri(cor_mat), arr.ind = TRUE)
   r_names <- sprintf("r_%d_%d", idx[, 1], idx[, 2])
 
   inputs <- c(
-    setNames(lapply(sd_vector, interval_from_digits, sd_vector_digits, rounding = rounding),
-             s_names),
-    setNames(lapply(seq_len(nrow(idx)),
-                    function(i) interval_from_digits(
-                      cor_mat[idx[i, 1], idx[i, 2]], cor_mat_digits,
-                      rounding = rounding)),
-             r_names)
+    setNames(
+      lapply(
+        sd_vector,
+        interval_from_digits,
+        sd_vector_digits,
+        rounding = rounding
+      ),
+      s_names
+    ),
+    setNames(
+      lapply(seq_len(nrow(idx)), function(i) {
+        interval_from_digits(
+          cor_mat[idx[i, 1], idx[i, 2]],
+          cor_mat_digits,
+          rounding = rounding
+        )
+      }),
+      r_names
+    )
   )
 
   fn <- function(...) {
@@ -68,6 +93,10 @@ recalc_alpha_from_cor_sd <- function(cor_mat, sd_vector, alpha = NULL,
     (p / (p - 1)) * (1 - sum_ss / V)
   }
   recomp <- propagate_intervals(fn, inputs)
-  recalc_result("D1: alpha = (p/(p-1))(1 - sum s_j^2 / V)",
-                alpha, reported_interval(alpha, alpha_digits, rounding = rounding), recomp)
+  recalc_result(
+    "D1: alpha = (p/(p-1))(1 - sum s_j^2 / V)",
+    alpha,
+    reported_interval(alpha, alpha_digits, rounding = rounding),
+    recomp
+  )
 }

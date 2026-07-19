@@ -28,9 +28,15 @@
 #' @param method One of \code{"sobel"}, \code{"aroian"}, \code{"goodman"}.
 #' @return Numeric scalar, the two-tailed p for the indirect effect.
 #' @keywords internal
-sobel_p <- function(a, b, p_a, p_b, df = NULL,
-                    two_tailed = TRUE,
-                    method = c("sobel", "aroian", "goodman")) {
+sobel_p <- function(
+  a,
+  b,
+  p_a,
+  p_b,
+  df = NULL,
+  two_tailed = TRUE,
+  method = c("sobel", "aroian", "goodman")
+) {
   method <- match.arg(method)
   tail_factor <- if (two_tailed) 2 else 1
   crit <- if (is.null(df)) {
@@ -45,15 +51,21 @@ sobel_p <- function(a, b, p_a, p_b, df = NULL,
   var_ab <- b^2 * SE_a^2 + a^2 * SE_b^2
   var_ab <- switch(
     method,
-    sobel   = var_ab,
-    aroian  = var_ab + SE_a^2 * SE_b^2,
+    sobel = var_ab,
+    aroian = var_ab + SE_a^2 * SE_b^2,
     goodman = max(var_ab - SE_a^2 * SE_b^2, 0)
   )
   SE_ab <- sqrt(var_ab)
   ab <- a * b
   z <- ab / SE_ab
-  if (!is.finite(z)) return(NA_real_)
-  if (is.null(df)) 2 * stats::pnorm(-abs(z)) else 2 * stats::pt(-abs(z), df = df)
+  if (!is.finite(z)) {
+    return(NA_real_)
+  }
+  if (is.null(df)) {
+    2 * stats::pnorm(-abs(z))
+  } else {
+    2 * stats::pt(-abs(z), df = df)
+  }
 }
 
 # Input interval for a reported p-value: rounding interval if reported as
@@ -63,11 +75,11 @@ p_input_interval <- function(p, digits, op = "eq", rounding = "either") {
   eps <- .Machine$double.eps
   switch(
     op,
-    eq      = interval_from_digits(p, digits, lo = eps, hi = 1, rounding = rounding),
+    eq = interval_from_digits(p, digits, lo = eps, hi = 1, rounding = rounding),
     lt = ,
-    le      = c(eps, p),
+    le = c(eps, p),
     gt = ,
-    ge      = c(p, 1),
+    ge = c(p, 1),
     stop("Unknown op: ", op)
   )
 }
@@ -79,10 +91,12 @@ require_digits <- function(...) {
   args <- list(...)
   missing <- vapply(args, is.null, logical(1))
   if (any(missing)) {
-    stop("Missing required digits argument(s): ",
-         paste(names(args)[missing], collapse = ", "),
-         ". Specify the number of decimal places each value was reported to.",
-         call. = FALSE)
+    stop(
+      "Missing required digits argument(s): ",
+      paste(names(args)[missing], collapse = ", "),
+      ". Specify the number of decimal places each value was reported to.",
+      call. = FALSE
+    )
   }
   invisible(TRUE)
 }
@@ -106,18 +120,32 @@ require_digits <- function(...) {
 #'                     a_digits = 3, b_digits = 3, ab_digits = 3)
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
-recalc_mediation_ab <- function(a, b, ab = NULL,
-                                a_digits = NULL, b_digits = NULL,
-                                ab_digits = NULL, rounding = "either") {
+recalc_mediation_ab <- function(
+  a,
+  b,
+  ab = NULL,
+  a_digits = NULL,
+  b_digits = NULL,
+  ab_digits = NULL,
+  rounding = "either"
+) {
   require_digits(a_digits = a_digits, b_digits = b_digits)
-  if (!is.null(ab)) require_digits(ab_digits = ab_digits)
+  if (!is.null(ab)) {
+    require_digits(ab_digits = ab_digits)
+  }
   recomp <- propagate_intervals(
     fn = function(a, b) a * b,
-    inputs = list(a = interval_from_digits(a, a_digits, rounding = rounding),
-                  b = interval_from_digits(b, b_digits, rounding = rounding))
+    inputs = list(
+      a = interval_from_digits(a, a_digits, rounding = rounding),
+      b = interval_from_digits(b, b_digits, rounding = rounding)
+    )
   )
-  recalc_result("M1: ab = a * b", ab,
-                reported_interval(ab, ab_digits, rounding = rounding), recomp)
+  recalc_result(
+    "M1: ab = a * b",
+    ab,
+    reported_interval(ab, ab_digits, rounding = rounding),
+    recomp
+  )
 }
 
 #' Recalculate the Sobel-family p-value for an indirect effect
@@ -166,25 +194,44 @@ recalc_mediation_ab <- function(a, b, ab = NULL,
 #'                    label = "HAM-D")
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
-recalc_mediation_p <- function(a, p_a, b, p_b, p = NULL,
-                               a_digits = NULL, p_a_digits = NULL,
-                               b_digits = NULL, p_b_digits = NULL,
-                               p_digits = NULL,
-                               p_a_op = "eq", p_b_op = "eq", p_op = "eq",
-                               two_tailed = TRUE,
-                               df_t = NULL,
-                               method = NULL,
-                               label = NULL,
-                               rounding = "either") {
-  require_digits(a_digits = a_digits, p_a_digits = p_a_digits,
-                 b_digits = b_digits, p_b_digits = p_b_digits)
-  if (!is.null(p)) require_digits(p_digits = p_digits)
+recalc_mediation_p <- function(
+  a,
+  p_a,
+  b,
+  p_b,
+  p = NULL,
+  a_digits = NULL,
+  p_a_digits = NULL,
+  b_digits = NULL,
+  p_b_digits = NULL,
+  p_digits = NULL,
+  p_a_op = "eq",
+  p_b_op = "eq",
+  p_op = "eq",
+  two_tailed = TRUE,
+  df_t = NULL,
+  method = NULL,
+  label = NULL,
+  rounding = "either"
+) {
+  require_digits(
+    a_digits = a_digits,
+    p_a_digits = p_a_digits,
+    b_digits = b_digits,
+    p_b_digits = p_b_digits
+  )
+  if (!is.null(p)) {
+    require_digits(p_digits = p_digits)
+  }
   all_methods <- c("sobel", "aroian", "goodman")
-  methods <- if (is.null(method)) all_methods else match.arg(method, all_methods,
-                                                             several.ok = TRUE)
+  methods <- if (is.null(method)) {
+    all_methods
+  } else {
+    match.arg(method, all_methods, several.ok = TRUE)
+  }
   inputs <- list(
-    a   = interval_from_digits(a, a_digits, rounding = rounding),
-    b   = interval_from_digits(b, b_digits, rounding = rounding),
+    a = interval_from_digits(a, a_digits, rounding = rounding),
+    b = interval_from_digits(b, b_digits, rounding = rounding),
     p_a = p_input_interval(p_a, p_a_digits, op = p_a_op, rounding = rounding),
     p_b = p_input_interval(p_b, p_b_digits, op = p_b_op, rounding = rounding)
   )
@@ -192,13 +239,14 @@ recalc_mediation_p <- function(a, p_a, b, p_b, p = NULL,
 
   one_row <- function(df_val, m) {
     fn <- function(a, b, p_a, p_b) {
-      sobel_p(a, b, p_a, p_b, df = df_val,
-              two_tailed = two_tailed, method = m)
+      sobel_p(a, b, p_a, p_b, df = df_val, two_tailed = two_tailed, method = m)
     }
     recomp <- propagate_intervals(fn, inputs)
     out <- recalc_result(
       sprintf("M2: Sobel p (%s)", m),
-      p, rep_int, recomp
+      p,
+      rep_int,
+      recomp
     )
     out$method <- m
     out$reference <- if (is.null(df_val)) "z" else sprintf("t(%g)", df_val)
@@ -209,10 +257,14 @@ recalc_mediation_p <- function(a, p_a, b, p_b, p = NULL,
   rows <- list()
   for (m in methods) {
     rows[[length(rows) + 1L]] <- one_row(NULL, m)
-    for (d in df_t) rows[[length(rows) + 1L]] <- one_row(d, m)
+    for (d in df_t) {
+      rows[[length(rows) + 1L]] <- one_row(d, m)
+    }
   }
   out <- dplyr::bind_rows(rows)
-  if (!is.null(label)) out$label <- label
+  if (!is.null(label)) {
+    out$label <- label
+  }
   out
 }
 
@@ -257,35 +309,63 @@ recalc_mediation_p <- function(a, p_a, b, p_b, p = NULL,
 #'                  label = "HAM-D")
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
-recalc_mediation <- function(a, p_a, b, p_b, ab = NULL, p = NULL,
-                             a_digits = NULL, p_a_digits = NULL,
-                             b_digits = NULL, p_b_digits = NULL,
-                             ab_digits = NULL, p_digits = NULL,
-                             p_a_op = "eq", p_b_op = "eq", p_op = "eq",
-                             two_tailed = TRUE,
-                             df_t = NULL,
-                             method = NULL,
-                             label = NULL,
-                             rounding = "either") {
-  row_ab <- recalc_mediation_ab(a, b, ab,
-                                a_digits = a_digits, b_digits = b_digits,
-                                ab_digits = ab_digits,
-                                rounding = rounding)
+recalc_mediation <- function(
+  a,
+  p_a,
+  b,
+  p_b,
+  ab = NULL,
+  p = NULL,
+  a_digits = NULL,
+  p_a_digits = NULL,
+  b_digits = NULL,
+  p_b_digits = NULL,
+  ab_digits = NULL,
+  p_digits = NULL,
+  p_a_op = "eq",
+  p_b_op = "eq",
+  p_op = "eq",
+  two_tailed = TRUE,
+  df_t = NULL,
+  method = NULL,
+  label = NULL,
+  rounding = "either"
+) {
+  row_ab <- recalc_mediation_ab(
+    a,
+    b,
+    ab,
+    a_digits = a_digits,
+    b_digits = b_digits,
+    ab_digits = ab_digits,
+    rounding = rounding
+  )
   row_ab$method <- NA_character_
   row_ab$reference <- NA_character_
   row_ab$df_t <- NA_real_
   rows_p <- recalc_mediation_p(
-    a = a, p_a = p_a, b = b, p_b = p_b, p = p,
-    a_digits = a_digits, p_a_digits = p_a_digits,
-    b_digits = b_digits, p_b_digits = p_b_digits,
+    a = a,
+    p_a = p_a,
+    b = b,
+    p_b = p_b,
+    p = p,
+    a_digits = a_digits,
+    p_a_digits = p_a_digits,
+    b_digits = b_digits,
+    p_b_digits = p_b_digits,
     p_digits = p_digits,
-    p_a_op = p_a_op, p_b_op = p_b_op, p_op = p_op,
+    p_a_op = p_a_op,
+    p_b_op = p_b_op,
+    p_op = p_op,
     two_tailed = two_tailed,
-    df_t = df_t, method = method,
+    df_t = df_t,
+    method = method,
     label = NULL,
     rounding = rounding
   )
   out <- dplyr::bind_rows(row_ab, rows_p)
-  if (!is.null(label)) out$label <- label
+  if (!is.null(label)) {
+    out$label <- label
+  }
   out
 }

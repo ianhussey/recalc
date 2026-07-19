@@ -122,43 +122,74 @@
 #' @importFrom tibble tibble
 #' @export
 recalc_chisq_p <- function(
-    counts = NULL,
-    n_rows = NULL, n_cols = NULL,
-    prop1 = NULL, prop2 = NULL, n1 = NULL, n2 = NULL, prop_digits = NULL,
-    rounding = "either",
-    p = NULL,
-    p_digits = NULL,
-    p_operator = c("equals", "less_than", "greater_than",
-                   "less_than_or_equal_to", "greater_than_or_equal_to"),
-    p_methods = NULL,
-    fisher_simulate = FALSE,
-    fisher_B = 1e5
+  counts = NULL,
+  n_rows = NULL,
+  n_cols = NULL,
+  prop1 = NULL,
+  prop2 = NULL,
+  n1 = NULL,
+  n2 = NULL,
+  prop_digits = NULL,
+  rounding = "either",
+  p = NULL,
+  p_digits = NULL,
+  p_operator = c(
+    "equals",
+    "less_than",
+    "greater_than",
+    "less_than_or_equal_to",
+    "greater_than_or_equal_to"
+  ),
+  p_methods = NULL,
+  fisher_simulate = FALSE,
+  fisher_B = 1e5
 ) {
   p_operator <- match.arg(p_operator)
-  rounding   <- match.arg(rounding, .recalc_rounding_choices)
+  rounding <- match.arg(rounding, .recalc_rounding_choices)
 
-  all_methods <- c("pearson", "yates", "likelihood_ratio", "n1_chisq",
-                   "fisher", "fisher_central", "fisher_midp", "fisher_midp_sas",
-                   "wald_z")
+  all_methods <- c(
+    "pearson",
+    "yates",
+    "likelihood_ratio",
+    "n1_chisq",
+    "fisher",
+    "fisher_central",
+    "fisher_midp",
+    "fisher_midp_sas",
+    "wald_z"
+  )
   p_methods <- .validate_methods(p_methods, all_methods, "p_methods")
 
   # Build the candidate tables (one if exact counts; many if reconstructed
   # from rounded proportions).
   grid <- .build_chisq_grid(
-    counts = counts, n_rows = n_rows, n_cols = n_cols,
-    prop1 = prop1, prop2 = prop2, n1 = n1, n2 = n2,
-    prop_digits = prop_digits, rounding = rounding
+    counts = counts,
+    n_rows = n_rows,
+    n_cols = n_cols,
+    prop1 = prop1,
+    prop2 = prop2,
+    n1 = n1,
+    n2 = n2,
+    prop_digits = prop_digits,
+    rounding = rounding
   )
 
   # Drop 2x2-only methods when the table is larger than 2x2.
   if (!grid$is_2x2) {
-    twobytwo_only <- c("yates", "fisher_central", "fisher_midp",
-                       "fisher_midp_sas", "wald_z")
+    twobytwo_only <- c(
+      "yates",
+      "fisher_central",
+      "fisher_midp",
+      "fisher_midp_sas",
+      "wald_z"
+    )
     keep <- setdiff(p_methods, twobytwo_only)
     dropped <- intersect(p_methods, twobytwo_only)
     if (length(dropped) > 0) {
-      message("Dropping 2x2-only method(s) for a larger table: ",
-              paste(dropped, collapse = ", "))
+      message(
+        "Dropping 2x2-only method(s) for a larger table: ",
+        paste(dropped, collapse = ", ")
+      )
     }
     if (length(keep) == 0) {
       stop("No applicable test methods remain for a table larger than 2x2.")
@@ -167,18 +198,27 @@ recalc_chisq_p <- function(
   }
 
   if (!is.null(p)) {
-    if (is.null(p_digits)) stop("You supplied 'p' but not 'p_digits'.")
+    if (is.null(p_digits)) {
+      stop("You supplied 'p' but not 'p_digits'.")
+    }
     .validate_digits(p_digits, "p_digits", min_val = 1L)
   }
   p_digits <- if (is.null(p_digits)) 3L else as.integer(p_digits)
-  p_num    <- if (!is.null(p)) as.numeric(p) else NA_real_
+  p_num <- if (!is.null(p)) as.numeric(p) else NA_real_
 
   p_results <- .multiverse_chisq_p_results(
-    grid, p_methods, fisher_simulate, fisher_B
+    grid,
+    p_methods,
+    fisher_simulate,
+    fisher_B
   )
 
   reproduced_out <- .reproduced_p_summary(
-    p_results, p_num, p_operator, p_digits = p_digits, rounding = rounding
+    p_results,
+    p_num,
+    p_operator,
+    p_digits = p_digits,
+    rounding = rounding
   )
 
   # Sharper, gap-aware bounds (the default): each test method spans an interval
@@ -187,15 +227,26 @@ recalc_chisq_p <- function(
   # intervals is a subset of that hull but still contains every
   # legitimately-producible p. `p_inbounds` is the union decision;
   # `p_inbounds_hull` keeps the convex-hull decision for legibility.
-  method_intervals <- .method_intervals(p_results, "p_unrounded", "method",
-                                        p_digits, rounding)
-  applied <- .apply_union_default(reproduced_out, method_intervals, p_num,
-                                  p_operator, p_digits,
-                                  inbounds_col = "p_inbounds", value_prefix = "p")
+  method_intervals <- .method_intervals(
+    p_results,
+    "p_unrounded",
+    "method",
+    p_digits,
+    rounding
+  )
+  applied <- .apply_union_default(
+    reproduced_out,
+    method_intervals,
+    p_num,
+    p_operator,
+    p_digits,
+    inbounds_col = "p_inbounds",
+    value_prefix = "p"
+  )
 
   list(
-    reproduced       = applied$reproduced,
-    p_results        = p_results,
+    reproduced = applied$reproduced,
+    p_results = p_results,
     method_intervals = applied$method_intervals
   )
 }
@@ -226,17 +277,28 @@ recalc_chisq <- function(...) {
 #' (a character label per table describing the input adjustment), and
 #' `is_2x2`.
 #' @keywords internal
-.build_chisq_grid <- function(counts, n_rows, n_cols,
-                              prop1, prop2, n1, n2, prop_digits, rounding) {
+.build_chisq_grid <- function(
+  counts,
+  n_rows,
+  n_cols,
+  prop1,
+  prop2,
+  n1,
+  n2,
+  prop_digits,
+  rounding
+) {
   have_counts <- !is.null(counts)
-  have_props  <- !is.null(prop1) || !is.null(prop2)
+  have_props <- !is.null(prop1) || !is.null(prop2)
 
   if (have_counts && have_props) {
     stop("Supply either 'counts' or the proportion arguments, not both.")
   }
   if (!have_counts && !have_props) {
-    stop("Supply a contingency table via 'counts', or a 2x2 table via ",
-         "'prop1'/'prop2'/'n1'/'n2'/'prop_digits'.")
+    stop(
+      "Supply a contingency table via 'counts', or a 2x2 table via ",
+      "'prop1'/'prop2'/'n1'/'n2'/'prop_digits'."
+    )
   }
 
   if (have_counts) {
@@ -250,12 +312,19 @@ recalc_chisq <- function(...) {
 
   # Proportion-reconstruction route (2x2 only).
   vals <- list(prop1 = prop1, prop2 = prop2, n1 = n1, n2 = n2)
-  missing <- names(vals)[vapply(vals, function(z) {
-    is.null(z) || length(z) == 0 || is.na(z[1])
-  }, logical(1))]
+  missing <- names(vals)[vapply(
+    vals,
+    function(z) {
+      is.null(z) || length(z) == 0 || is.na(z[1])
+    },
+    logical(1)
+  )]
   if (length(missing) > 0) {
-    stop("The proportion route needs all of prop1, prop2, n1, n2. Missing: ",
-         paste(missing, collapse = ", "), ".")
+    stop(
+      "The proportion route needs all of prop1, prop2, n1, n2. Missing: ",
+      paste(missing, collapse = ", "),
+      "."
+    )
   }
   if (is.null(prop_digits)) {
     stop("You must supply 'prop_digits' (decimal places of prop1/prop2).")
@@ -277,19 +346,20 @@ recalc_chisq <- function(...) {
   e1 <- .feasible_events(prop1, n1, prop_digits, rounding)
   e2 <- .feasible_events(prop2, n2, prop_digits, rounding)
   if (length(e1) == 0 || length(e2) == 0) {
-    stop("No integer event counts are consistent with the reported ",
-         "proportions and totals.")
+    stop(
+      "No integer event counts are consistent with the reported ",
+      "proportions and totals."
+    )
   }
 
-  combos <- expand.grid(e1 = e1, e2 = e2,
-                        KEEP.OUT.ATTRS = FALSE)
+  combos <- expand.grid(e1 = e1, e2 = e2, KEEP.OUT.ATTRS = FALSE)
   tables <- vector("list", nrow(combos))
   labels <- character(nrow(combos))
   for (i in seq_len(nrow(combos))) {
-    a <- combos$e1[i]; cc <- combos$e2[i]
+    a <- combos$e1[i]
+    cc <- combos$e2[i]
     # rows = groups, columns = (level 1, level 2)
-    tables[[i]] <- matrix(c(a, n1 - a, cc, n2 - cc),
-                          nrow = 2L, byrow = TRUE)
+    tables[[i]] <- matrix(c(a, n1 - a, cc, n2 - cc), nrow = 2L, byrow = TRUE)
     labels[i] <- paste0("events_g1:", a, "|events_g2:", cc)
   }
 
@@ -306,10 +376,20 @@ recalc_chisq <- function(...) {
       stop("When 'counts' is a vector you must supply 'n_rows' and 'n_cols'.")
     }
     if (length(counts) != n_rows * n_cols) {
-      stop("length(counts) (", length(counts), ") != n_rows * n_cols (",
-           n_rows * n_cols, ").")
+      stop(
+        "length(counts) (",
+        length(counts),
+        ") != n_rows * n_cols (",
+        n_rows * n_cols,
+        ")."
+      )
     }
-    tab <- matrix(as.numeric(counts), nrow = n_rows, ncol = n_cols, byrow = TRUE)
+    tab <- matrix(
+      as.numeric(counts),
+      nrow = n_rows,
+      ncol = n_cols,
+      byrow = TRUE
+    )
   } else {
     stop("'counts' must be a matrix, a table, or a numeric vector.")
   }
@@ -332,13 +412,20 @@ recalc_chisq <- function(...) {
 #' integer counts that fall inside.
 #' @keywords internal
 .feasible_events <- function(prop, n, prop_digits, rounding) {
-  int_p <- interval_from_digits(prop, prop_digits, lo = 0, hi = 1,
-                                rounding = rounding)
+  int_p <- interval_from_digits(
+    prop,
+    prop_digits,
+    lo = 0,
+    hi = 1,
+    rounding = rounding
+  )
   lo <- ceiling(int_p[1] * n - 1e-9)
   hi <- floor(int_p[2] * n + 1e-9)
   lo <- max(0L, as.integer(lo))
   hi <- min(as.integer(n), as.integer(hi))
-  if (hi < lo) return(integer(0))
+  if (hi < lo) {
+    return(integer(0))
+  }
   seq.int(lo, hi)
 }
 
@@ -399,7 +486,9 @@ recalc_chisq <- function(...) {
 #' Point (hypergeometric) probability of an observed 2x2 table.
 #' @keywords internal
 .hyper_point <- function(tab) {
-  r1 <- sum(tab[1, ]); r2 <- sum(tab[2, ]); c1 <- sum(tab[, 1])
+  r1 <- sum(tab[1, ])
+  r2 <- sum(tab[2, ])
+  c1 <- sum(tab[, 1])
   dhyper(tab[1, 1], m = r1, n = r2, k = c1)
 }
 
@@ -408,8 +497,12 @@ recalc_chisq <- function(...) {
 .fisher_p <- function(tab, simulate = FALSE, B = 1e5) {
   out <- tryCatch(
     suppressWarnings(
-      fisher.test(tab, alternative = "two.sided",
-                  simulate.p.value = simulate, B = B)$p.value
+      fisher.test(
+        tab,
+        alternative = "two.sided",
+        simulate.p.value = simulate,
+        B = B
+      )$p.value
     ),
     error = function(e) NA_real_
   )
@@ -423,13 +516,19 @@ recalc_chisq <- function(...) {
 #' used by StatXact / OpenEpi / epitools).
 #' @keywords internal
 .fisher_midp <- function(tab) {
-  if (nrow(tab) != 2L || ncol(tab) != 2L) return(NA_real_)
-  r1 <- sum(tab[1, ]); r2 <- sum(tab[2, ]); c1 <- sum(tab[, 1])
-  if (r1 == 0 || r2 == 0 || c1 == 0 || (r1 + r2) - c1 == 0) return(NA_real_)
+  if (nrow(tab) != 2L || ncol(tab) != 2L) {
+    return(NA_real_)
+  }
+  r1 <- sum(tab[1, ])
+  r2 <- sum(tab[2, ])
+  c1 <- sum(tab[, 1])
+  if (r1 == 0 || r2 == 0 || c1 == 0 || (r1 + r2) - c1 == 0) {
+    return(NA_real_)
+  }
   a <- tab[1, 1]
   pt_obs <- dhyper(a, m = r1, n = r2, k = c1)
-  lower  <- phyper(a,     m = r1, n = r2, k = c1)                       # P(X <= a)
-  upper  <- phyper(a - 1, m = r1, n = r2, k = c1, lower.tail = FALSE)   # P(X >= a)
+  lower <- phyper(a, m = r1, n = r2, k = c1) # P(X <= a)
+  upper <- phyper(a - 1, m = r1, n = r2, k = c1, lower.tail = FALSE) # P(X >= a)
   midp_lower <- lower - 0.5 * pt_obs
   midp_upper <- upper - 0.5 * pt_obs
   min(1, 2 * min(midp_lower, midp_upper))
@@ -442,9 +541,13 @@ recalc_chisq <- function(...) {
 #' value implemented in the \code{reappraised} package as \code{midp.sas}.
 #' @keywords internal
 .fisher_midp_sas <- function(tab) {
-  if (nrow(tab) != 2L || ncol(tab) != 2L) return(NA_real_)
+  if (nrow(tab) != 2L || ncol(tab) != 2L) {
+    return(NA_real_)
+  }
   pf <- .fisher_p(tab, simulate = FALSE)
-  if (is.na(pf)) return(NA_real_)
+  if (is.na(pf)) {
+    return(NA_real_)
+  }
   pt_obs <- .hyper_point(tab)
   max(0, min(1, pf - 0.5 * pt_obs))
 }
@@ -459,10 +562,16 @@ recalc_chisq <- function(...) {
 #' @keywords internal
 .chisq_n1 <- function(tab) {
   pr <- .chisq_pearson(tab)
-  if (is.na(pr$statistic)) return(pr)
+  if (is.na(pr$statistic)) {
+    return(pr)
+  }
   N <- sum(tab)
   stat <- (N - 1) / N * pr$statistic
-  list(statistic = stat, df = pr$df, p = pchisq(stat, pr$df, lower.tail = FALSE))
+  list(
+    statistic = stat,
+    df = pr$df,
+    p = pchisq(stat, pr$df, lower.tail = FALSE)
+  )
 }
 
 #' Central (equal-tailed) two-sided Fisher exact p (2x2), non-mid-p.
@@ -474,12 +583,18 @@ recalc_chisq <- function(...) {
 #' This is the non-mid-p analogue of \code{fisher_midp}.
 #' @keywords internal
 .fisher_central <- function(tab) {
-  if (nrow(tab) != 2L || ncol(tab) != 2L) return(NA_real_)
-  r1 <- sum(tab[1, ]); r2 <- sum(tab[2, ]); c1 <- sum(tab[, 1])
-  if (r1 == 0 || r2 == 0 || c1 == 0 || (r1 + r2) - c1 == 0) return(NA_real_)
+  if (nrow(tab) != 2L || ncol(tab) != 2L) {
+    return(NA_real_)
+  }
+  r1 <- sum(tab[1, ])
+  r2 <- sum(tab[2, ])
+  c1 <- sum(tab[, 1])
+  if (r1 == 0 || r2 == 0 || c1 == 0 || (r1 + r2) - c1 == 0) {
+    return(NA_real_)
+  }
   a <- tab[1, 1]
-  lower <- phyper(a,     m = r1, n = r2, k = c1)                       # P(X <= a)
-  upper <- phyper(a - 1, m = r1, n = r2, k = c1, lower.tail = FALSE)   # P(X >= a)
+  lower <- phyper(a, m = r1, n = r2, k = c1) # P(X <= a)
+  upper <- phyper(a - 1, m = r1, n = r2, k = c1, lower.tail = FALSE) # P(X >= a)
   min(1, 2 * min(lower, upper))
 }
 
@@ -494,12 +609,20 @@ recalc_chisq <- function(...) {
 #' @keywords internal
 .wald_z <- function(tab) {
   na_out <- list(statistic = NA_real_, df = NA_real_, p = NA_real_)
-  if (nrow(tab) != 2L || ncol(tab) != 2L) return(na_out)
-  n1 <- sum(tab[1, ]); n2 <- sum(tab[2, ])
-  if (n1 == 0 || n2 == 0) return(na_out)
-  p1 <- tab[1, 1] / n1; p2 <- tab[2, 1] / n2
+  if (nrow(tab) != 2L || ncol(tab) != 2L) {
+    return(na_out)
+  }
+  n1 <- sum(tab[1, ])
+  n2 <- sum(tab[2, ])
+  if (n1 == 0 || n2 == 0) {
+    return(na_out)
+  }
+  p1 <- tab[1, 1] / n1
+  p2 <- tab[2, 1] / n2
   se <- sqrt(p1 * (1 - p1) / n1 + p2 * (1 - p2) / n2)
-  if (!is.finite(se) || se == 0) return(na_out)
+  if (!is.finite(se) || se == 0) {
+    return(na_out)
+  }
   z <- (p1 - p2) / se
   list(statistic = z, df = NA_real_, p = 2 * pnorm(-abs(z)))
 }
@@ -509,18 +632,30 @@ recalc_chisq <- function(...) {
 .chisq_one <- function(tab, method, fisher_simulate, fisher_B) {
   switch(
     method,
-    pearson          = .chisq_pearson(tab),
-    yates            = .chisq_yates(tab),
+    pearson = .chisq_pearson(tab),
+    yates = .chisq_yates(tab),
     likelihood_ratio = .chisq_lr(tab),
-    n1_chisq         = .chisq_n1(tab),
-    fisher = list(statistic = NA_real_, df = NA_real_,
-                  p = .fisher_p(tab, fisher_simulate, fisher_B)),
-    fisher_central = list(statistic = NA_real_, df = NA_real_,
-                          p = .fisher_central(tab)),
-    fisher_midp = list(statistic = NA_real_, df = NA_real_,
-                       p = .fisher_midp(tab)),
-    fisher_midp_sas = list(statistic = NA_real_, df = NA_real_,
-                           p = .fisher_midp_sas(tab)),
+    n1_chisq = .chisq_n1(tab),
+    fisher = list(
+      statistic = NA_real_,
+      df = NA_real_,
+      p = .fisher_p(tab, fisher_simulate, fisher_B)
+    ),
+    fisher_central = list(
+      statistic = NA_real_,
+      df = NA_real_,
+      p = .fisher_central(tab)
+    ),
+    fisher_midp = list(
+      statistic = NA_real_,
+      df = NA_real_,
+      p = .fisher_midp(tab)
+    ),
+    fisher_midp_sas = list(
+      statistic = NA_real_,
+      df = NA_real_,
+      p = .fisher_midp_sas(tab)
+    ),
     wald_z = .wald_z(tab),
     stop("Unknown method: ", method)
   )
@@ -530,8 +665,12 @@ recalc_chisq <- function(...) {
 # === Internal: p multiverse ===================================================
 
 #' @keywords internal
-.multiverse_chisq_p_results <- function(grid, p_methods,
-                                        fisher_simulate, fisher_B) {
+.multiverse_chisq_p_results <- function(
+  grid,
+  p_methods,
+  fisher_simulate,
+  fisher_B
+) {
   rows <- vector("list", 0L)
 
   for (ti in seq_along(grid$tables)) {
@@ -539,14 +678,16 @@ recalc_chisq <- function(...) {
     lbl <- grid$labels[ti]
     for (method in p_methods) {
       res <- .chisq_one(tab, method, fisher_simulate, fisher_B)
-      if (is.na(res$p)) next
+      if (is.na(res$p)) {
+        next
+      }
       rows[[length(rows) + 1L]] <- data.frame(
-        source           = "counts",
-        method           = method,
+        source = "counts",
+        method = method,
         input_adj_counts = lbl,
-        statistic        = res$statistic,
-        df               = res$df,
-        p_unrounded      = res$p,
+        statistic = res$statistic,
+        df = res$df,
+        p_unrounded = res$p,
         stringsAsFactors = FALSE
       )
     }
@@ -554,9 +695,12 @@ recalc_chisq <- function(...) {
 
   if (length(rows) == 0L) {
     return(data.frame(
-      source = character(), method = character(),
+      source = character(),
+      method = character(),
       input_adj_counts = character(),
-      statistic = numeric(), df = numeric(), p_unrounded = numeric(),
+      statistic = numeric(),
+      df = numeric(),
+      p_unrounded = numeric(),
       stringsAsFactors = FALSE
     ))
   }
@@ -564,7 +708,6 @@ recalc_chisq <- function(...) {
   out <- do.call(rbind, rows)
   out[order(out$p_unrounded), ]
 }
-
 
 # (Per-method interval + gap-aware union helpers are shared across the chi-square,
 #  t-test p, and Cohen's d functions; see `.method_intervals` / `.union_summary`

@@ -73,35 +73,51 @@
 #' @importFrom tibble tibble
 #' @export
 recalc_independent_t_p <- function(
-    m1, m2, sd1, sd2, n1, n2,
-    m_digits = NULL,
-    sd_digits = NULL,
-    rounding = "either",
-    p = NULL,
-    p_digits = NULL,
-    p_operator = c("equals", "less_than", "greater_than",
-                   "less_than_or_equal_to", "greater_than_or_equal_to"),
-    p_methods = NULL,
-    alternative = "two.sided",
-    direction = c("m1_minus_m2", "m2_minus_m1", "both"),
-    mu = 0,
-    include_se_sd_confusion = FALSE
+  m1,
+  m2,
+  sd1,
+  sd2,
+  n1,
+  n2,
+  m_digits = NULL,
+  sd_digits = NULL,
+  rounding = "either",
+  p = NULL,
+  p_digits = NULL,
+  p_operator = c(
+    "equals",
+    "less_than",
+    "greater_than",
+    "less_than_or_equal_to",
+    "greater_than_or_equal_to"
+  ),
+  p_methods = NULL,
+  alternative = "two.sided",
+  direction = c("m1_minus_m2", "m2_minus_m1", "both"),
+  mu = 0,
+  include_se_sd_confusion = FALSE
 ) {
-  direction  <- match.arg(direction)
+  direction <- match.arg(direction)
   p_operator <- match.arg(p_operator)
 
   .validate_msd_inputs(m1, m2, sd1, sd2, n1, n2, m_digits, sd_digits)
-  m_digits  <- as.integer(m_digits)
+  m_digits <- as.integer(m_digits)
   sd_digits <- as.integer(sd_digits)
-  rounding  <- match.arg(rounding, .recalc_rounding_choices)
+  rounding <- match.arg(rounding, .recalc_rounding_choices)
 
   if (length(mu) != 1L || !is.finite(mu)) {
-    stop("'mu' must be a single finite numeric value (the null mean difference).")
+    stop(
+      "'mu' must be a single finite numeric value (the null mean difference)."
+    )
   }
   mu <- as.numeric(mu)
 
   alternative <- .validate_alternative(alternative)
-  p_methods   <- .validate_methods(p_methods, c("student_t", "welch_t"), "p_methods")
+  p_methods <- .validate_methods(
+    p_methods,
+    c("student_t", "welch_t"),
+    "p_methods"
+  )
 
   if (!is.null(p)) {
     if (is.null(p_digits)) {
@@ -118,31 +134,54 @@ recalc_independent_t_p <- function(
   p_num <- if (!is.null(p)) as.numeric(p) else NA_real_
 
   p_results <- .multiverse_p_results(
-    m1, m2, sd1, sd2, n1, n2,
-    m_digits, sd_digits, rounding,
-    p_methods, alternative, direction,
-    include_se_sd_confusion, mu
+    m1,
+    m2,
+    sd1,
+    sd2,
+    n1,
+    n2,
+    m_digits,
+    sd_digits,
+    rounding,
+    p_methods,
+    alternative,
+    direction,
+    include_se_sd_confusion,
+    mu
   )
 
-  reproduced_out <- .reproduced_p_summary(p_results, p_num, p_operator,
-                                          p_digits = p_digits, rounding = rounding)
+  reproduced_out <- .reproduced_p_summary(
+    p_results,
+    p_num,
+    p_operator,
+    p_digits = p_digits,
+    rounding = rounding
+  )
 
   # Sharper, gap-aware bounds (the default). A "method" here is a combination of
   # the discrete analytic choices (test variant, alternative, direction, SD
   # interpretation); within each, the input-rounding grid gives an interval.
   # `p_inbounds` is the union decision; `p_inbounds_hull` keeps the convex hull.
   method_intervals <- .method_intervals(
-    p_results, "p_unrounded",
+    p_results,
+    "p_unrounded",
     c("p_method", "alternative", "direction", "sd_interpretation"),
-    p_digits, rounding
+    p_digits,
+    rounding
   )
-  applied <- .apply_union_default(reproduced_out, method_intervals, p_num,
-                                  p_operator, p_digits,
-                                  inbounds_col = "p_inbounds", value_prefix = "p")
+  applied <- .apply_union_default(
+    reproduced_out,
+    method_intervals,
+    p_num,
+    p_operator,
+    p_digits,
+    inbounds_col = "p_inbounds",
+    value_prefix = "p"
+  )
 
   list(
-    reproduced       = applied$reproduced,
-    p_results        = p_results,
+    reproduced = applied$reproduced,
+    p_results = p_results,
     method_intervals = applied$method_intervals
   )
 }
@@ -250,28 +289,33 @@ recalc_independent_t_p <- function(
 #' @importFrom tibble tibble
 #' @export
 recalc_independent_t_d <- function(
-    m1, m2, sd1, sd2, n1, n2,
-    m_digits = NULL,
-    sd_digits = NULL,
-    rounding = "either",
-    d = NULL,
-    d_ci_lower = NULL,
-    d_ci_upper = NULL,
-    d_digits = NULL,
-    d_formulas = NULL,
-    hedges_correction = NULL,
-    ci_methods = NULL,
-    se_formulas = NULL,
-    alpha = 0.05,
-    direction = c("m1_minus_m2", "m2_minus_m1", "both"),
-    include_se_sd_confusion = FALSE
+  m1,
+  m2,
+  sd1,
+  sd2,
+  n1,
+  n2,
+  m_digits = NULL,
+  sd_digits = NULL,
+  rounding = "either",
+  d = NULL,
+  d_ci_lower = NULL,
+  d_ci_upper = NULL,
+  d_digits = NULL,
+  d_formulas = NULL,
+  hedges_correction = NULL,
+  ci_methods = NULL,
+  se_formulas = NULL,
+  alpha = 0.05,
+  direction = c("m1_minus_m2", "m2_minus_m1", "both"),
+  include_se_sd_confusion = FALSE
 ) {
   direction <- match.arg(direction)
 
   .validate_msd_inputs(m1, m2, sd1, sd2, n1, n2, m_digits, sd_digits)
-  m_digits  <- as.integer(m_digits)
+  m_digits <- as.integer(m_digits)
   sd_digits <- as.integer(sd_digits)
-  rounding  <- match.arg(rounding, .recalc_rounding_choices)
+  rounding <- match.arg(rounding, .recalc_rounding_choices)
 
   if (!is.null(d) && is.null(d_digits)) {
     stop("You supplied 'd' but not 'd_digits'.")
@@ -285,30 +329,60 @@ recalc_independent_t_d <- function(
   }
 
   d_formulas <- .validate_methods(
-    d_formulas, c("pooled_df", "pooled_n", "simple_avg"), "d_formulas"
+    d_formulas,
+    c("pooled_df", "pooled_n", "simple_avg"),
+    "d_formulas"
   )
   ci_methods <- .validate_methods(
-    ci_methods, c("wald_t", "wald_z", "welch_t", "nct"), "ci_methods"
+    ci_methods,
+    c("wald_t", "wald_z", "welch_t", "nct"),
+    "ci_methods"
   )
   se_formulas <- .validate_methods(
-    se_formulas, c("hedges_olkin", "cumming", "uncorrected"), "se_formulas"
+    se_formulas,
+    c("hedges_olkin", "cumming", "uncorrected"),
+    "se_formulas"
   )
   hedges_correction <- .validate_hedges(hedges_correction)
 
-  d_num          <- if (!is.null(d))          as.numeric(d)          else NA_real_
-  d_ci_lower_num <- if (!is.null(d_ci_lower)) as.numeric(d_ci_lower) else NA_real_
-  d_ci_upper_num <- if (!is.null(d_ci_upper)) as.numeric(d_ci_upper) else NA_real_
+  d_num <- if (!is.null(d)) as.numeric(d) else NA_real_
+  d_ci_lower_num <- if (!is.null(d_ci_lower)) {
+    as.numeric(d_ci_lower)
+  } else {
+    NA_real_
+  }
+  d_ci_upper_num <- if (!is.null(d_ci_upper)) {
+    as.numeric(d_ci_upper)
+  } else {
+    NA_real_
+  }
 
   d_results <- .multiverse_d_results(
-    m1, m2, sd1, sd2, n1, n2,
-    m_digits, sd_digits, rounding,
-    d_formulas, hedges_correction, ci_methods, se_formulas,
-    alpha, direction, include_se_sd_confusion
+    m1,
+    m2,
+    sd1,
+    sd2,
+    n1,
+    n2,
+    m_digits,
+    sd_digits,
+    rounding,
+    d_formulas,
+    hedges_correction,
+    ci_methods,
+    se_formulas,
+    alpha,
+    direction,
+    include_se_sd_confusion
   )
 
   reproduced_out <- .reproduced_d_summary(
-    d_results, d_num, d_ci_lower_num, d_ci_upper_num,
-    d_digits = d_digits, rounding = rounding
+    d_results,
+    d_num,
+    d_ci_lower_num,
+    d_ci_upper_num,
+    d_digits = d_digits,
+    rounding = rounding
   )
 
   # Sharper, gap-aware bounds for the point estimate (the default). A "method"
@@ -317,17 +391,25 @@ recalc_independent_t_d <- function(
   # choices do not move the point estimate. `d_inbounds` is the union decision;
   # `d_inbounds_hull` keeps the convex hull.
   method_intervals <- .method_intervals(
-    d_results, "d_unrounded",
+    d_results,
+    "d_unrounded",
     c("d_formula", "hedges_correction", "direction", "sd_interpretation"),
-    d_digits, rounding
+    d_digits,
+    rounding
   )
-  applied <- .apply_union_default(reproduced_out, method_intervals, d_num,
-                                  "equals", d_digits,
-                                  inbounds_col = "d_inbounds", value_prefix = "d")
+  applied <- .apply_union_default(
+    reproduced_out,
+    method_intervals,
+    d_num,
+    "equals",
+    d_digits,
+    inbounds_col = "d_inbounds",
+    value_prefix = "d"
+  )
 
   list(
-    reproduced       = applied$reproduced,
-    d_results        = d_results,
+    reproduced = applied$reproduced,
+    d_results = d_results,
     method_intervals = applied$method_intervals
   )
 }
@@ -351,49 +433,73 @@ recalc_independent_t_d <- function(
 #'
 #' @export
 recalc_independent_t <- function(
-    m1, m2, sd1, sd2, n1, n2,
-    m_digits = NULL,
-    sd_digits = NULL,
-    rounding = "either",
-    p = NULL,
-    p_digits = NULL,
-    p_operator = "equals",
-    p_methods = NULL,
-    alternative = "two.sided",
-    mu = 0,
-    d = NULL,
-    d_ci_lower = NULL,
-    d_ci_upper = NULL,
-    d_digits = NULL,
-    d_formulas = NULL,
-    hedges_correction = NULL,
-    ci_methods = NULL,
-    se_formulas = NULL,
-    alpha = 0.05,
-    direction = c("m1_minus_m2", "m2_minus_m1", "both"),
-    include_se_sd_confusion = FALSE
+  m1,
+  m2,
+  sd1,
+  sd2,
+  n1,
+  n2,
+  m_digits = NULL,
+  sd_digits = NULL,
+  rounding = "either",
+  p = NULL,
+  p_digits = NULL,
+  p_operator = "equals",
+  p_methods = NULL,
+  alternative = "two.sided",
+  mu = 0,
+  d = NULL,
+  d_ci_lower = NULL,
+  d_ci_upper = NULL,
+  d_digits = NULL,
+  d_formulas = NULL,
+  hedges_correction = NULL,
+  ci_methods = NULL,
+  se_formulas = NULL,
+  alpha = 0.05,
+  direction = c("m1_minus_m2", "m2_minus_m1", "both"),
+  include_se_sd_confusion = FALSE
 ) {
   direction <- match.arg(direction)
 
   res_p <- recalc_independent_t_p(
-    m1 = m1, m2 = m2, sd1 = sd1, sd2 = sd2, n1 = n1, n2 = n2,
-    m_digits = m_digits, sd_digits = sd_digits,
+    m1 = m1,
+    m2 = m2,
+    sd1 = sd1,
+    sd2 = sd2,
+    n1 = n1,
+    n2 = n2,
+    m_digits = m_digits,
+    sd_digits = sd_digits,
     rounding = rounding,
-    p = p, p_digits = p_digits, p_operator = p_operator,
-    p_methods = p_methods, alternative = alternative,
+    p = p,
+    p_digits = p_digits,
+    p_operator = p_operator,
+    p_methods = p_methods,
+    alternative = alternative,
     mu = mu,
     direction = direction,
     include_se_sd_confusion = include_se_sd_confusion
   )
 
   res_d <- recalc_independent_t_d(
-    m1 = m1, m2 = m2, sd1 = sd1, sd2 = sd2, n1 = n1, n2 = n2,
-    m_digits = m_digits, sd_digits = sd_digits,
+    m1 = m1,
+    m2 = m2,
+    sd1 = sd1,
+    sd2 = sd2,
+    n1 = n1,
+    n2 = n2,
+    m_digits = m_digits,
+    sd_digits = sd_digits,
     rounding = rounding,
-    d = d, d_ci_lower = d_ci_lower, d_ci_upper = d_ci_upper,
+    d = d,
+    d_ci_lower = d_ci_lower,
+    d_ci_upper = d_ci_upper,
     d_digits = d_digits,
-    d_formulas = d_formulas, hedges_correction = hedges_correction,
-    ci_methods = ci_methods, se_formulas = se_formulas,
+    d_formulas = d_formulas,
+    hedges_correction = hedges_correction,
+    ci_methods = ci_methods,
+    se_formulas = se_formulas,
     alpha = alpha,
     direction = direction,
     include_se_sd_confusion = include_se_sd_confusion
@@ -401,11 +507,26 @@ recalc_independent_t <- function(
 
   reproduced_out <- dplyr::bind_cols(
     res_d$reproduced |>
-      dplyr::select(d, min_d, max_d, min_d_rounded, max_d_rounded,
-                    d_inbounds, d_inbounds_hull),
+      dplyr::select(
+        d,
+        min_d,
+        max_d,
+        min_d_rounded,
+        max_d_rounded,
+        d_inbounds,
+        d_inbounds_hull
+      ),
     res_p$reproduced |>
-      dplyr::select(p_operator, p, min_p, max_p,
-                    min_p_rounded, max_p_rounded, p_inbounds, p_inbounds_hull)
+      dplyr::select(
+        p_operator,
+        p,
+        min_p,
+        max_p,
+        min_p_rounded,
+        max_p_rounded,
+        p_inbounds,
+        p_inbounds_hull
+      )
   )
 
   # Carry the union-region "covered fraction" with d_/p_ prefixes (both families
@@ -414,9 +535,9 @@ recalc_independent_t <- function(
   reproduced_out$p_covered_fraction <- res_p$reproduced$covered_fraction
 
   list(
-    reproduced         = reproduced_out,
-    d_results          = res_d$d_results,
-    p_results          = res_p$p_results,
+    reproduced = reproduced_out,
+    d_results = res_d$d_results,
+    p_results = res_p$p_results,
     d_method_intervals = res_d$method_intervals,
     p_method_intervals = res_p$method_intervals
   )
@@ -442,24 +563,42 @@ plot_multiverse_d <- function(res) {
     dplyr::arrange(.data$d_unrounded) |>
     tibble::rownames_to_column(var = "rowname") |>
     dplyr::mutate(rowname = as.numeric(.data$rowname)) |>
-    dplyr::rename(d_plot = "d_unrounded",
-                  ci_lower_plot = "ci_lower_unrounded",
-                  ci_upper_plot = "ci_upper_unrounded")
+    dplyr::rename(
+      d_plot = "d_unrounded",
+      ci_lower_plot = "ci_lower_unrounded",
+      ci_upper_plot = "ci_upper_unrounded"
+    )
 
-  xmin_shade  <- min(res_d$ci_lower_plot, na.rm = TRUE)
-  xmax_shade  <- max(res_d$ci_upper_plot, na.rm = TRUE)
+  xmin_shade <- min(res_d$ci_lower_plot, na.rm = TRUE)
+  xmax_shade <- max(res_d$ci_upper_plot, na.rm = TRUE)
   xmin_shade2 <- min(res_d$d_plot, na.rm = TRUE)
   xmax_shade2 <- max(res_d$d_plot, na.rm = TRUE)
 
   ggplot2::ggplot(
     res_d,
-    ggplot2::aes(y = .data$rowname, x = .data$d_plot,
-                 xmin = .data$ci_lower_plot, xmax = .data$ci_upper_plot)
+    ggplot2::aes(
+      y = .data$rowname,
+      x = .data$d_plot,
+      xmin = .data$ci_lower_plot,
+      xmax = .data$ci_upper_plot
+    )
   ) +
-    ggplot2::annotate("rect", xmin = xmin_shade,  xmax = xmax_shade,
-                      ymin = -Inf, ymax = Inf, alpha = 0.3) +
-    ggplot2::annotate("rect", xmin = xmin_shade2, xmax = xmax_shade2,
-                      ymin = -Inf, ymax = Inf, alpha = 0.4) +
+    ggplot2::annotate(
+      "rect",
+      xmin = xmin_shade,
+      xmax = xmax_shade,
+      ymin = -Inf,
+      ymax = Inf,
+      alpha = 0.3
+    ) +
+    ggplot2::annotate(
+      "rect",
+      xmin = xmin_shade2,
+      xmax = xmax_shade2,
+      ymin = -Inf,
+      ymax = Inf,
+      alpha = 0.4
+    ) +
     ggstance::geom_linerangeh() +
     ggplot2::geom_point() +
     ggplot2::theme_linedraw() +
@@ -468,7 +607,10 @@ plot_multiverse_d <- function(res) {
       breaks = scales::breaks_pretty(n = 8),
       expand = ggplot2::expansion(mult = c(0.1, 0.1))
     ) +
-    ggplot2::scale_y_continuous(labels = NULL, name = "Set of analytic choices") +
+    ggplot2::scale_y_continuous(
+      labels = NULL,
+      name = "Set of analytic choices"
+    ) +
     ggplot2::ggtitle("Multiverse of d / Hedges' g and 95% CIs")
 }
 
@@ -498,8 +640,14 @@ plot_multiverse_p <- function(res) {
     res_p,
     ggplot2::aes(y = .data$rowname, x = .data$p_plot)
   ) +
-    ggplot2::annotate("rect", xmin = xmin_shade, xmax = xmax_shade,
-                      ymin = -Inf, ymax = Inf, alpha = 0.4) +
+    ggplot2::annotate(
+      "rect",
+      xmin = xmin_shade,
+      xmax = xmax_shade,
+      ymin = -Inf,
+      ymax = Inf,
+      alpha = 0.4
+    ) +
     ggplot2::geom_point() +
     ggplot2::theme_linedraw() +
     ggplot2::scale_x_continuous(
@@ -507,7 +655,10 @@ plot_multiverse_p <- function(res) {
       breaks = scales::breaks_pretty(n = 8),
       expand = ggplot2::expansion(mult = c(0.1, 0.1))
     ) +
-    ggplot2::scale_y_continuous(labels = NULL, name = "Set of analytic choices") +
+    ggplot2::scale_y_continuous(
+      labels = NULL,
+      name = "Set of analytic choices"
+    ) +
     ggplot2::ggtitle("Multiverse of p-values")
 }
 
@@ -516,35 +667,69 @@ plot_multiverse_p <- function(res) {
 
 #' @keywords internal
 .get_digits <- function(x) {
-  if (is.null(x) || length(x) == 0 || is.na(x)) return(0L)
+  if (is.null(x) || length(x) == 0 || is.na(x)) {
+    return(0L)
+  }
   sx <- sub("^-", "", as.character(x[1L]))
-  if (!grepl("\\.", sx)) return(0L)
+  if (!grepl("\\.", sx)) {
+    return(0L)
+  }
   nchar(sub("^[^.]*\\.", "", sx))
 }
 
 #' @keywords internal
 .validate_digits <- function(value, name, min_val = 0L) {
-  if (!is.numeric(value) || length(value) != 1L ||
-      !is.finite(value) || value < min_val) {
-    stop("'", name, "' must be a single non-negative finite number",
-         if (min_val > 0) paste0(" >= ", min_val), ".")
+  if (
+    !is.numeric(value) ||
+      length(value) != 1L ||
+      !is.finite(value) ||
+      value < min_val
+  ) {
+    stop(
+      "'",
+      name,
+      "' must be a single non-negative finite number",
+      if (min_val > 0) paste0(" >= ", min_val),
+      "."
+    )
   }
   if (value %% 1 != 0) {
-    stop("'", name, "' must be an integer number of decimal places, not ",
-         value, ".")
+    stop(
+      "'",
+      name,
+      "' must be an integer number of decimal places, not ",
+      value,
+      "."
+    )
   }
   invisible(as.integer(value))
 }
 
 #' @keywords internal
-.validate_msd_inputs <- function(m1, m2, sd1, sd2, n1, n2, m_digits, sd_digits) {
+.validate_msd_inputs <- function(
+  m1,
+  m2,
+  sd1,
+  sd2,
+  n1,
+  n2,
+  m_digits,
+  sd_digits
+) {
   vals <- list(m1 = m1, m2 = m2, sd1 = sd1, sd2 = sd2, n1 = n1, n2 = n2)
-  missing <- names(vals)[vapply(vals, function(z) {
-    is.null(z) || length(z) == 0 || is.na(z[1])
-  }, logical(1))]
+  missing <- names(vals)[vapply(
+    vals,
+    function(z) {
+      is.null(z) || length(z) == 0 || is.na(z[1])
+    },
+    logical(1)
+  )]
   if (length(missing) > 0) {
-    stop("The following inputs must be supplied: ",
-         paste(missing, collapse = ", "), ".")
+    stop(
+      "The following inputs must be supplied: ",
+      paste(missing, collapse = ", "),
+      "."
+    )
   }
 
   if (is.null(m_digits)) {
@@ -556,41 +741,62 @@ plot_multiverse_p <- function(res) {
   .validate_digits(m_digits, "m_digits", min_val = 0L)
   .validate_digits(sd_digits, "sd_digits", min_val = 0L)
 
-  obs_m_digits  <- max(.get_digits(m1),  .get_digits(m2))
+  obs_m_digits <- max(.get_digits(m1), .get_digits(m2))
   obs_sd_digits <- max(.get_digits(sd1), .get_digits(sd2))
 
   if (m_digits < obs_m_digits) {
-    stop("m_digits = ", m_digits,
-         " is smaller than the apparent decimal precision of m1/m2 (",
-         obs_m_digits, ").")
+    stop(
+      "m_digits = ",
+      m_digits,
+      " is smaller than the apparent decimal precision of m1/m2 (",
+      obs_m_digits,
+      ")."
+    )
   }
   if (m_digits > obs_m_digits) {
-    warning("m_digits = ", m_digits,
-            " is larger than the apparent precision of m1/m2 (",
-            obs_m_digits,
-            "). This assumes implied trailing zeros (e.g. stored 3.1 = reported 3.10).")
+    warning(
+      "m_digits = ",
+      m_digits,
+      " is larger than the apparent precision of m1/m2 (",
+      obs_m_digits,
+      "). This assumes implied trailing zeros (e.g. stored 3.1 = reported 3.10)."
+    )
   }
   if (sd_digits < obs_sd_digits) {
-    stop("sd_digits = ", sd_digits,
-         " is smaller than the apparent decimal precision of sd1/sd2 (",
-         obs_sd_digits, ").")
+    stop(
+      "sd_digits = ",
+      sd_digits,
+      " is smaller than the apparent decimal precision of sd1/sd2 (",
+      obs_sd_digits,
+      ")."
+    )
   }
   if (sd_digits > obs_sd_digits) {
-    warning("sd_digits = ", sd_digits,
-            " is larger than the apparent precision of sd1/sd2 (",
-            obs_sd_digits, "). This assumes implied trailing zeros.")
+    warning(
+      "sd_digits = ",
+      sd_digits,
+      " is larger than the apparent precision of sd1/sd2 (",
+      obs_sd_digits,
+      "). This assumes implied trailing zeros."
+    )
   }
   invisible(TRUE)
 }
 
 #' @keywords internal
 .validate_methods <- function(input, allowed, name) {
-  if (is.null(input)) return(allowed)
+  if (is.null(input)) {
+    return(allowed)
+  }
   bad <- setdiff(input, allowed)
   if (length(bad) > 0L) {
-    stop(name, " contains invalid values: ",
-         paste0(bad, collapse = ", "),
-         "\nAllowed: ", paste0(allowed, collapse = ", "))
+    stop(
+      name,
+      " contains invalid values: ",
+      paste0(bad, collapse = ", "),
+      "\nAllowed: ",
+      paste0(allowed, collapse = ", ")
+    )
   }
   input
 }
@@ -598,11 +804,17 @@ plot_multiverse_p <- function(res) {
 #' @keywords internal
 .validate_alternative <- function(alternative) {
   allowed <- c("two.sided", "less", "greater")
-  if (is.null(alternative)) return("two.sided")
+  if (is.null(alternative)) {
+    return("two.sided")
+  }
   bad <- setdiff(alternative, allowed)
   if (length(bad) > 0L) {
-    stop("alternative contains invalid values: ", paste(bad, collapse = ", "),
-         "\nAllowed: ", paste(allowed, collapse = ", "))
+    stop(
+      "alternative contains invalid values: ",
+      paste(bad, collapse = ", "),
+      "\nAllowed: ",
+      paste(allowed, collapse = ", ")
+    )
   }
   alternative
 }
@@ -610,25 +822,38 @@ plot_multiverse_p <- function(res) {
 #' @keywords internal
 .validate_hedges <- function(hc) {
   allowed <- c("none", "approx", "exact")
-  if (is.null(hc)) return(allowed)
+  if (is.null(hc)) {
+    return(allowed)
+  }
   if (is.logical(hc)) {
-    if (any(is.na(hc))) stop("'hedges_correction' must not contain NA.")
+    if (any(is.na(hc))) {
+      stop("'hedges_correction' must not contain NA.")
+    }
     # Back-compat: TRUE -> approx + exact; FALSE -> none. If both supplied:
     # union over the mapping.
     out <- character(0)
-    if (any(hc))  out <- c(out, "approx", "exact")
-    if (any(!hc)) out <- c(out, "none")
+    if (any(hc)) {
+      out <- c(out, "approx", "exact")
+    }
+    if (any(!hc)) {
+      out <- c(out, "none")
+    }
     return(unique(out))
   }
   if (!is.character(hc)) {
-    stop("'hedges_correction' must be NULL, a logical, or a character vector ",
-         "from c('none','approx','exact').")
+    stop(
+      "'hedges_correction' must be NULL, a logical, or a character vector ",
+      "from c('none','approx','exact')."
+    )
   }
   bad <- setdiff(hc, allowed)
   if (length(bad) > 0L) {
-    stop("hedges_correction contains invalid values: ",
-         paste(bad, collapse = ", "),
-         "\nAllowed: ", paste(allowed, collapse = ", "))
+    stop(
+      "hedges_correction contains invalid values: ",
+      paste(bad, collapse = ", "),
+      "\nAllowed: ",
+      paste(allowed, collapse = ", ")
+    )
   }
   hc
 }
@@ -639,28 +864,33 @@ plot_multiverse_p <- function(res) {
 #' Build the 3^4 corner grid over (m1, m2, sd1, sd2) implied by the rounding.
 #' @keywords internal
 .build_msd_grid <- function(m1, m2, sd1, sd2, m_digits, sd_digits, rounding) {
-  m1_int  <- interval_from_digits(m1,  m_digits,          rounding = rounding)
-  m2_int  <- interval_from_digits(m2,  m_digits,          rounding = rounding)
+  m1_int <- interval_from_digits(m1, m_digits, rounding = rounding)
+  m2_int <- interval_from_digits(m2, m_digits, rounding = rounding)
   sd1_int <- interval_from_digits(sd1, sd_digits, lo = 0, rounding = rounding)
   sd2_int <- interval_from_digits(sd2, sd_digits, lo = 0, rounding = rounding)
 
-  m1_vals  <- c(reported = m1,  lower = m1_int[1],  upper = m1_int[2])
-  m2_vals  <- c(reported = m2,  lower = m2_int[1],  upper = m2_int[2])
+  m1_vals <- c(reported = m1, lower = m1_int[1], upper = m1_int[2])
+  m2_vals <- c(reported = m2, lower = m2_int[1], upper = m2_int[2])
   sd1_vals <- c(reported = sd1, lower = sd1_int[1], upper = sd1_int[2])
   sd2_vals <- c(reported = sd2, lower = sd2_int[1], upper = sd2_int[2])
 
   adj_levels <- c("reported", "lower", "upper")
   grid <- expand.grid(
-    m1_idx  = 1:3, m2_idx  = 1:3,
-    sd1_idx = 1:3, sd2_idx = 1:3,
-    KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE
+    m1_idx = 1:3,
+    m2_idx = 1:3,
+    sd1_idx = 1:3,
+    sd2_idx = 1:3,
+    KEEP.OUT.ATTRS = FALSE,
+    stringsAsFactors = FALSE
   )
 
   list(
     grid = grid,
     levels = adj_levels,
-    m1_vals = m1_vals, m2_vals = m2_vals,
-    sd1_vals = sd1_vals, sd2_vals = sd2_vals
+    m1_vals = m1_vals,
+    m2_vals = m2_vals,
+    sd1_vals = sd1_vals,
+    sd2_vals = sd2_vals
   )
 }
 
@@ -671,8 +901,8 @@ plot_multiverse_p <- function(res) {
 .pooled_sd <- function(sd1, sd2, n1, n2, formula) {
   switch(
     formula,
-    pooled_df  = sqrt(((n1 - 1) * sd1^2 + (n2 - 1) * sd2^2) / (n1 + n2 - 2)),
-    pooled_n   = sqrt((n1 * sd1^2 + n2 * sd2^2) / (n1 + n2)),
+    pooled_df = sqrt(((n1 - 1) * sd1^2 + (n2 - 1) * sd2^2) / (n1 + n2 - 2)),
+    pooled_n = sqrt((n1 * sd1^2 + n2 * sd2^2) / (n1 + n2)),
     simple_avg = sqrt((sd1^2 + sd2^2) / 2),
     stop("Unknown d_formula: ", formula)
   )
@@ -681,11 +911,12 @@ plot_multiverse_p <- function(res) {
 #' @keywords internal
 .welch_t <- function(m1, m2, sd1, sd2, n1, n2) {
   diff_mean <- m1 - m2
-  var1 <- sd1^2; var2 <- sd2^2
+  var1 <- sd1^2
+  var2 <- sd2^2
   se_welch <- sqrt(var1 / n1 + var2 / n2)
   num_w <- (var1 / n1 + var2 / n2)^2
   den_w <- (var1^2 / (n1^2 * (n1 - 1))) + (var2^2 / (n2^2 * (n2 - 1)))
-  df_w  <- num_w / den_w
+  df_w <- num_w / den_w
   t_val <- diff_mean / se_welch
   list(t = t_val, df = df_w, se = se_welch)
 }
@@ -703,12 +934,14 @@ plot_multiverse_p <- function(res) {
 #' Uses the precise tail forms so very small p-values do not underflow.
 #' @keywords internal
 .p_from_t <- function(t, df, alternative) {
-  if (is.na(t) || is.na(df)) return(NA_real_)
+  if (is.na(t) || is.na(df)) {
+    return(NA_real_)
+  }
   switch(
     alternative,
     two.sided = 2 * pt(-abs(t), df = df),
-    less      = pt(t, df = df, lower.tail = TRUE),
-    greater   = pt(t, df = df, lower.tail = FALSE),
+    less = pt(t, df = df, lower.tail = TRUE),
+    greater = pt(t, df = df, lower.tail = FALSE),
     stop("Unknown alternative: ", alternative)
   )
 }
@@ -718,13 +951,15 @@ plot_multiverse_p <- function(res) {
 
 #' @keywords internal
 .hedges_J <- function(df, type) {
-  if (!is.finite(df) || df <= 1) return(NA_real_)
+  if (!is.finite(df) || df <= 1) {
+    return(NA_real_)
+  }
   switch(
     type,
-    none   = 1,
+    none = 1,
     approx = 1 - 3 / (4 * df - 1),
     # Use lgamma for numerical stability at large df.
-    exact  = exp(lgamma(df / 2) - 0.5 * log(df / 2) - lgamma((df - 1) / 2)),
+    exact = exp(lgamma(df / 2) - 0.5 * log(df / 2) - lgamma((df - 1) / 2)),
     stop("Unknown hedges correction type: ", type)
   )
 }
@@ -735,8 +970,8 @@ plot_multiverse_p <- function(res) {
   switch(
     formula,
     hedges_olkin = sqrt(N / (n1 * n2) + d^2 / (2 * N)),
-    cumming      = sqrt(N / (n1 * n2) + d^2 / (2 * (N - 2))),
-    uncorrected  = sqrt(N / (n1 * n2)),
+    cumming = sqrt(N / (n1 * n2) + d^2 / (2 * (N - 2))),
+    uncorrected = sqrt(N / (n1 * n2)),
     stop("Unknown se_formula: ", formula)
   )
 }
@@ -765,26 +1000,36 @@ plot_multiverse_p <- function(res) {
 #' to both bounds.
 #' @keywords internal
 .ci_nct <- function(t_obs, df, n1, n2, alpha, J = 1, max_ncp = 1000) {
-  if (is.na(t_obs) || is.na(df)) return(c(lower = NA_real_, upper = NA_real_))
+  if (is.na(t_obs) || is.na(df)) {
+    return(c(lower = NA_real_, upper = NA_real_))
+  }
 
   suppress_nct_warning <- function(expr) {
     withCallingHandlers(
       expr,
       warning = function(w) {
-        if (grepl("full precision may not have been achieved in 'pnt\\{final\\}'",
-                  conditionMessage(w))) {
+        if (
+          grepl(
+            "full precision may not have been achieved in 'pnt\\{final\\}'",
+            conditionMessage(w)
+          )
+        ) {
           invokeRestart("muffleWarning")
         }
       }
     )
   }
 
-  f_upper <- function(delta) suppress_nct_warning(
-    pt(t_obs, df = df, ncp = delta) - alpha / 2
-  )
-  f_lower <- function(delta) suppress_nct_warning(
-    pt(t_obs, df = df, ncp = delta, lower.tail = FALSE) - alpha / 2
-  )
+  f_upper <- function(delta) {
+    suppress_nct_warning(
+      pt(t_obs, df = df, ncp = delta) - alpha / 2
+    )
+  }
+  f_lower <- function(delta) {
+    suppress_nct_warning(
+      pt(t_obs, df = df, ncp = delta, lower.tail = FALSE) - alpha / 2
+    )
+  }
 
   delta_upper <- tryCatch(
     uniroot(f_upper, lower = -max_ncp, upper = max_ncp)$root,
@@ -808,36 +1053,66 @@ plot_multiverse_p <- function(res) {
 
 #' @keywords internal
 .multiverse_p_results <- function(
-    m1, m2, sd1, sd2, n1, n2,
-    m_digits, sd_digits, rounding,
-    p_methods, alternative, direction,
-    include_se_sd_confusion, mu = 0
+  m1,
+  m2,
+  sd1,
+  sd2,
+  n1,
+  n2,
+  m_digits,
+  sd_digits,
+  rounding,
+  p_methods,
+  alternative,
+  direction,
+  include_se_sd_confusion,
+  mu = 0
 ) {
   g <- .build_msd_grid(m1, m2, sd1, sd2, m_digits, sd_digits, rounding)
-  dir_modes <- if (direction == "both") c("m1_minus_m2", "m2_minus_m1") else direction
-  sd_modes  <- if (isTRUE(include_se_sd_confusion)) c("sd", "se_converted") else "sd"
+  dir_modes <- if (direction == "both") {
+    c("m1_minus_m2", "m2_minus_m1")
+  } else {
+    direction
+  }
+  sd_modes <- if (isTRUE(include_se_sd_confusion)) {
+    c("sd", "se_converted")
+  } else {
+    "sd"
+  }
 
   rows <- vector("list", 0L)
 
   for (i in seq_len(nrow(g$grid))) {
     row <- g$grid[i, ]
-    m1_code  <- g$levels[row$m1_idx];  m2_code  <- g$levels[row$m2_idx]
-    sd1_code <- g$levels[row$sd1_idx]; sd2_code <- g$levels[row$sd2_idx]
-    adj_label <- paste0("m1:", m1_code, "|m2:", m2_code,
-                        "|sd1:", sd1_code, "|sd2:", sd2_code)
+    m1_code <- g$levels[row$m1_idx]
+    m2_code <- g$levels[row$m2_idx]
+    sd1_code <- g$levels[row$sd1_idx]
+    sd2_code <- g$levels[row$sd2_idx]
+    adj_label <- paste0(
+      "m1:",
+      m1_code,
+      "|m2:",
+      m2_code,
+      "|sd1:",
+      sd1_code,
+      "|sd2:",
+      sd2_code
+    )
 
-    m1_star  <- unname(g$m1_vals [row$m1_idx])
-    m2_star  <- unname(g$m2_vals [row$m2_idx])
+    m1_star <- unname(g$m1_vals[row$m1_idx])
+    m2_star <- unname(g$m2_vals[row$m2_idx])
     sd1_star <- unname(g$sd1_vals[row$sd1_idx])
     sd2_star <- unname(g$sd2_vals[row$sd2_idx])
 
     for (sd_mode in sd_modes) {
       sd1_eff <- if (sd_mode == "sd") sd1_star else sd1_star * sqrt(n1)
       sd2_eff <- if (sd_mode == "sd") sd2_star else sd2_star * sqrt(n2)
-      if (sd1_eff <= 0 || sd2_eff <= 0) next
+      if (sd1_eff <= 0 || sd2_eff <= 0) {
+        next
+      }
 
       stat_s <- .student_t(m1_star, m2_star, sd1_eff, sd2_eff, n1, n2)
-      stat_w <- .welch_t  (m1_star, m2_star, sd1_eff, sd2_eff, n1, n2)
+      stat_w <- .welch_t(m1_star, m2_star, sd1_eff, sd2_eff, n1, n2)
 
       for (dir_mode in dir_modes) {
         sign_factor <- if (dir_mode == "m1_minus_m2") 1 else -1
@@ -849,20 +1124,22 @@ plot_multiverse_p <- function(res) {
         for (p_method in p_methods) {
           tt <- if (p_method == "student_t") t_s else t_w
           dd <- if (p_method == "student_t") stat_s$df else stat_w$df
-          if (is.na(tt) || is.na(dd)) next
+          if (is.na(tt) || is.na(dd)) {
+            next
+          }
 
           for (alt in alternative) {
             rows[[length(rows) + 1L]] <- data.frame(
-              source            = "summary",
-              direction         = dir_mode,
-              p_method          = p_method,
-              alternative       = alt,
-              input_adj_stats   = adj_label,
+              source = "summary",
+              direction = dir_mode,
+              p_method = p_method,
+              alternative = alt,
+              input_adj_stats = adj_label,
               sd_interpretation = sd_mode,
-              t_used            = tt,
-              df_used           = dd,
-              p_unrounded       = .p_from_t(tt, dd, alt),
-              stringsAsFactors  = FALSE
+              t_used = tt,
+              df_used = dd,
+              p_unrounded = .p_from_t(tt, dd, alt),
+              stringsAsFactors = FALSE
             )
           }
         }
@@ -872,10 +1149,15 @@ plot_multiverse_p <- function(res) {
 
   if (length(rows) == 0L) {
     return(data.frame(
-      source = character(), direction = character(),
-      p_method = character(), alternative = character(),
-      input_adj_stats = character(), sd_interpretation = character(),
-      t_used = numeric(), df_used = numeric(), p_unrounded = numeric(),
+      source = character(),
+      direction = character(),
+      p_method = character(),
+      alternative = character(),
+      input_adj_stats = character(),
+      sd_interpretation = character(),
+      t_used = numeric(),
+      df_used = numeric(),
+      p_unrounded = numeric(),
       stringsAsFactors = FALSE
     ))
   }
@@ -889,33 +1171,65 @@ plot_multiverse_p <- function(res) {
 
 #' @keywords internal
 .multiverse_d_results <- function(
-    m1, m2, sd1, sd2, n1, n2,
-    m_digits, sd_digits, rounding,
-    d_formulas, hedges_correction, ci_methods, se_formulas,
-    alpha, direction, include_se_sd_confusion
+  m1,
+  m2,
+  sd1,
+  sd2,
+  n1,
+  n2,
+  m_digits,
+  sd_digits,
+  rounding,
+  d_formulas,
+  hedges_correction,
+  ci_methods,
+  se_formulas,
+  alpha,
+  direction,
+  include_se_sd_confusion
 ) {
   g <- .build_msd_grid(m1, m2, sd1, sd2, m_digits, sd_digits, rounding)
-  dir_modes <- if (direction == "both") c("m1_minus_m2", "m2_minus_m1") else direction
-  sd_modes  <- if (isTRUE(include_se_sd_confusion)) c("sd", "se_converted") else "sd"
+  dir_modes <- if (direction == "both") {
+    c("m1_minus_m2", "m2_minus_m1")
+  } else {
+    direction
+  }
+  sd_modes <- if (isTRUE(include_se_sd_confusion)) {
+    c("sd", "se_converted")
+  } else {
+    "sd"
+  }
 
   rows <- vector("list", 0L)
 
   for (i in seq_len(nrow(g$grid))) {
     row <- g$grid[i, ]
-    m1_code  <- g$levels[row$m1_idx];  m2_code  <- g$levels[row$m2_idx]
-    sd1_code <- g$levels[row$sd1_idx]; sd2_code <- g$levels[row$sd2_idx]
-    adj_label <- paste0("m1:", m1_code, "|m2:", m2_code,
-                        "|sd1:", sd1_code, "|sd2:", sd2_code)
+    m1_code <- g$levels[row$m1_idx]
+    m2_code <- g$levels[row$m2_idx]
+    sd1_code <- g$levels[row$sd1_idx]
+    sd2_code <- g$levels[row$sd2_idx]
+    adj_label <- paste0(
+      "m1:",
+      m1_code,
+      "|m2:",
+      m2_code,
+      "|sd1:",
+      sd1_code,
+      "|sd2:",
+      sd2_code
+    )
 
-    m1_star  <- unname(g$m1_vals [row$m1_idx])
-    m2_star  <- unname(g$m2_vals [row$m2_idx])
+    m1_star <- unname(g$m1_vals[row$m1_idx])
+    m2_star <- unname(g$m2_vals[row$m2_idx])
     sd1_star <- unname(g$sd1_vals[row$sd1_idx])
     sd2_star <- unname(g$sd2_vals[row$sd2_idx])
 
     for (sd_mode in sd_modes) {
       sd1_eff <- if (sd_mode == "sd") sd1_star else sd1_star * sqrt(n1)
       sd2_eff <- if (sd_mode == "sd") sd2_star else sd2_star * sqrt(n2)
-      if (sd1_eff <= 0 || sd2_eff <= 0) next
+      if (sd1_eff <= 0 || sd2_eff <= 0) {
+        next
+      }
 
       # Pre-compute Welch stats once per (corner, sd_mode); reused below.
       stat_w <- .welch_t(m1_star, m2_star, sd1_eff, sd2_eff, n1, n2)
@@ -923,11 +1237,13 @@ plot_multiverse_p <- function(res) {
 
       for (dir_mode in dir_modes) {
         sign_factor <- if (dir_mode == "m1_minus_m2") 1 else -1
-        diff_mean   <- (m1_star - m2_star) * sign_factor
+        diff_mean <- (m1_star - m2_star) * sign_factor
 
         for (d_formula in d_formulas) {
           sp <- .pooled_sd(sd1_eff, sd2_eff, n1, n2, d_formula)
-          if (!is.finite(sp) || sp <= 0) next
+          if (!is.finite(sp) || sp <= 0) {
+            next
+          }
           d_raw <- diff_mean / sp
 
           for (hc_type in hedges_correction) {
@@ -936,71 +1252,90 @@ plot_multiverse_p <- function(res) {
             # the estimate is consistent across CI methods within a row group
             # (df_used in the row reflects the CI's df).
             J <- .hedges_J(df_pooled, hc_type)
-            if (is.na(J)) next
+            if (is.na(J)) {
+              next
+            }
             es <- J * d_raw
 
             for (ci_method in ci_methods) {
               if (ci_method == "nct") {
                 # NCT inverts the t-distribution of the test statistic.
                 # Use the Student pooled t for symmetry with the rest of d.
-                stat_s_for_nct <- .student_t(m1_star, m2_star, sd1_eff, sd2_eff,
-                                             n1, n2)
+                stat_s_for_nct <- .student_t(
+                  m1_star,
+                  m2_star,
+                  sd1_eff,
+                  sd2_eff,
+                  n1,
+                  n2
+                )
                 t_for_nct <- stat_s_for_nct$t * sign_factor
                 ci <- .ci_nct(t_for_nct, df_pooled, n1, n2, alpha, J = J)
                 rows[[length(rows) + 1L]] <- data.frame(
-                  source             = "summary",
-                  direction          = dir_mode,
-                  d_formula          = d_formula,
-                  hedges_correction  = hc_type,
-                  ci_method          = ci_method,
-                  se_formula         = NA_character_,
-                  input_adj_stats    = adj_label,
-                  sd_interpretation  = sd_mode,
-                  t_used             = t_for_nct,
-                  df_used            = df_pooled,
-                  d_unrounded        = es,
+                  source = "summary",
+                  direction = dir_mode,
+                  d_formula = d_formula,
+                  hedges_correction = hc_type,
+                  ci_method = ci_method,
+                  se_formula = NA_character_,
+                  input_adj_stats = adj_label,
+                  sd_interpretation = sd_mode,
+                  t_used = t_for_nct,
+                  df_used = df_pooled,
+                  d_unrounded = es,
                   ci_lower_unrounded = unname(ci["lower"]),
                   ci_upper_unrounded = unname(ci["upper"]),
-                  stringsAsFactors   = FALSE
+                  stringsAsFactors = FALSE
                 )
               } else {
                 # Wald methods: pick df + critical-distribution combo, and
                 # iterate over SE formulae.
                 df_use <- switch(
                   ci_method,
-                  wald_t  = df_pooled,
-                  wald_z  = NA_real_,    # z critical doesn't use df
+                  wald_t = df_pooled,
+                  wald_z = NA_real_, # z critical doesn't use df
                   welch_t = stat_w$df
                 )
                 crit_method <- switch(
                   ci_method,
-                  wald_t  = "t",
-                  wald_z  = "z",
+                  wald_t = "t",
+                  wald_z = "z",
                   welch_t = "t"
                 )
-                if (ci_method == "welch_t" && (is.na(stat_w$df) || !is.finite(stat_w$df))) next
+                if (
+                  ci_method == "welch_t" &&
+                    (is.na(stat_w$df) || !is.finite(stat_w$df))
+                ) {
+                  next
+                }
 
                 for (se_form in se_formulas) {
                   se_d <- .se_of_d(es, n1, n2, se_form)
-                  if (!is.finite(se_d)) next
-                  ci <- .ci_wald(es, se_d,
-                                 df = if (is.na(df_use)) Inf else df_use,
-                                 crit_method = crit_method, alpha = alpha)
+                  if (!is.finite(se_d)) {
+                    next
+                  }
+                  ci <- .ci_wald(
+                    es,
+                    se_d,
+                    df = if (is.na(df_use)) Inf else df_use,
+                    crit_method = crit_method,
+                    alpha = alpha
+                  )
                   rows[[length(rows) + 1L]] <- data.frame(
-                    source             = "summary",
-                    direction          = dir_mode,
-                    d_formula          = d_formula,
-                    hedges_correction  = hc_type,
-                    ci_method          = ci_method,
-                    se_formula         = se_form,
-                    input_adj_stats    = adj_label,
-                    sd_interpretation  = sd_mode,
-                    t_used             = NA_real_,
-                    df_used            = df_use,
-                    d_unrounded        = es,
+                    source = "summary",
+                    direction = dir_mode,
+                    d_formula = d_formula,
+                    hedges_correction = hc_type,
+                    ci_method = ci_method,
+                    se_formula = se_form,
+                    input_adj_stats = adj_label,
+                    sd_interpretation = sd_mode,
+                    t_used = NA_real_,
+                    df_used = df_use,
+                    d_unrounded = es,
                     ci_lower_unrounded = unname(ci["lower"]),
                     ci_upper_unrounded = unname(ci["upper"]),
-                    stringsAsFactors   = FALSE
+                    stringsAsFactors = FALSE
                   )
                 }
               }
@@ -1013,13 +1348,19 @@ plot_multiverse_p <- function(res) {
 
   if (length(rows) == 0L) {
     return(data.frame(
-      source = character(), direction = character(),
-      d_formula = character(), hedges_correction = character(),
-      ci_method = character(), se_formula = character(),
-      input_adj_stats = character(), sd_interpretation = character(),
-      t_used = numeric(), df_used = numeric(),
+      source = character(),
+      direction = character(),
+      d_formula = character(),
+      hedges_correction = character(),
+      ci_method = character(),
+      se_formula = character(),
+      input_adj_stats = character(),
+      sd_interpretation = character(),
+      t_used = numeric(),
+      df_used = numeric(),
       d_unrounded = numeric(),
-      ci_lower_unrounded = numeric(), ci_upper_unrounded = numeric(),
+      ci_lower_unrounded = numeric(),
+      ci_upper_unrounded = numeric(),
       stringsAsFactors = FALSE
     ))
   }
@@ -1051,21 +1392,32 @@ plot_multiverse_p <- function(res) {
   fn <- switch(
     rounding,
     truncate = function(z) roundwork::round_trunc(z, digits),
-    bankers  = function(z) round(z, digits),
-    half_up  = function(z) roundwork::round_up(z, digits),
-    either   = function(z) roundwork::round_up(z, digits),
+    bankers = function(z) round(z, digits),
+    half_up = function(z) roundwork::round_up(z, digits),
+    either = function(z) roundwork::round_up(z, digits),
     stop("Unknown rounding: ", rounding)
   )
   ifelse(is.na(x) | !is.finite(x), x, fn(x))
 }
 
 #' @keywords internal
-.reproduced_p_summary <- function(p_results, p_num, p_operator,
-                                  p_digits, rounding) {
-  if (!is.null(p_results) && nrow(p_results) > 0 && "p_unrounded" %in% names(p_results)) {
-    summ <- dplyr::summarise(p_results,
-                             min_p = min(.data$p_unrounded, na.rm = TRUE),
-                             max_p = max(.data$p_unrounded, na.rm = TRUE))
+.reproduced_p_summary <- function(
+  p_results,
+  p_num,
+  p_operator,
+  p_digits,
+  rounding
+) {
+  if (
+    !is.null(p_results) &&
+      nrow(p_results) > 0 &&
+      "p_unrounded" %in% names(p_results)
+  ) {
+    summ <- dplyr::summarise(
+      p_results,
+      min_p = min(.data$p_unrounded, na.rm = TRUE),
+      max_p = max(.data$p_unrounded, na.rm = TRUE)
+    )
   } else {
     summ <- tibble::tibble(min_p = NA_real_, max_p = NA_real_)
   }
@@ -1079,26 +1431,49 @@ plot_multiverse_p <- function(res) {
       p_operator = p_operator,
       p_inbounds = dplyr::case_when(
         is.na(.data$p) ~ NA,
-        p_operator == "equals" ~ dplyr::between(.data$p,
-                                                .data$min_p_rounded,
-                                                .data$max_p_rounded),
-        p_operator %in% c("less_than", "less_than_or_equal_to") ~ .data$min_p_rounded <= .data$p,
-        p_operator %in% c("greater_than", "greater_than_or_equal_to") ~ .data$max_p_rounded >= .data$p
+        p_operator == "equals" ~ dplyr::between(
+          .data$p,
+          .data$min_p_rounded,
+          .data$max_p_rounded
+        ),
+        p_operator %in%
+          c("less_than", "less_than_or_equal_to") ~ .data$min_p_rounded <=
+          .data$p,
+        p_operator %in%
+          c("greater_than", "greater_than_or_equal_to") ~ .data$max_p_rounded >=
+          .data$p
       )
     ) |>
-    dplyr::select("p_operator", "p",
-                  "min_p", "max_p",
-                  "min_p_rounded", "max_p_rounded",
-                  "p_inbounds")
+    dplyr::select(
+      "p_operator",
+      "p",
+      "min_p",
+      "max_p",
+      "min_p_rounded",
+      "max_p_rounded",
+      "p_inbounds"
+    )
 }
 
 #' @keywords internal
-.reproduced_d_summary <- function(d_results, d_num, d_ci_lower_num, d_ci_upper_num,
-                                  d_digits, rounding) {
-  if (!is.null(d_results) && nrow(d_results) > 0 && "d_unrounded" %in% names(d_results)) {
-    summ <- dplyr::summarise(d_results,
-                             min_d = min(.data$d_unrounded, na.rm = TRUE),
-                             max_d = max(.data$d_unrounded, na.rm = TRUE))
+.reproduced_d_summary <- function(
+  d_results,
+  d_num,
+  d_ci_lower_num,
+  d_ci_upper_num,
+  d_digits,
+  rounding
+) {
+  if (
+    !is.null(d_results) &&
+      nrow(d_results) > 0 &&
+      "d_unrounded" %in% names(d_results)
+  ) {
+    summ <- dplyr::summarise(
+      d_results,
+      min_d = min(.data$d_unrounded, na.rm = TRUE),
+      max_d = max(.data$d_unrounded, na.rm = TRUE)
+    )
   } else {
     summ <- tibble::tibble(min_d = NA_real_, max_d = NA_real_)
   }
@@ -1114,8 +1489,12 @@ plot_multiverse_p <- function(res) {
         TRUE ~ dplyr::between(.data$d, .data$min_d_rounded, .data$max_d_rounded)
       )
     ) |>
-    dplyr::select("d",
-                  "min_d", "max_d",
-                  "min_d_rounded", "max_d_rounded",
-                  "d_inbounds")
+    dplyr::select(
+      "d",
+      "min_d",
+      "max_d",
+      "min_d_rounded",
+      "max_d_rounded",
+      "d_inbounds"
+    )
 }

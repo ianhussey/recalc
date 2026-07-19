@@ -45,19 +45,46 @@
 #' recalc_prepost_r(sd_pre = 14.58, sd_post = 7.79, sd_change = 13.01,
 #'                  sd_pre_digits = 2, sd_post_digits = 2, sd_change_digits = 2)
 #' @export
-recalc_prepost_r <- function(sd_pre, sd_post, sd_change,
-                             sd_pre_digits = NULL, sd_post_digits = NULL,
-                             sd_change_digits = NULL,
-                             r = NULL, r_digits = NULL, rounding = "either") {
+recalc_prepost_r <- function(
+  sd_pre,
+  sd_post,
+  sd_change,
+  sd_pre_digits = NULL,
+  sd_post_digits = NULL,
+  sd_change_digits = NULL,
+  r = NULL,
+  r_digits = NULL,
+  rounding = "either"
+) {
   rounding <- match.arg(rounding, .recalc_rounding_choices)
-  require_digits(sd_pre_digits = sd_pre_digits, sd_post_digits = sd_post_digits,
-                 sd_change_digits = sd_change_digits)
-  if (!is.null(r)) require_digits(r_digits = r_digits)
+  require_digits(
+    sd_pre_digits = sd_pre_digits,
+    sd_post_digits = sd_post_digits,
+    sd_change_digits = sd_change_digits
+  )
+  if (!is.null(r)) {
+    require_digits(r_digits = r_digits)
+  }
 
   inputs <- list(
-    sd_pre    = interval_from_digits(sd_pre,    sd_pre_digits,    lo = 0, rounding = rounding),
-    sd_post   = interval_from_digits(sd_post,   sd_post_digits,   lo = 0, rounding = rounding),
-    sd_change = interval_from_digits(sd_change, sd_change_digits, lo = 0, rounding = rounding)
+    sd_pre = interval_from_digits(
+      sd_pre,
+      sd_pre_digits,
+      lo = 0,
+      rounding = rounding
+    ),
+    sd_post = interval_from_digits(
+      sd_post,
+      sd_post_digits,
+      lo = 0,
+      rounding = rounding
+    ),
+    sd_change = interval_from_digits(
+      sd_change,
+      sd_change_digits,
+      lo = 0,
+      rounding = rounding
+    )
   )
   fn <- function(sd_pre, sd_post, sd_change) {
     (sd_pre^2 + sd_post^2 - sd_change^2) / (2 * sd_pre * sd_post)
@@ -65,7 +92,10 @@ recalc_prepost_r <- function(sd_pre, sd_post, sd_change,
   recomp <- propagate_intervals(fn, inputs)
   recalc_result(
     "implied pre-post r = (sd_pre^2 + sd_post^2 - sd_change^2) / (2 sd_pre sd_post)",
-    r, reported_interval(r, r_digits, rounding = rounding), recomp)
+    r,
+    reported_interval(r, r_digits, rounding = rounding),
+    recomp
+  )
 }
 
 #' Change-score SD expected for a given pre-post correlation (reverse direction)
@@ -88,19 +118,41 @@ recalc_prepost_r <- function(sd_pre, sd_post, sd_change,
 #' recalc_change_sd_from_r(sd_pre = 14.58, sd_post = 7.79, r = 0.46,
 #'                         sd_pre_digits = 2, sd_post_digits = 2, r_digits = 2)
 #' @export
-recalc_change_sd_from_r <- function(sd_pre, sd_post, r,
-                                    sd_pre_digits = NULL, sd_post_digits = NULL,
-                                    r_digits = NULL, sd_change = NULL,
-                                    sd_change_digits = NULL, rounding = "either") {
+recalc_change_sd_from_r <- function(
+  sd_pre,
+  sd_post,
+  r,
+  sd_pre_digits = NULL,
+  sd_post_digits = NULL,
+  r_digits = NULL,
+  sd_change = NULL,
+  sd_change_digits = NULL,
+  rounding = "either"
+) {
   rounding <- match.arg(rounding, .recalc_rounding_choices)
-  require_digits(sd_pre_digits = sd_pre_digits, sd_post_digits = sd_post_digits,
-                 r_digits = r_digits)
-  if (!is.null(sd_change)) require_digits(sd_change_digits = sd_change_digits)
+  require_digits(
+    sd_pre_digits = sd_pre_digits,
+    sd_post_digits = sd_post_digits,
+    r_digits = r_digits
+  )
+  if (!is.null(sd_change)) {
+    require_digits(sd_change_digits = sd_change_digits)
+  }
 
   inputs <- list(
-    sd_pre  = interval_from_digits(sd_pre,  sd_pre_digits,  lo = 0,  rounding = rounding),
-    sd_post = interval_from_digits(sd_post, sd_post_digits, lo = 0,  rounding = rounding),
-    r       = interval_from_digits(r,       r_digits, lo = -1, hi = 1, rounding = rounding)
+    sd_pre = interval_from_digits(
+      sd_pre,
+      sd_pre_digits,
+      lo = 0,
+      rounding = rounding
+    ),
+    sd_post = interval_from_digits(
+      sd_post,
+      sd_post_digits,
+      lo = 0,
+      rounding = rounding
+    ),
+    r = interval_from_digits(r, r_digits, lo = -1, hi = 1, rounding = rounding)
   )
   fn <- function(sd_pre, sd_post, r) {
     sqrt(max(sd_pre^2 + sd_post^2 - 2 * r * sd_pre * sd_post, 0))
@@ -108,7 +160,10 @@ recalc_change_sd_from_r <- function(sd_pre, sd_post, r,
   recomp <- propagate_intervals(fn, inputs)
   recalc_result(
     "change SD = sqrt(sd_pre^2 + sd_post^2 - 2 r sd_pre sd_post)",
-    sd_change, reported_interval(sd_change, sd_change_digits, rounding = rounding), recomp)
+    sd_change,
+    reported_interval(sd_change, sd_change_digits, rounding = rounding),
+    recomp
+  )
 }
 
 #' Implied common pre-post correlation from a 2x2 RM-ANOVA interaction F
@@ -140,25 +195,53 @@ recalc_change_sd_from_r <- function(sd_pre, sd_post, r,
 #'   m2b = 24.81, sd2b = 3.774, m2p = 15.95, sd2p = 5.714, n2 = 26,
 #'   f_digits = 3, m_digits = 2, sd_digits = 3)
 #' @export
-recalc_prepost_r_from_f <- function(f, m1b, sd1b, m1p, sd1p, n1,
-                                       m2b, sd2b, m2p, sd2p, n2,
-                                    f_digits = NULL, m_digits = NULL,
-                                    sd_digits = NULL, r = NULL, r_digits = NULL,
-                                    rounding = "either") {
+recalc_prepost_r_from_f <- function(
+  f,
+  m1b,
+  sd1b,
+  m1p,
+  sd1p,
+  n1,
+  m2b,
+  sd2b,
+  m2p,
+  sd2p,
+  n2,
+  f_digits = NULL,
+  m_digits = NULL,
+  sd_digits = NULL,
+  r = NULL,
+  r_digits = NULL,
+  rounding = "either"
+) {
   rounding <- match.arg(rounding, .recalc_rounding_choices)
-  require_digits(f_digits = f_digits, m_digits = m_digits, sd_digits = sd_digits)
-  if (!is.null(r)) require_digits(r_digits = r_digits)
+  require_digits(
+    f_digits = f_digits,
+    m_digits = m_digits,
+    sd_digits = sd_digits
+  )
+  if (!is.null(r)) {
+    require_digits(r_digits = r_digits)
+  }
 
-  mi  <- function(v) interval_from_digits(v, m_digits,  rounding = rounding)
-  sdi <- function(v) interval_from_digits(v, sd_digits, lo = 0, rounding = rounding)
+  mi <- function(v) interval_from_digits(v, m_digits, rounding = rounding)
+  sdi <- function(v) {
+    interval_from_digits(v, sd_digits, lo = 0, rounding = rounding)
+  }
   inputs <- list(
-    f   = interval_from_digits(f, f_digits, lo = 0, rounding = rounding),
-    m1b = mi(m1b), sd1b = sdi(sd1b), m1p = mi(m1p), sd1p = sdi(sd1p),
-    m2b = mi(m2b), sd2b = sdi(sd2b), m2p = mi(m2p), sd2p = sdi(sd2p)
+    f = interval_from_digits(f, f_digits, lo = 0, rounding = rounding),
+    m1b = mi(m1b),
+    sd1b = sdi(sd1b),
+    m1p = mi(m1p),
+    sd1p = sdi(sd1p),
+    m2b = mi(m2b),
+    sd2b = sdi(sd2b),
+    m2p = mi(m2p),
+    sd2p = sdi(sd2p)
   )
   fn <- function(f, m1b, sd1b, m1p, sd1p, m2b, sd2b, m2p, sd2p) {
     diff_change <- (m1p - m1b) - (m2p - m2b)
-    s_pooled    <- abs(diff_change) / (sqrt(f) * sqrt(1 / n1 + 1 / n2))
+    s_pooled <- abs(diff_change) / (sqrt(f) * sqrt(1 / n1 + 1 / n2))
     Nden <- n1 + n2 - 2
     A <- ((n1 - 1) * (sd1b^2 + sd1p^2) + (n2 - 1) * (sd2b^2 + sd2p^2)) / Nden
     B <- ((n1 - 1) * (2 * sd1b * sd1p) + (n2 - 1) * (2 * sd2b * sd2p)) / Nden
@@ -167,7 +250,10 @@ recalc_prepost_r_from_f <- function(f, m1b, sd1b, m1p, sd1p, n1,
   recomp <- propagate_intervals(fn, inputs)
   recalc_result(
     "implied common pre-post r from 2x2 (group x time) RM-ANOVA interaction F",
-    r, reported_interval(r, r_digits, rounding = rounding), recomp)
+    r,
+    reported_interval(r, r_digits, rounding = rounding),
+    recomp
+  )
 }
 
 #' Recalculate partial eta-squared from an F statistic
@@ -189,17 +275,30 @@ recalc_prepost_r_from_f <- function(f, m1b, sd1b, m1p, sd1p, n1,
 #' recalc_partial_eta_from_f(f = 117.055, df_effect = 1, df_error = 76,
 #'                           f_digits = 3, eta = 0.606, eta_digits = 3)
 #' @export
-recalc_partial_eta_from_f <- function(f, df_effect, df_error, f_digits = NULL,
-                                      eta = NULL, eta_digits = NULL,
-                                      rounding = "either") {
+recalc_partial_eta_from_f <- function(
+  f,
+  df_effect,
+  df_error,
+  f_digits = NULL,
+  eta = NULL,
+  eta_digits = NULL,
+  rounding = "either"
+) {
   rounding <- match.arg(rounding, .recalc_rounding_choices)
   require_digits(f_digits = f_digits)
-  if (!is.null(eta)) require_digits(eta_digits = eta_digits)
+  if (!is.null(eta)) {
+    require_digits(eta_digits = eta_digits)
+  }
 
-  inputs <- list(f = interval_from_digits(f, f_digits, lo = 0, rounding = rounding))
+  inputs <- list(
+    f = interval_from_digits(f, f_digits, lo = 0, rounding = rounding)
+  )
   fn <- function(f) (f * df_effect) / (f * df_effect + df_error)
   recomp <- propagate_intervals(fn, inputs)
   recalc_result(
     "partial eta^2 = (F df_effect) / (F df_effect + df_error)",
-    eta, reported_interval(eta, eta_digits, rounding = rounding), recomp)
+    eta,
+    reported_interval(eta, eta_digits, rounding = rounding),
+    recomp
+  )
 }

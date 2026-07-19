@@ -10,8 +10,10 @@ suppressPackageStartupMessages({
 })
 
 ui <- fluidPage(
-  titlePanel("recalc: Bounds of an independent t-test's p-value and Cohen's d from M/SD/N"),
-  
+  titlePanel(
+    "recalc: Bounds of an independent t-test's p-value and Cohen's d from M/SD/N"
+  ),
+
   sidebarLayout(
     sidebarPanel(
       h4("Summary statistics (required)"),
@@ -21,106 +23,174 @@ ui <- fluidPage(
       numericInput("sd2", "SD group 2", value = NA, step = 0.01),
       numericInput("n1", "N group 1", value = NA, min = 2, step = 1),
       numericInput("n2", "N group 2", value = NA, min = 2, step = 1),
-      numericInput("m_digits", "Number of digits means reported to", value = NA, min = 0, step = 1),
-      numericInput("sd_digits", "Number of digits SDs reported to", value = NA, min = 0, step = 1),
-      
+      numericInput(
+        "m_digits",
+        "Number of digits means reported to",
+        value = NA,
+        min = 0,
+        step = 1
+      ),
+      numericInput(
+        "sd_digits",
+        "Number of digits SDs reported to",
+        value = NA,
+        min = 0,
+        step = 1
+      ),
+
       hr(),
       h4("Reported p-value (optional)"),
       selectInput(
         "p_operator",
         "p operator",
-        choices = c("equals", "less_than", "greater_than",
-                    "less_than_or_equal_to", "greater_than_or_equal_to"),
+        choices = c(
+          "equals",
+          "less_than",
+          "greater_than",
+          "less_than_or_equal_to",
+          "greater_than_or_equal_to"
+        ),
         selected = "equals"
       ),
-      numericInput("p", "Reported p", value = NA, min = 0, max = 1, step = 0.01),
-      numericInput("p_digits", "Digits used for p (p_digits)", value = 3, min = 0, step = 1),
+      numericInput(
+        "p",
+        "Reported p",
+        value = NA,
+        min = 0,
+        max = 1,
+        step = 0.01
+      ),
+      numericInput(
+        "p_digits",
+        "Digits used for p (p_digits)",
+        value = 3,
+        min = 0,
+        step = 1
+      ),
       selectInput(
         "p_methods",
         "P-value method",
-        choices = c("Both Student's t and Welch's t" = "NULL",
-                    "Student's t" = "student_t",
-                    "Welch's t" = "welch_t"),
+        choices = c(
+          "Both Student's t and Welch's t" = "NULL",
+          "Student's t" = "student_t",
+          "Welch's t" = "welch_t"
+        ),
         selected = "NULL"
       ),
       selectInput(
         "alternative",
         "Alternative hypothesis",
-        choices = c("Two-sided" = "two.sided",
-                    "One-sided (less)" = "less",
-                    "One-sided (greater)" = "greater"),
+        choices = c(
+          "Two-sided" = "two.sided",
+          "One-sided (less)" = "less",
+          "One-sided (greater)" = "greater"
+        ),
         selected = "two.sided"
       ),
-      numericInput("alpha", "alpha", value = 0.05, min = 0, max = 1, step = 0.01),
-      
+      numericInput(
+        "alpha",
+        "alpha",
+        value = 0.05,
+        min = 0,
+        max = 1,
+        step = 0.01
+      ),
+
       hr(),
       h4("Reported Cohen's d and 95% Confidence Intervals (optional)"),
-      numericInput("d", "Reported SMD (Cohen's d or Hedges' g)", value = NA, step = 0.01),
-      numericInput("d_ci_lower", "Reported d CI lower", value = NA, step = 0.01),
-      numericInput("d_ci_upper", "Reported d CI upper", value = NA, step = 0.01),
-      
+      numericInput(
+        "d",
+        "Reported SMD (Cohen's d or Hedges' g)",
+        value = NA,
+        step = 0.01
+      ),
+      numericInput(
+        "d_ci_lower",
+        "Reported d CI lower",
+        value = NA,
+        step = 0.01
+      ),
+      numericInput(
+        "d_ci_upper",
+        "Reported d CI upper",
+        value = NA,
+        step = 0.01
+      ),
+
       selectInput(
         "direction",
         "Direction of effect",
         choices = c("m1_minus_m2", "m2_minus_m1", "both"),
         selected = "m1_minus_m2"
       ),
-      
+
       hr(),
       h4("Rounding and method options"),
-      
+
       selectInput(
         "rounding",
         "Rounding mode for reported values",
-        choices = c("Either half-up or bankers (default)" = "either",
-                    "Round half up" = "half_up",
-                    "Bankers (round half to even)" = "bankers",
-                    "Truncated" = "truncate"),
+        choices = c(
+          "Either half-up or bankers (default)" = "either",
+          "Round half up" = "half_up",
+          "Bankers (round half to even)" = "bankers",
+          "Truncated" = "truncate"
+        ),
         selected = "either"
       ),
 
-      numericInput("d_digits", "Number of digits Cohens' d reported to", value = 2, min = 0, step = 1),
-      
+      numericInput(
+        "d_digits",
+        "Number of digits Cohens' d reported to",
+        value = 2,
+        min = 0,
+        step = 1
+      ),
+
       selectInput(
         "hedges_correction",
         "Apply Hedges' correction",
-        choices = c("Both methods" = "NULL",
-                    "Apply"     = "TRUE",
-                    "Do not apply" = "FALSE"),
+        choices = c(
+          "Both methods" = "NULL",
+          "Apply" = "TRUE",
+          "Do not apply" = "FALSE"
+        ),
         selected = "NULL"
       ),
-      
+
       selectInput(
         "ci_methods",
         "CI method",
-        choices = c("All methods" = "NULL",
-                    "Wald (pooled-df t)" = "wald_t",
-                    "Wald (z)" = "wald_z",
-                    "Welch (t)" = "welch_t",
-                    "Non-central t" = "nct"),
+        choices = c(
+          "All methods" = "NULL",
+          "Wald (pooled-df t)" = "wald_t",
+          "Wald (z)" = "wald_z",
+          "Welch (t)" = "welch_t",
+          "Non-central t" = "nct"
+        ),
         selected = "NULL"
       ),
-      
+
       checkboxInput(
         "include_se_sd_confusion",
         "Treat SDs as if they may have been SEs confused for SDs",
         value = FALSE
       ),
-      
+
       hr(),
       actionButton("run", "Run analysis"),
       hr(),
-      
+
       textInput(
         "report_title",
         "html report name",
         value = "e.g., Recalculation of Jones et al. (2015) outcome 1"
       ),
-      
+
       hr(),
       downloadButton("downloadReport", "Download HTML report")
     ),
-    
+
     mainPanel(
       tableOutput("tbl_reproduced"),
       br(),
@@ -129,12 +199,12 @@ ui <- fluidPage(
       plotOutput("plot_d", height = "400px")
     )
   ),
-  
+
   tags$hr(),
   tags$div(
     "Developed by Ian Hussey – ",
     tags$a(
-      href  = "https://github.com/ianhussey/recalc", 
+      href = "https://github.com/ianhussey/recalc",
       "{recalc} GitHub repository",
       target = "_blank"
     ),
@@ -146,25 +216,24 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
-  
   # Helper: map selectInput strings for optional arguments to real values
   get_p_methods <- reactive({
     if (identical(input$p_methods, "NULL")) NULL else input$p_methods
   })
-  
+
   get_hedges_correction <- reactive({
     switch(
       input$hedges_correction,
-      "NULL"  = NULL,
-      "TRUE"  = TRUE,
+      "NULL" = NULL,
+      "TRUE" = TRUE,
       "FALSE" = FALSE
     )
   })
-  
+
   get_ci_methods <- reactive({
     if (identical(input$ci_methods, "NULL")) NULL else input$ci_methods
   })
-  
+
   # Only runs when the button is clicked
   recalc_res <- eventReactive(
     input$run,
@@ -178,7 +247,7 @@ server <- function(input, output, session) {
         !is.na(input$n1),
         !is.na(input$n2)
       )
-      
+
       recalc::recalc_independent_t(
         m1 = input$m1,
         m2 = input$m2,
@@ -208,25 +277,25 @@ server <- function(input, output, session) {
         include_se_sd_confusion = isTRUE(input$include_se_sd_confusion)
       )
     },
-    ignoreNULL = TRUE   # before first click, recalc_res() returns NULL
+    ignoreNULL = TRUE # before first click, recalc_res() returns NULL
   )
-  
+
   # Outputs depend ONLY on recalc_res()
   output$tbl_reproduced <- renderTable(
     {
       res <- recalc_res()
-      req(res)             # ensures the button has been clicked successfully
+      req(res) # ensures the button has been clicked successfully
       res$reproduced |>
         dplyr::select(
           p_operator,
-          p_reported   = p,
-          p_min        = min_p,
-          p_max        = max_p,
+          p_reported = p,
+          p_min = min_p,
+          p_max = max_p,
           p_in_bounds_given_operator = p_inbounds,
-          d_reported   = d,
-          d_min        = min_d,
-          d_max        = max_d,
-          d_in_bounds  = d_inbounds
+          d_reported = d,
+          d_min = min_d,
+          d_max = max_d,
+          d_in_bounds = d_inbounds
         )
     },
     digits = function(df) {
@@ -238,19 +307,19 @@ server <- function(input, output, session) {
       )
     }
   )
-  
+
   output$plot_p <- renderPlot({
     res <- recalc_res()
     req(res)
     plot_multiverse_p(res)
   })
-  
+
   output$plot_d <- renderPlot({
     res <- recalc_res()
     req(res)
     plot_multiverse_d(res)
   })
-  
+
   output$downloadReport <- downloadHandler(
     # filename = function() {
     #   paste0("recalc_report_", Sys.Date(), ".html")
@@ -271,7 +340,7 @@ server <- function(input, output, session) {
       owd <- setwd(tempdir())
       on.exit(setwd(owd), add = TRUE)
       file.copy(src, "report.Rmd", overwrite = TRUE)
-      
+
       params <- list(
         report_title = input$report_title,
         m1 = input$m1,
@@ -282,14 +351,14 @@ server <- function(input, output, session) {
         n2 = input$n2,
         m_digits = input$m_digits,
         sd_digits = input$sd_digits,
-        
+
         p_operator = input$p_operator,
         p = input$p,
         p_digits = input$p_digits,
         p_methods = input$p_methods,
         alternative = input$alternative,
         alpha = input$alpha,
-        
+
         d = input$d,
         d_ci_lower = input$d_ci_lower,
         d_ci_upper = input$d_ci_upper,
@@ -301,13 +370,13 @@ server <- function(input, output, session) {
         ci_methods = get_ci_methods(),
         include_se_sd_confusion = isTRUE(input$include_se_sd_confusion)
       )
-      
+
       out <- rmarkdown::render(
         "report.Rmd",
         params = params,
         envir = new.env(parent = globalenv())
       )
-      
+
       file.copy(out, file, overwrite = TRUE)
     }
   )
