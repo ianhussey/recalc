@@ -27,14 +27,14 @@ value they supply.}
 \value{
 One-row tibble. \code{recalculated_lower} / \code{recalculated_upper} bracket the
 lower-tail p-value over the rounding box. Small values (e.g. < 0.05) are
-the forensic flag — subject to the caveats in "Limitations".
+the forensic flag - subject to the caveats in "Limitations".
 }
 \description{
 \strong{Status: exploratory.} This function is offered as a candidate forensic
-signal, not as a calibrated hypothesis test. The χ²(k−1) approximation
-underlying Bartlett's K² is documented for the upper tail; lower-tail
-calibration in the regimes psychology papers actually use (k = 2–5,
-n_g = 20–100, mild non-normality) has not been validated. Use the output
+signal, not as a calibrated hypothesis test. The chi^2(k-1) approximation
+underlying Bartlett's K^2 is documented for the upper tail; lower-tail
+calibration in the regimes psychology papers actually use (k = 2-5,
+n_g = 20-100, mild non-normality) has not been validated. Use the output
 as a flag for closer inspection of a table, not as evidence on its own.
 See "Limitations" below.
 }
@@ -50,15 +50,15 @@ produce a small \eqn{K^2} and therefore a small \emph{lower-tail} p-value. This
 is TIVA's logic (Test of Insufficient Variance) applied at the
 descriptive-statistic level rather than the test-statistic level.
 
-Sample SD has its own sampling variability — \code{SE(s)} is of order
-\eqn{\sigma / \sqrt{2(n - 1)}} for normal data — and a paper whose
+Sample SD has its own sampling variability - \code{SE(s)} is of order
+\eqn{\sigma / \sqrt{2(n - 1)}} for normal data - and a paper whose
 subgroup SDs do not exhibit that variability is a candidate for
 interpolated or copy-pasted values.
 }
 \section{Limitations}{
 
 \itemize{
-\item \strong{Calibration not validated.} Bartlett's χ²(k − 1) approximation
+\item \strong{Calibration not validated.} Bartlett's chi^2(k - 1) approximation
 was derived for upper-tail variance-heterogeneity testing. Its
 accuracy in the \emph{lower} tail at small \code{n_g}, modest \code{k}, or under
 non-normality has not been established. The nominal \code{p < 0.05}

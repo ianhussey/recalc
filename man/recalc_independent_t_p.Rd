@@ -95,7 +95,7 @@ and \code{rounding}. See \code{\link{recalc_rounding}}.
 \item \strong{Alternative hypothesis}: \code{"two.sided"} (default),
 \code{"less"}, or \code{"greater"} (\code{alternative}). Vectors
 are allowed and iterate the multiverse.
-\item \strong{Direction}: M1 − M2, M2 − M1, or both (\code{direction}).
+\item \strong{Direction}: M1 - M2, M2 - M1, or both (\code{direction}).
 \item \strong{SD vs SE confusion (optional)}: if
 \code{include_se_sd_confusion = TRUE}, the multiverse also includes
 a branch where \code{sd1}/\code{sd2} are reinterpreted as SEs and

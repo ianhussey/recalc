@@ -9,18 +9,18 @@ argument with one of the following values:
 }
 \details{
 \itemize{
-\item \code{"either"} (default) — assume the reported value came from either
+\item \code{"either"} (default) - assume the reported value came from either
 round-half-up \emph{or} bankers (round-half-to-even) rounding. Both produce
-the same closed preimage interval \verb{[value − ½ULP, value + ½ULP]}, since
+the same closed preimage interval \verb{[value - 1/2ULP, value + 1/2ULP]}, since
 the two methods agree everywhere except on the measure-zero tie set.
-\item \code{"half_up"} — same closed interval. Use when you want to be explicit
+\item \code{"half_up"} - same closed interval. Use when you want to be explicit
 that the source used round-half-up specifically.
-\item \code{"bankers"} — same closed interval. Use when you want to be explicit
+\item \code{"bankers"} - same closed interval. Use when you want to be explicit
 that the source used round-half-to-even specifically.
-\item \code{"truncate"} — assume the reported value was truncated toward zero.
+\item \code{"truncate"} - assume the reported value was truncated toward zero.
 The preimage interval is \strong{asymmetric}: \verb{[value, value + ULP]} for
-\code{value > 0}, \verb{[value − ULP, value]} for \code{value < 0}, and
-\verb{[−ULP, +ULP]} for \code{value == 0}.
+\code{value > 0}, \verb{[value - ULP, value]} for \code{value < 0}, and
+\verb{[-ULP, +ULP]} for \code{value == 0}.
 }
 
 Where \code{ULP = 10^(-digits)} is the unit of least precision implied by

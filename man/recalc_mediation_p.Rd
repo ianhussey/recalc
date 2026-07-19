@@ -64,7 +64,7 @@ Identity: \eqn{p = 2(1 - F(|ab| / SE_{ab}))} with
 \eqn{SE_{ab}^2 = b^2 SE_a^2 + a^2 SE_b^2} (Sobel; \code{method}
 chooses Aroian or Goodman variants). Each path's SE is recovered by
 inverting its reported p-value, so this is a consistency check on what
-the original paper would have computed under Sobel — not an endorsement
+the original paper would have computed under Sobel - not an endorsement
 over bootstrap or Monte-Carlo CIs, which are now the field standard for
 indirect-effect inference.
 }
@@ -76,7 +76,7 @@ distribution a separate row is returned; the z-based row is always
 included.
 }
 \examples{
-# Rutherford et al. 2017, HAM-D outcome — all three Sobel variants
+# Rutherford et al. 2017, HAM-D outcome - all three Sobel variants
 recalc_mediation_p(a = 0.268, p_a = 0.038,
                    b = -0.279, p_b = 0.005,
                    p = 0.046, df_t = c(32, 47),

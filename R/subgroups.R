@@ -129,7 +129,7 @@ recalc_total_from_subgroups <- function(subgroup_ns, subgroup_means,
 #'   \item{`M_miss`}{When `scale_min` and `scale_max` are supplied, `TRUE`
 #'         iff the recalculated interval intersects `[scale_min, scale_max]`.
 #'         `NA` when scale endpoints are not supplied (no bound to check).}
-#'   \item{`SD_miss`}{`FALSE` if the propagated interval contains `NaN` —
+#'   \item{`SD_miss`}{`FALSE` if the propagated interval contains `NaN` -
 #'         i.e. the implied variance is negative at some rounding corner, so
 #'         no real subgroup reconciles the reported values. When `scale_min`
 #'         and `scale_max` are supplied, additionally `FALSE` if the implied
@@ -308,10 +308,10 @@ recalc_missing_subgroup <- function(reported_ns, reported_means,
 #' Test for insufficient variance among subgroup SDs (Bartlett, lower tail)
 #'
 #' **Status: exploratory.** This function is offered as a candidate forensic
-#' signal, not as a calibrated hypothesis test. The χ²(k−1) approximation
-#' underlying Bartlett's K² is documented for the upper tail; lower-tail
-#' calibration in the regimes psychology papers actually use (k = 2–5,
-#' n_g = 20–100, mild non-normality) has not been validated. Use the output
+#' signal, not as a calibrated hypothesis test. The chi^2(k-1) approximation
+#' underlying Bartlett's K^2 is documented for the upper tail; lower-tail
+#' calibration in the regimes psychology papers actually use (k = 2-5,
+#' n_g = 20-100, mild non-normality) has not been validated. Use the output
 #' as a flag for closer inspection of a table, not as evidence on its own.
 #' See "Limitations" below.
 #'
@@ -326,14 +326,14 @@ recalc_missing_subgroup <- function(reported_ns, reported_means,
 #' is TIVA's logic (Test of Insufficient Variance) applied at the
 #' descriptive-statistic level rather than the test-statistic level.
 #'
-#' Sample SD has its own sampling variability — `SE(s)` is of order
-#' \eqn{\sigma / \sqrt{2(n - 1)}} for normal data — and a paper whose
+#' Sample SD has its own sampling variability - `SE(s)` is of order
+#' \eqn{\sigma / \sqrt{2(n - 1)}} for normal data - and a paper whose
 #' subgroup SDs do not exhibit that variability is a candidate for
 #' interpolated or copy-pasted values.
 #'
 #' @section Limitations:
 #' \itemize{
-#'   \item **Calibration not validated.** Bartlett's χ²(k − 1) approximation
+#'   \item **Calibration not validated.** Bartlett's chi^2(k - 1) approximation
 #'     was derived for upper-tail variance-heterogeneity testing. Its
 #'     accuracy in the *lower* tail at small `n_g`, modest `k`, or under
 #'     non-normality has not been established. The nominal `p < 0.05`
@@ -360,7 +360,7 @@ recalc_missing_subgroup <- function(reported_ns, reported_means,
 #'   value they supply.
 #' @return One-row tibble. `recalculated_lower` / `recalculated_upper` bracket the
 #'   lower-tail p-value over the rounding box. Small values (e.g. < 0.05) are
-#'   the forensic flag — subject to the caveats in "Limitations".
+#'   the forensic flag - subject to the caveats in "Limitations".
 #' @examples
 #' recalc_sd_concentration(subgroup_ns  = c(40, 40, 40, 40),
 #'                         subgroup_sds = c(2.40, 2.40, 2.40, 2.40),

@@ -14,11 +14,11 @@ the \code{inbounds} comparison to be apples-to-apples, the multiverse's
 convention; otherwise reported values just outside the unrounded
 multiverse but within rounding tolerance produce spurious \code{FALSE}s
 (most visible when the analytic value is within half a ULP of a
-representational boundary such as p ≈ 0 or p ≈ 1).
+representational boundary such as p ~ 0 or p ~ 1).
 }
 \details{
 For \code{"either"}, \code{"half_up"}, and \code{"bankers"} the closed preimage
-interval is the symmetric ±½-ULP, so half-up is used as the canonical
+interval is the symmetric +/-1/2-ULP, so half-up is used as the canonical
 rounding for the bound. For \code{"truncate"} the preimage is asymmetric
 and we use \code{round_trunc} (toward zero) to match.
 }

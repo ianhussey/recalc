@@ -75,7 +75,7 @@ triangle_to_cor_matrix <- function(triangle) {
 #'   (otherwise the function does not return `b` rows).
 #' @param cor_mat_digits,n_digits,sd_vector_digits,reported_betas_digits,reported_b_digits Integer.
 #'   Number of decimal places each value was reported to. `cor_mat_digits` has
-#'   no default — the caller must state the precision of the reported
+#'   no default - the caller must state the precision of the reported
 #'   correlations. `sd_vector_digits`, `reported_betas_digits`, and
 #'   `reported_b_digits` are required only when their corresponding inputs
 #'   are provided.

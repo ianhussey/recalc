@@ -15,7 +15,7 @@
 #'   \item \strong{Alternative hypothesis}: \code{"two.sided"} (default),
 #'         \code{"less"}, or \code{"greater"} (\code{alternative}). Vectors
 #'         are allowed and iterate the multiverse.
-#'   \item \strong{Direction}: M1 − M2, M2 − M1, or both (\code{direction}).
+#'   \item \strong{Direction}: M1 - M2, M2 - M1, or both (\code{direction}).
 #'   \item \strong{SD vs SE confusion (optional)}: if
 #'         \code{include_se_sd_confusion = TRUE}, the multiverse also includes
 #'         a branch where \code{sd1}/\code{sd2} are reinterpreted as SEs and
@@ -1040,10 +1040,10 @@ plot_multiverse_p <- function(res) {
 #' convention; otherwise reported values just outside the unrounded
 #' multiverse but within rounding tolerance produce spurious `FALSE`s
 #' (most visible when the analytic value is within half a ULP of a
-#' representational boundary such as p ≈ 0 or p ≈ 1).
+#' representational boundary such as p ~ 0 or p ~ 1).
 #'
 #' For `"either"`, `"half_up"`, and `"bankers"` the closed preimage
-#' interval is the symmetric ±½-ULP, so half-up is used as the canonical
+#' interval is the symmetric +/-1/2-ULP, so half-up is used as the canonical
 #' rounding for the bound. For `"truncate"` the preimage is asymmetric
 #' and we use `round_trunc` (toward zero) to match.
 #' @keywords internal

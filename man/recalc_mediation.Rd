@@ -71,7 +71,7 @@ distributions and variants). See those functions for the underlying
 identities and caveats.
 }
 \examples{
-# Rutherford et al. 2017, HAM-D outcome — all three Sobel variants
+# Rutherford et al. 2017, HAM-D outcome - all three Sobel variants
 recalc_mediation(a = 0.268, p_a = 0.038,
                  b = -0.279, p_b = 0.005,
                  ab = -0.075, p = 0.046,

@@ -126,7 +126,7 @@ recalc_mediation_ab <- function(a, b, ab = NULL,
 #' \eqn{SE_{ab}^2 = b^2 SE_a^2 + a^2 SE_b^2} (Sobel; \code{method}
 #' chooses Aroian or Goodman variants). Each path's SE is recovered by
 #' inverting its reported p-value, so this is a consistency check on what
-#' the original paper would have computed under Sobel — not an endorsement
+#' the original paper would have computed under Sobel - not an endorsement
 #' over bootstrap or Monte-Carlo CIs, which are now the field standard for
 #' indirect-effect inference.
 #'
@@ -157,7 +157,7 @@ recalc_mediation_ab <- function(a, b, ab = NULL,
 #' @param label Optional string included as a \code{label} column.
 #' @return Tibble, one row per method \eqn{\times} reference distribution.
 #' @examples
-#' # Rutherford et al. 2017, HAM-D outcome — all three Sobel variants
+#' # Rutherford et al. 2017, HAM-D outcome - all three Sobel variants
 #' recalc_mediation_p(a = 0.268, p_a = 0.038,
 #'                    b = -0.279, p_b = 0.005,
 #'                    p = 0.046, df_t = c(32, 47),
@@ -246,7 +246,7 @@ recalc_mediation_p <- function(a, p_a, b, p_b, p = NULL,
 #' @return Tibble: one M1 row plus one M2 row per method \eqn{\times}
 #'   reference distribution.
 #' @examples
-#' # Rutherford et al. 2017, HAM-D outcome — all three Sobel variants
+#' # Rutherford et al. 2017, HAM-D outcome - all three Sobel variants
 #' recalc_mediation(a = 0.268, p_a = 0.038,
 #'                  b = -0.279, p_b = 0.005,
 #'                  ab = -0.075, p = 0.046,

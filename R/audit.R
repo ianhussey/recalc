@@ -11,7 +11,7 @@
 #'
 #' C5 (hierarchical Delta F) is structurally distinct (requires a nested-model
 #' pair with separate R^2, k, and increment metadata) and is not dispatched by
-#' this wrapper — call \code{recalc_delta_f()} directly.
+#' this wrapper - call \code{recalc_delta_f()} directly.
 #'
 #' @param n,k Numeric scalars.
 #' @param r2,adj_r2,f Numeric scalars (optional).

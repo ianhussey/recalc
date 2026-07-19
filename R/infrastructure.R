@@ -3,18 +3,18 @@
 #' Functions in `{recalc}` that propagate input rounding accept a `rounding`
 #' argument with one of the following values:
 #'
-#' * `"either"` (default) — assume the reported value came from either
+#' * `"either"` (default) - assume the reported value came from either
 #'   round-half-up *or* bankers (round-half-to-even) rounding. Both produce
-#'   the same closed preimage interval `[value − ½ULP, value + ½ULP]`, since
+#'   the same closed preimage interval `[value - 1/2ULP, value + 1/2ULP]`, since
 #'   the two methods agree everywhere except on the measure-zero tie set.
-#' * `"half_up"` — same closed interval. Use when you want to be explicit
+#' * `"half_up"` - same closed interval. Use when you want to be explicit
 #'   that the source used round-half-up specifically.
-#' * `"bankers"` — same closed interval. Use when you want to be explicit
+#' * `"bankers"` - same closed interval. Use when you want to be explicit
 #'   that the source used round-half-to-even specifically.
-#' * `"truncate"` — assume the reported value was truncated toward zero.
+#' * `"truncate"` - assume the reported value was truncated toward zero.
 #'   The preimage interval is **asymmetric**: `[value, value + ULP]` for
-#'   `value > 0`, `[value − ULP, value]` for `value < 0`, and
-#'   `[−ULP, +ULP]` for `value == 0`.
+#'   `value > 0`, `[value - ULP, value]` for `value < 0`, and
+#'   `[-ULP, +ULP]` for `value == 0`.
 #'
 #' Where `ULP = 10^(-digits)` is the unit of least precision implied by
 #' the digit count.
@@ -33,7 +33,7 @@ NULL
     else if (value < 0)  c(-ulp, 0)
     else                 c(-ulp, ulp)
   } else {
-    # half_up, bankers, either: closed symmetric interval ±½ ULP
+    # half_up, bankers, either: closed symmetric interval +/-1/2 ULP
     c(-0.5 * ulp, 0.5 * ulp)
   }
 }

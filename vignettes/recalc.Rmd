@@ -78,7 +78,7 @@ plot_multiverse_d(res)
 A common source of irreproducible *t*-tests is a table that labels standard
 errors as standard deviations. Setting `include_se_sd_confusion = TRUE` adds a
 branch to the multiverse in which the reported SDs are reinterpreted as SEs and
-converted with \eqn{SD = SE\sqrt{n}}.
+converted with `SD = SE * sqrt(n)`.
 
 ```{r se-sd}
 res_se <- recalc_independent_t(

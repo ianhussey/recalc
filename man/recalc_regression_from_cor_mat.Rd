@@ -46,7 +46,7 @@ recalculated \code{b} interval. Only meaningful when \code{sd_vector} is supplie
 
 \item{cor_mat_digits, n_digits, sd_vector_digits, reported_betas_digits, reported_b_digits}{Integer.
 Number of decimal places each value was reported to. \code{cor_mat_digits} has
-no default — the caller must state the precision of the reported
+no default - the caller must state the precision of the reported
 correlations. \code{sd_vector_digits}, \code{reported_betas_digits}, and
 \code{reported_b_digits} are required only when their corresponding inputs
 are provided.}

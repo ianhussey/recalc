@@ -35,8 +35,8 @@
 #' @param rounding One of \code{"either"}, \code{"half_up"}, \code{"bankers"},
 #'   \code{"truncate"}. See \code{\link{recalc_rounding}}.
 #' @return One-row tibble (see \code{\link{recalc_result}}): the recalculated
-#'   \code{[lower, upper]} interval for the implied \eqn{r}, and—if \code{r} is
-#'   supplied—whether it is consistent with that interval.
+#'   \code{[lower, upper]} interval for the implied \eqn{r}, and-if \code{r} is
+#'   supplied-whether it is consistent with that interval.
 #' @examples
 #' # Gauhar (2016) TSC-40, change SD 13.01 with the TABLE component SDs:
 #' recalc_prepost_r(sd_pre = 6.77, sd_post = 7.45, sd_change = 13.01,

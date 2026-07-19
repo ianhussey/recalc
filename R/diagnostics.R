@@ -37,14 +37,14 @@ diagnose_beta_label <- function(coef_reported, r_y, sd_x, sd_y, r2,
             length(sd_x) == length(coef_reported))
   k <- length(coef_reported)
 
-  # Interpretation A: column is true beta — apply B4 directly
+  # Interpretation A: column is true beta - apply B4 directly
   res_A <- recalc_r2_from_betas_corrs(
     betas = coef_reported, r_y = r_y, r2 = r2,
     betas_digits = coef_digits, r_y_digits = r_y_digits, r2_digits = r2_digits
   )
   res_A$check <- "E1 (Interp A): column is true beta"
 
-  # Interpretation B: column is b mislabeled as beta — convert and apply B4
+  # Interpretation B: column is b mislabeled as beta - convert and apply B4
   inputs_B <- c(
     setNames(lapply(coef_reported, interval_from_digits, coef_digits, rounding = rounding),
              paste0("b", seq_len(k))),
@@ -73,8 +73,8 @@ diagnose_beta_label <- function(coef_reported, r_y, sd_x, sd_y, r2,
 
 #' Diagnose whether a reported "R^2" is actually adjusted R^2
 #'
-#' Tests two interpretations: (A) the value is raw R^2 — apply B4 directly;
-#' (B) the value is adjusted R^2 — back out the implied raw R^2 via
+#' Tests two interpretations: (A) the value is raw R^2 - apply B4 directly;
+#' (B) the value is adjusted R^2 - back out the implied raw R^2 via
 #' \eqn{R^2_\text{raw} = 1 - (1 - R^2_\text{adj})(N - k - 1)/(N - 1)} and
 #' test that against B4.
 #'
@@ -119,7 +119,7 @@ diagnose_r2_label <- function(r2_reported, betas, r_y, n, k,
     r2_reported, reported_interval(r2_reported, r2_digits, rounding = rounding), recomp_br
   )
 
-  # Interpretation B: reported value is adjusted R^2 — invert to raw R^2
+  # Interpretation B: reported value is adjusted R^2 - invert to raw R^2
   raw_int <- propagate_intervals(
     fn = function(adj, n, k) 1 - (1 - adj) * (n - k - 1) / (n - 1),
     inputs = list(adj = interval_from_digits(r2_reported, r2_digits, rounding = rounding),

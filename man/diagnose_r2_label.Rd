@@ -35,8 +35,8 @@ diagnose_r2_label(
 Two-row tibble.
 }
 \description{
-Tests two interpretations: (A) the value is raw R^2 — apply B4 directly;
-(B) the value is adjusted R^2 — back out the implied raw R^2 via
+Tests two interpretations: (A) the value is raw R^2 - apply B4 directly;
+(B) the value is adjusted R^2 - back out the implied raw R^2 via
 \eqn{R^2_\text{raw} = 1 - (1 - R^2_\text{adj})(N - k - 1)/(N - 1)} and
 test that against B4.
 }

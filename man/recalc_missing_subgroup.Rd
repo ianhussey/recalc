@@ -70,7 +70,7 @@ if the reported subgroup Ns already saturate or exceed
 \item{\code{M_miss}}{When \code{scale_min} and \code{scale_max} are supplied, \code{TRUE}
 iff the recalculated interval intersects \verb{[scale_min, scale_max]}.
 \code{NA} when scale endpoints are not supplied (no bound to check).}
-\item{\code{SD_miss}}{\code{FALSE} if the propagated interval contains \code{NaN} —
+\item{\code{SD_miss}}{\code{FALSE} if the propagated interval contains \code{NaN} -
 i.e. the implied variance is negative at some rounding corner, so
 no real subgroup reconciles the reported values. When \code{scale_min}
 and \code{scale_max} are supplied, additionally \code{FALSE} if the implied

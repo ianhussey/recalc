@@ -33,8 +33,8 @@ only when \code{r} is supplied.}
 }
 \value{
 One-row tibble (see \code{\link{recalc_result}}): the recalculated
-\code{[lower, upper]} interval for the implied \eqn{r}, and—if \code{r} is
-supplied—whether it is consistent with that interval.
+\code{[lower, upper]} interval for the implied \eqn{r}, and-if \code{r} is
+supplied-whether it is consistent with that interval.
 }
 \description{
 For a pre/post (repeated-measures) design the change-score variance is tied
