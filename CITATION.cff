@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+title: >-
+  recalc: Trustworthiness assessments for summary statistics using
+  recalculation checks
+message: >-
+  If you use this software, please cite it as below.
+type: software
+authors:
+  - family-names: Hussey
+    given-names: Ian
+    email: ian.hussey@unibe.ch
+    orcid: "https://orcid.org/0000-0001-8906-7559"
+abstract: >-
+  Forensic meta-science tools that recalculate statistical results from the
+  summary and test statistics reported in a paper. Reported numbers are rounded,
+  and the analysis that produced them involves choices that are often left
+  unstated, so a single reported result is compatible with a range of
+  recalculated values rather than a single one. The package recomputes p-values
+  and standardised effect sizes across the multiverse of defensible choices and
+  returns the interval of recalculated values, together with whether the
+  reported result falls inside it.
+keywords:
+  - meta-science
+  - error detection
+  - recalculation
+  - effect sizes
+  - R
+version: 0.6.0
+date-released: "2026-06-17"
+doi: 10.5281/zenodo.21439896
+license: MIT
+url: "https://github.com/ianhussey/recalc"
+repository-code: "https://github.com/ianhussey/recalc"
