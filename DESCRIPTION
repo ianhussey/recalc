@@ -1,5 +1,5 @@
 Package: recalc
-Title: Trustworthiness assessments for summary statistics using recalculation checks
+Title: Trustworthiness Assessments for Summary Statistics using Recalculation Checks
 Version: 0.6.0
 Authors@R: c(
     person("Ian", "Hussey", , "ian.hussey@unibe.ch", role = c("aut", "cre"),
