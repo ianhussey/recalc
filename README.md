@@ -121,6 +121,6 @@ Hussey, I. (2026). *recalc*: Trustworthiness assessments for summary statistics 
 
 ## License
 
-Code is MIT licensed © Ian Hussey (2024).
+Code is MIT licensed © Ian Hussey (2024-2026).
 
 Text and images are CC BY 4.0.
