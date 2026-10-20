@@ -10,5 +10,10 @@
 This is the default CI returned by \code{confint()} on a binomial
 \code{glm} in R and by SAS \code{PROC LOGISTIC}'s \code{CLODDS=PL}, so it is
 the natural CI source for any OR reported out of a logistic model.
+A table with a zero cell is quasi-completely separated: the logistic fit
+diverges and \code{confint()} returns \code{NA} for one limit and an
+arbitrary value for the other. Such tables are passed to
+\code{.or_ci_profile_lr()}, which inverts the likelihood-ratio test
+directly and gives the finite limit and an infinite (\code{NA}) one.
 }
 \keyword{internal}

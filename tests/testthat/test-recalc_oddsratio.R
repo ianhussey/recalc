@@ -260,3 +260,44 @@ test_that("the OR track works through the proportion-reconstruction route", {
   expect_true(nrow(res$or_results) > 0)
   expect_true(all(is.finite(res$or_results$or_unrounded)))
 })
+
+test_that("profile-likelihood CI has a finite limit and an infinite one with a zero cell", {
+  m <- function(v) matrix(v, 2, byrow = TRUE)
+  ci <- .or_ci_profile(m(c(4, 11, 0, 15)), 0.05)
+  # the OR is infinite, so the upper limit is infinite (NA), and the lower
+  # limit is where the likelihood-ratio deviance reaches the chi-square quantile
+  expect_true(is.na(ci[2]))
+  expect_equal(ci[1], 1.972033, tolerance = 1e-5)
+  b0 <- seq(-40, 10, by = 1e-4)
+  ll <- 4 * (b0 + log(ci[1])) - 15 * log1p(exp(b0 + log(ci[1]))) -
+    15 * log1p(exp(b0))
+  ll_max <- 4 * log(4 / 15) + 11 * log(11 / 15)
+  expect_equal(2 * (ll_max - max(ll)), qchisq(0.95, 1), tolerance = 1e-6)
+
+  # with the rows swapped, the CI is the reciprocal
+  swapped <- .or_ci_profile(m(c(0, 15, 4, 11)), 0.05)
+  expect_equal(swapped[1], 0)
+  expect_equal(swapped[2], 1 / ci[1], tolerance = 1e-6)
+
+  # an empty column has no OR at all
+  expect_true(all(is.na(.or_ci_profile(m(c(0, 5, 0, 5)), 0.05))))
+
+  # through the multiverse
+  res <- recalc_oddsratio(counts = c(4, 11, 0, 15), n_rows = 2, n_cols = 2)
+  prof <- res$or_results[
+    res$or_results$ci_method == "profile_likelihood" &
+      res$or_results$orientation == "as_is",
+  ]
+  expect_true(all(abs(prof$ci_lower_unrounded - 1.972033) < 1e-5))
+})
+
+test_that("direct LR inversion agrees with confint() on tables without zeros", {
+  m <- function(v) matrix(v, 2, byrow = TRUE)
+  for (v in list(c(13, 123, 2, 135), c(10, 20, 15, 25), c(3, 7, 8, 2))) {
+    expect_equal(
+      .or_ci_profile_lr(m(v), 0.05),
+      .or_ci_profile(m(v), 0.05),
+      tolerance = 1e-3
+    )
+  }
+})

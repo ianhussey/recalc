@@ -1,3 +1,16 @@
+# recalc 0.6.5
+
+## Bug fixes
+
+* The profile-likelihood CI of the odds ratio was wrong for tables with a zero
+  cell. The logistic model is then quasi-completely separated, and
+  `confint()` returned `NA` for one limit and an arbitrary value for the
+  other, which became a lower limit of 0 (e.g. 4/15 vs 0/15). Such tables now
+  get the CI by direct inversion of the likelihood-ratio test: a finite limit
+  (1.97 in that example) and an infinite one, returned as `NA` like the other
+  CI methods. Tables without a zero cell still use `confint()`; the direct
+  inversion agrees with it to within 0.1% on tables where both apply.
+
 # recalc 0.6.4
 
 ## New features

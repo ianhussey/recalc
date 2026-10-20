@@ -199,8 +199,16 @@
 #' This is the default CI returned by \code{confint()} on a binomial
 #' \code{glm} in R and by SAS \code{PROC LOGISTIC}'s \code{CLODDS=PL}, so it is
 #' the natural CI source for any OR reported out of a logistic model.
+#' A table with a zero cell is quasi-completely separated: the logistic fit
+#' diverges and \code{confint()} returns \code{NA} for one limit and an
+#' arbitrary value for the other. Such tables are passed to
+#' \code{.or_ci_profile_lr()}, which inverts the likelihood-ratio test
+#' directly and gives the finite limit and an infinite (\code{NA}) one.
 #' @keywords internal
 .or_ci_profile <- function(tab, alpha) {
+  if (any(tab == 0)) {
+    return(.or_ci_profile_lr(tab, alpha))
+  }
   succ <- c(tab[1, 1], tab[2, 1])
   fail <- c(tab[1, 2], tab[2, 2])
   grp <- factor(c("g1", "g2"), levels = c("g1", "g2"))
@@ -217,6 +225,72 @@
   # The grpg2 coefficient is log-odds(level1 | g2) - log-odds(level1 | g1)
   # = -log(OR_native), so exp(-rev(ci)) maps it back to the native OR scale.
   c(.finite_or_na(exp(-ci[2])), .finite_or_na(exp(-ci[1])))
+}
+
+#' Profile-likelihood odds-ratio CI by direct inversion of the LR test.
+#'
+#' With row 2's log-odds \eqn{\beta_0} and row 1's \eqn{\beta_0 + \theta}
+#' (\eqn{\theta} = log of the native OR), each limit solves
+#' \eqn{2(\ell_{max} - \max_{\beta_0} \ell(\beta_0, \theta)) =
+#' \chi^2_{1, 1 - \alpha}}. Used for tables with a zero cell, where the MLE of
+#' \eqn{\theta} is infinite: a zero in \code{b} or \code{c} makes it
+#' \eqn{+\infty} (upper limit infinite), a zero in \code{a} or \code{d}
+#' \eqn{-\infty} (lower limit 0). An infinite limit is returned as \code{NA},
+#' and a zero lower limit as 0, as for the other CI methods.
+#' @keywords internal
+.or_ci_profile_lr <- function(tab, alpha) {
+  a <- tab[1, 1]
+  b <- tab[1, 2]
+  cc <- tab[2, 1]
+  d <- tab[2, 2]
+  n1 <- a + b
+  n2 <- cc + d
+  if (n1 == 0 || n2 == 0 || a + cc == 0 || b + d == 0) {
+    return(c(NA_real_, NA_real_))
+  }
+  log1pexp <- function(x) ifelse(x > 0, x + log1p(exp(-x)), log1p(exp(x)))
+  # binomial log-likelihood at the observed proportion, with 0 log 0 = 0
+  ll_sat <- function(x, n) {
+    if (x == 0 || x == n) 0 else x * log(x / n) + (n - x) * log(1 - x / n)
+  }
+  ll_max <- ll_sat(a, n1) + ll_sat(cc, n2)
+  ll_profile <- function(theta) {
+    ll <- function(b0) {
+      a * (b0 + theta) - n1 * log1pexp(b0 + theta) + cc * b0 - n2 * log1pexp(b0)
+    }
+    stats::optimize(
+      ll,
+      c(-abs(theta) - 40, abs(theta) + 40),
+      maximum = TRUE
+    )$objective
+  }
+  q <- stats::qchisq(1 - alpha, df = 1)
+  g <- function(theta) 2 * (ll_max - ll_profile(theta)) - q
+
+  # theta is searched on [-50, 50] (ORs from e^-50 to e^50). The deviance is
+  # below q at the MLE and above it far from it, so there is one root on each
+  # side of a finite MLE, and one root in all on the finite side of an
+  # infinite MLE. A finite MLE only arises when this is called directly (e.g.
+  # to check it against confint()), since .or_ci_profile() sends only tables
+  # with a zero cell here.
+  theta_hat <- if (b == 0 || cc == 0) {
+    Inf
+  } else if (a == 0 || d == 0) {
+    -Inf
+  } else {
+    log((a * d) / (b * cc))
+  }
+  root <- function(from, to) {
+    f_from <- g(from)
+    f_to <- g(to)
+    if (!is.finite(f_from) || !is.finite(f_to) || f_from * f_to > 0) {
+      return(NA_real_)
+    }
+    exp(stats::uniroot(g, c(from, to), tol = 1e-10)$root)
+  }
+  lower <- if (theta_hat == -Inf) 0 else root(-50, min(theta_hat, 50))
+  upper <- if (theta_hat == Inf) NA_real_ else root(max(theta_hat, -50), 50)
+  c(.finite_or_na(lower), .finite_or_na(upper))
 }
 
 
