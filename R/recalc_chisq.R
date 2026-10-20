@@ -95,6 +95,38 @@
 #'   (\code{simulate.p.value = TRUE}). Default FALSE.
 #' @param fisher_B Integer. Number of replicates when \code{fisher_simulate} is
 #'   TRUE. Default 1e5.
+#' @param include_or Logical. If TRUE, additionally run the opt-in odds-ratio
+#'   track (2x2 only). Switched on automatically if any of \code{odds_ratio},
+#'   \code{or_ci_lower} or \code{or_ci_upper} is supplied. Default FALSE, in
+#'   which case the output is exactly the chi-square p multiverse and no
+#'   \code{or_*} elements are returned. Note that score, likelihood-ratio and
+#'   exact-conditional tests of OR != 1 coincide with the \code{pearson},
+#'   \code{likelihood_ratio} and \code{fisher} p-methods already in the p track,
+#'   so the only new OR-specific p here is the Wald test on log(OR).
+#' @param odds_ratio Numeric. Reported odds ratio to check against (optional).
+#' @param or_ci_lower,or_ci_upper Numeric. Reported CI bounds for the odds ratio
+#'   to check against (optional).
+#' @param or_digits Integer. Decimal places the OR / its CI were reported to.
+#'   Default 2.
+#' @param or_estimators Character vector. Subset of \code{c("uncond_mle",
+#'   "cond_mle")}: the unconditional MLE \eqn{(ad)/(bc)} and the conditional MLE
+#'   (noncentral-hypergeometric, as from \code{fisher.test}). NULL (default)
+#'   uses both.
+#' @param or_ci_methods Character vector. Subset of \code{c("wald_logor",
+#'   "cornfield_exact", "midp_exact", "profile_likelihood")}. NULL (default)
+#'   uses all four. \code{profile_likelihood} is the default CI from
+#'   \code{confint()} on a logistic \code{glm} and from SAS
+#'   \code{PROC LOGISTIC CLODDS=PL}.
+#' @param or_orientation One of \code{"both"} (default) or \code{"as_is"}.
+#'   \code{"both"} also carries the reciprocal (1/OR) so a reported OR expressed
+#'   against the other reference group is not flagged as non-reproducible.
+#' @param or_alpha Numeric. CI level for the OR track. Default 0.05.
+#' @param or_cc Numeric. Continuity-correction constant added to each cell
+#'   (set to 1 for the less-common +1 variant). Default 0.5.
+#' @param or_cc_apply One of \code{"on_zero"} (default; correct only when a cell
+#'   is 0), \code{"always"} (force correction), or \code{"never"}. Affects only
+#'   the Wald estimate / CI / p; the conditional-MLE and exact (Cornfield /
+#'   mid-p) CIs are computed on the raw integer table.
 #'
 #' @return A list with three elements:
 #'   \describe{
@@ -114,10 +146,24 @@
 #'       for each combination of analytic choices; compatible with
 #'       \code{\link{plot_multiverse_p}}.}
 #'     \item{\code{method_intervals}}{Per-method \code{[p_min, p_max]} (and the
-#'       rounded bounds), one row per test method.}
+#'       rounded bounds), one row per test method. Also carries
+#'       \code{statistic_min}, \code{statistic_max} and \code{df} for the
+#'       chi-square-family methods (NA for the exact Fisher methods).}
 #'   }
 #'
-#' @importFrom stats pchisq dhyper phyper fisher.test pnorm
+#'   When the odds-ratio track is active (\code{include_or}, 2x2 only), the list
+#'   additionally contains \code{or_results} (long-format OR multiverse, one row
+#'   per estimator / CI-method / orientation / continuity-correction
+#'   combination) and \code{or_method_intervals} (per-method OR point-estimate
+#'   intervals), and \code{reproduced} gains OR-prefixed columns: the reported
+#'   \code{odds_ratio}, hull bounds \code{min_or}/\code{max_or} (+ rounded), the
+#'   gap-aware union decision \code{or_inbounds} with its \code{or_inbounds_hull}
+#'   fallback, the CI-bound reconciliations \code{or_ci_lower_inbounds} /
+#'   \code{or_ci_upper_inbounds}, and the OR-specific Wald p decision
+#'   \code{or_p_inbounds}.
+#'
+#' @importFrom stats pchisq dhyper phyper fisher.test pnorm qnorm uniroot
+#' @importFrom stats glm binomial confint setNames
 #' @importFrom dplyr summarise mutate case_when between bind_cols select
 #' @importFrom tibble tibble
 #' @export
@@ -142,10 +188,56 @@ recalc_chisq_p <- function(
   ),
   p_methods = NULL,
   fisher_simulate = FALSE,
-  fisher_B = 1e5
+  fisher_B = 1e5,
+  include_or = FALSE,
+  odds_ratio = NULL,
+  or_ci_lower = NULL,
+  or_ci_upper = NULL,
+  or_digits = 2L,
+  or_estimators = NULL,
+  or_ci_methods = NULL,
+  or_orientation = c("both", "as_is"),
+  or_alpha = 0.05,
+  or_cc = 0.5,
+  or_cc_apply = c("on_zero", "always", "never")
 ) {
   p_operator <- match.arg(p_operator)
   rounding <- match.arg(rounding, .recalc_rounding_choices)
+  or_orientation <- match.arg(or_orientation)
+  or_cc_apply <- match.arg(or_cc_apply)
+
+  # The OR track is opt-in: switched on explicitly, or implicitly whenever a
+  # reported OR / OR-CI bound is supplied to be checked.
+  or_requested <- !is.null(odds_ratio) ||
+    !is.null(or_ci_lower) ||
+    !is.null(or_ci_upper)
+  include_or <- isTRUE(include_or) || or_requested
+
+  if (include_or) {
+    or_estimators <- .validate_methods(
+      or_estimators,
+      c("uncond_mle", "cond_mle"),
+      "or_estimators"
+    )
+    or_ci_methods <- .validate_methods(
+      or_ci_methods,
+      c("wald_logor", "cornfield_exact", "midp_exact", "profile_likelihood"),
+      "or_ci_methods"
+    )
+    .validate_digits(or_digits, "or_digits", min_val = 0L)
+    or_digits <- as.integer(or_digits)
+    if (!is.numeric(or_cc) || length(or_cc) != 1L || or_cc < 0) {
+      stop("'or_cc' must be a single non-negative number.")
+    }
+    if (
+      !is.numeric(or_alpha) ||
+        length(or_alpha) != 1L ||
+        or_alpha <= 0 ||
+        or_alpha >= 1
+    ) {
+      stop("'or_alpha' must be a single number in (0, 1).")
+    }
+  }
 
   all_methods <- c(
     "pearson",
@@ -244,11 +336,82 @@ recalc_chisq_p <- function(
     value_prefix = "p"
   )
 
-  list(
+  # Surface the chi-square statistic and df alongside each method's p interval
+  # (they are carried per-row in `p_results` but are otherwise easy to miss).
+  method_intervals_out <- .attach_chisq_statistic(applied$method_intervals,
+    p_results)
+
+  out <- list(
     reproduced = applied$reproduced,
     p_results = p_results,
-    method_intervals = applied$method_intervals
+    method_intervals = method_intervals_out
   )
+
+  if (include_or) {
+    if (!grid$is_2x2) {
+      message(
+        "Odds ratio is only defined for a 2x2 table; skipping the OR track."
+      )
+    } else {
+      or_track <- .run_or_track(
+        grid = grid,
+        odds_ratio = odds_ratio,
+        or_ci_lower = or_ci_lower,
+        or_ci_upper = or_ci_upper,
+        or_digits = or_digits,
+        or_estimators = or_estimators,
+        or_ci_methods = or_ci_methods,
+        or_orientation = or_orientation,
+        or_alpha = or_alpha,
+        or_cc = or_cc,
+        or_cc_apply = or_cc_apply,
+        p_num = p_num,
+        p_operator = p_operator,
+        p_digits = p_digits,
+        rounding = rounding
+      )
+      out$reproduced <- dplyr::bind_cols(
+        out$reproduced,
+        or_track$reproduced
+      )
+      out$or_results <- or_track$or_results
+      out$or_method_intervals <- or_track$or_method_intervals
+    }
+  }
+
+  out
+}
+
+#' Attach the chi-square statistic range and df to a p method-intervals frame.
+#'
+#' `method_intervals` has one row per test method; `p_results` carries the
+#' per-table `statistic`/`df`. Exact tests (Fisher family) have no statistic/df
+#' and stay NA.
+#' @keywords internal
+.attach_chisq_statistic <- function(method_intervals, p_results) {
+  if (is.null(method_intervals) || nrow(method_intervals) == 0) {
+    return(method_intervals)
+  }
+  stat_min <- rep(NA_real_, nrow(method_intervals))
+  stat_max <- rep(NA_real_, nrow(method_intervals))
+  df_val <- rep(NA_real_, nrow(method_intervals))
+  for (i in seq_len(nrow(method_intervals))) {
+    m <- method_intervals$method[i]
+    rows <- p_results[p_results$method == m, , drop = FALSE]
+    stats_i <- rows$statistic[is.finite(rows$statistic)]
+    if (length(stats_i)) {
+      stat_min[i] <- min(stats_i)
+      stat_max[i] <- max(stats_i)
+    }
+    df_i <- rows$df[is.finite(rows$df)]
+    if (length(df_i)) {
+      df_val[i] <- df_i[1]
+    }
+  }
+  method_intervals$statistic_min <- stat_min
+  method_intervals$statistic_max <- stat_max
+  method_intervals$df <- df_val
+  method_intervals
 }
 
 
@@ -266,6 +429,68 @@ recalc_chisq_p <- function(
 #' @export
 recalc_chisq <- function(...) {
   recalc_chisq_p(...)
+}
+
+
+#' @title Multiverse of 2x2 odds-ratio estimates, CIs and p-values
+#'
+#' @description
+#' Thin wrapper around \code{\link{recalc_chisq_p}} that turns the odds-ratio
+#' track on (\code{include_or = TRUE}) and presents the odds-ratio columns of
+#' \code{reproduced} first. It is the natural entry point when the reported
+#' statistic of interest is an odds ratio (with or without a CI and p) from a
+#' 2x2 table; the chi-square p multiverse is still computed and returned
+#' unchanged, so the association p-value is available alongside.
+#'
+#' All arguments are passed straight through to \code{\link{recalc_chisq_p}};
+#' see there for the OR-specific options (\code{odds_ratio}, \code{or_ci_lower},
+#' \code{or_ci_upper}, \code{or_digits}, \code{or_estimators},
+#' \code{or_ci_methods}, \code{or_orientation}, \code{or_alpha}, \code{or_cc},
+#' \code{or_cc_apply}) and the shared table / p arguments.
+#'
+#' @param ... Arguments passed to \code{\link{recalc_chisq_p}}.
+#'
+#' @return The same list as \code{\link{recalc_chisq_p}} with the OR track
+#'   active: \code{reproduced} (odds-ratio columns ordered first), plus
+#'   \code{p_results}, \code{method_intervals}, \code{or_results} and
+#'   \code{or_method_intervals}.
+#' @export
+recalc_oddsratio_p <- function(...) {
+  res <- recalc_chisq_p(..., include_or = TRUE)
+
+  # Present the OR columns first for legibility; keep every column.
+  rep <- res$reproduced
+  or_first <- c(
+    "odds_ratio",
+    "min_or",
+    "max_or",
+    "min_or_rounded",
+    "max_or_rounded",
+    "or_inbounds",
+    "or_inbounds_hull",
+    "or_n_method_intervals",
+    "or_covered_fraction",
+    "or_ci_lower",
+    "or_ci_upper",
+    "or_ci_lower_inbounds",
+    "or_ci_upper_inbounds",
+    "or_p",
+    "or_p_inbounds"
+  )
+  or_first <- intersect(or_first, names(rep))
+  res$reproduced <- rep[, c(or_first, setdiff(names(rep), or_first)), drop = FALSE]
+  res
+}
+
+
+#' @title Multiverse of 2x2 odds-ratio statistics (alias)
+#'
+#' @description Convenience alias for \code{\link{recalc_oddsratio_p}}.
+#' @param ... Arguments passed to \code{\link{recalc_oddsratio_p}}.
+#' @return See \code{\link{recalc_oddsratio_p}}.
+#' @export
+recalc_oddsratio <- function(...) {
+  recalc_oddsratio_p(...)
 }
 
 

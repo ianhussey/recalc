@@ -20,7 +20,18 @@ recalc_chisq_p(
     "greater_than_or_equal_to"),
   p_methods = NULL,
   fisher_simulate = FALSE,
-  fisher_B = 1e+05
+  fisher_B = 1e+05,
+  include_or = FALSE,
+  odds_ratio = NULL,
+  or_ci_lower = NULL,
+  or_ci_upper = NULL,
+  or_digits = 2L,
+  or_estimators = NULL,
+  or_ci_methods = NULL,
+  or_orientation = c("both", "as_is"),
+  or_alpha = 0.05,
+  or_cc = 0.5,
+  or_cc_apply = c("on_zero", "always", "never")
 )
 }
 \arguments{
@@ -66,6 +77,48 @@ larger than 2x2 are obtained by Monte-Carlo simulation
 
 \item{fisher_B}{Integer. Number of replicates when \code{fisher_simulate} is
 TRUE. Default 1e5.}
+
+\item{include_or}{Logical. If TRUE, additionally run the opt-in odds-ratio
+track (2x2 only). Switched on automatically if any of \code{odds_ratio},
+\code{or_ci_lower} or \code{or_ci_upper} is supplied. Default FALSE, in
+which case the output is exactly the chi-square p multiverse and no
+\code{or_*} elements are returned. Note that score, likelihood-ratio and
+exact-conditional tests of OR != 1 coincide with the \code{pearson},
+\code{likelihood_ratio} and \code{fisher} p-methods already in the p track,
+so the only new OR-specific p here is the Wald test on log(OR).}
+
+\item{odds_ratio}{Numeric. Reported odds ratio to check against (optional).}
+
+\item{or_ci_lower, or_ci_upper}{Numeric. Reported CI bounds for the odds ratio
+to check against (optional).}
+
+\item{or_digits}{Integer. Decimal places the OR / its CI were reported to.
+Default 2.}
+
+\item{or_estimators}{Character vector. Subset of \code{c("uncond_mle",
+  "cond_mle")}: the unconditional MLE \eqn{(ad)/(bc)} and the conditional MLE
+(noncentral-hypergeometric, as from \code{fisher.test}). NULL (default)
+uses both.}
+
+\item{or_ci_methods}{Character vector. Subset of \code{c("wald_logor",
+  "cornfield_exact", "midp_exact", "profile_likelihood")}. NULL (default)
+uses all four. \code{profile_likelihood} is the default CI from
+\code{confint()} on a logistic \code{glm} and from SAS
+\code{PROC LOGISTIC CLODDS=PL}.}
+
+\item{or_orientation}{One of \code{"both"} (default) or \code{"as_is"}.
+\code{"both"} also carries the reciprocal (1/OR) so a reported OR expressed
+against the other reference group is not flagged as non-reproducible.}
+
+\item{or_alpha}{Numeric. CI level for the OR track. Default 0.05.}
+
+\item{or_cc}{Numeric. Continuity-correction constant added to each cell
+(set to 1 for the less-common +1 variant). Default 0.5.}
+
+\item{or_cc_apply}{One of \code{"on_zero"} (default; correct only when a cell
+is 0), \code{"always"} (force correction), or \code{"never"}. Affects only
+the Wald estimate / CI / p; the conditional-MLE and exact (Cornfield /
+mid-p) CIs are computed on the raw integer table.}
 }
 \value{
 A list with three elements:
@@ -86,8 +139,21 @@ mostly gap).}
 for each combination of analytic choices; compatible with
 \code{\link{plot_multiverse_p}}.}
 \item{\code{method_intervals}}{Per-method \code{[p_min, p_max]} (and the
-rounded bounds), one row per test method.}
+rounded bounds), one row per test method. Also carries
+\code{statistic_min}, \code{statistic_max} and \code{df} for the
+chi-square-family methods (NA for the exact Fisher methods).}
 }
+
+When the odds-ratio track is active (\code{include_or}, 2x2 only), the list
+additionally contains \code{or_results} (long-format OR multiverse, one row
+per estimator / CI-method / orientation / continuity-correction
+combination) and \code{or_method_intervals} (per-method OR point-estimate
+intervals), and \code{reproduced} gains OR-prefixed columns: the reported
+\code{odds_ratio}, hull bounds \code{min_or}/\code{max_or} (+ rounded), the
+gap-aware union decision \code{or_inbounds} with its \code{or_inbounds_hull}
+fallback, the CI-bound reconciliations \code{or_ci_lower_inbounds} /
+\code{or_ci_upper_inbounds}, and the OR-specific Wald p decision
+\code{or_p_inbounds}.
 }
 \description{
 Explores the multiverse of \emph{p}-values for a contingency-table test of
