@@ -4,7 +4,14 @@
 \alias{propagate_intervals}
 \title{Propagate input rounding intervals through a function by corner enumeration}
 \usage{
-propagate_intervals(fn, inputs)
+propagate_intervals(fn, inputs, na.rm = FALSE)
+}
+\arguments{
+\item{fn}{Function of the named inputs, returning a single number.}
+
+\item{inputs}{Named list of \code{c(lower, upper)} intervals.}
+
+\item{na.rm}{Logical. Leave out corners where \code{fn} returns \code{NA}.}
 }
 \description{
 Returns the min and max of \code{fn} over the Cartesian product of input

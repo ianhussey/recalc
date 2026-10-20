@@ -75,9 +75,14 @@ if the reported subgroup Ns already saturate or exceed
 \item{\code{M_miss}}{When \code{scale_min} and \code{scale_max} are supplied, \code{TRUE}
 iff the recalculated interval intersects \verb{[scale_min, scale_max]}.
 \code{NA} when scale endpoints are not supplied (no bound to check).}
-\item{\code{SD_miss}}{\code{FALSE} if the propagated interval contains \code{NaN} -
-i.e. the implied variance is negative at some rounding corner, so
-no real subgroup reconciles the reported values. When \code{scale_min}
+\item{\code{SD_miss}}{The implied variance (not the SD) is propagated over the
+rounding box. \code{FALSE}, with \code{NaN} bounds, if the implied variance
+is negative at every corner, so no real subgroup reconciles the
+reported values. If it is negative at only some corners, a variance
+of 0 is attainable, and the SD interval starts at 0. A missing
+group of exactly one participant has no SD (bounds \code{NA}); it is
+\code{TRUE} if the leftover sum of squares can be exactly 0, which a
+single participant requires. When \code{scale_min}
 and \code{scale_max} are supplied, additionally \code{FALSE} if the implied
 SD exceeds the maximum Bhatia-Davis bound
 \eqn{\sqrt{n_\star/(n_\star - 1)\,(M_\star - a)(b - M_\star)}}

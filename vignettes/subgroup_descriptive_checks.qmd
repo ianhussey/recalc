@@ -120,9 +120,9 @@ With no scale supplied, the `consistent` verdicts are:
 
 - `n_miss` — `TRUE` iff the recalculated interval reaches $\geq 1$ (some rounding makes the missing group non-empty); `FALSE` if the reported subgroups already saturate or exceed `overall_n`.
 - `M_miss` — `NA` (no bound to check against).
-- `SD_miss` — `FALSE` if the propagated interval contains `NaN`, meaning the implied variance is negative somewhere in the rounding box and no real subgroup can reconcile the reported values; `TRUE` otherwise.
+- `SD_miss` — the implied *variance* is propagated through the rounding box, and the SD interval is its square root. `FALSE`, with `NaN` bounds, if the implied variance is negative everywhere in the box, so that no real subgroup can reconcile the reported values; `TRUE` otherwise. If the variance is negative in only part of the box, a variance of exactly 0 is attainable (it is continuous in the inputs), so the SD interval starts at 0. A missing group of exactly one participant has no SD, so its bounds are `NA`; it is `TRUE` if the sum of squares left for it can be exactly 0, which a single participant requires.
 
-For example, shrinking the reported overall SD to an implausible 0.10 makes the implied variance for the missing group strictly negative — the SD row's bounds become `NaN` and `consistent` is `FALSE`:
+For example, shrinking the reported overall SD to an implausible 0.10 makes the implied variance for the missing group negative everywhere in the rounding box — the SD row's bounds become `NaN` and `consistent` is `FALSE`:
 
 ```{r}
 #| warning: false

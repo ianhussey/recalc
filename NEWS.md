@@ -1,3 +1,21 @@
+# recalc 0.6.3
+
+## Bug fixes
+
+* `recalc_missing_subgroup()` no longer calls the implied missing-subgroup SD
+  impossible when the implied variance is negative at only some corners of the
+  rounding box. It propagated the SD, so a single negative-variance corner made
+  both bounds `NaN` and the row `FALSE`, even when most roundings gave a valid
+  SD (e.g. 52 of 64 corners in the test case). The variance is now propagated:
+  the row is `FALSE`, with `NaN` bounds, only if the variance is negative at
+  every corner, and an interval that straddles 0 gives an SD interval starting
+  at 0.
+* A missing group of exactly one participant, which has no SD, is now checked
+  by whether the sum of squares left for it can be exactly 0, rather than by
+  dividing by zero. Its SD bounds are `NA`.
+* `propagate_intervals()` gains `na.rm`, to leave out corners where a quantity
+  is undefined.
+
 # recalc 0.6.2
 
 ## Improvements

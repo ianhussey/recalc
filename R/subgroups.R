@@ -173,9 +173,14 @@ recalc_total_from_subgroups <- function(
 #'   \item{`M_miss`}{When `scale_min` and `scale_max` are supplied, `TRUE`
 #'         iff the recalculated interval intersects `[scale_min, scale_max]`.
 #'         `NA` when scale endpoints are not supplied (no bound to check).}
-#'   \item{`SD_miss`}{`FALSE` if the propagated interval contains `NaN` -
-#'         i.e. the implied variance is negative at some rounding corner, so
-#'         no real subgroup reconciles the reported values. When `scale_min`
+#'   \item{`SD_miss`}{The implied variance (not the SD) is propagated over the
+#'         rounding box. `FALSE`, with `NaN` bounds, if the implied variance
+#'         is negative at every corner, so no real subgroup reconciles the
+#'         reported values. If it is negative at only some corners, a variance
+#'         of 0 is attainable, and the SD interval starts at 0. A missing
+#'         group of exactly one participant has no SD (bounds `NA`); it is
+#'         `TRUE` if the leftover sum of squares can be exactly 0, which a
+#'         single participant requires. When `scale_min`
 #'         and `scale_max` are supplied, additionally `FALSE` if the implied
 #'         SD exceeds the maximum Bhatia-Davis bound
 #'         \eqn{\sqrt{n_\star/(n_\star - 1)\,(M_\star - a)(b - M_\star)}}
@@ -340,27 +345,77 @@ recalc_missing_subgroup <- function(
         s_names
       )
     )
-    recomp_sd <- propagate_intervals(
-      fn = function(...) {
-        args <- list(...)
-        N <- args$N
-        M <- args$M
-        SD <- args$SD
-        ns <- unlist(args[n_names])
-        ms <- unlist(args[m_names])
-        ss <- unlist(args[s_names])
-        n_miss <- N - sum(ns)
-        m_miss <- (N * M - sum(ns * ms)) / n_miss
-        var_miss <- ((N - 1) *
-          SD^2 -
-          sum((ns - 1) * ss^2) -
-          n_miss * (m_miss - M)^2 -
-          sum(ns * (ms - M)^2)) /
-          (n_miss - 1)
-        sqrt(var_miss)
-      },
-      inputs = inputs_all
-    )
+    # The missing group's sum of squares: what is left of the whole sample's
+    # sum of squares after the reported subgroups' within- and between-group
+    # parts and the missing group's own between-group part.
+    ss_miss <- function(args) {
+      N <- args$N
+      M <- args$M
+      ns <- unlist(args[n_names])
+      ms <- unlist(args[m_names])
+      sds <- unlist(args[s_names])
+      n_miss <- N - sum(ns)
+      m_miss <- (N * M - sum(ns * ms)) / n_miss
+      leftover <- (N - 1) *
+        args$SD^2 -
+        sum((ns - 1) * sds^2) -
+        n_miss * (m_miss - M)^2 -
+        sum(ns * (ms - M)^2)
+      c(n_miss = n_miss, ss = leftover)
+    }
+    n_lo <- recomp_n[["lower"]]
+    n_hi <- recomp_n[["upper"]]
+
+    # The implied variance is propagated rather than the SD, so that corners
+    # where it is negative do not turn the whole interval into NaN. Corners
+    # where the missing group would have fewer than 2 members have no
+    # variance and are left out. Because the variance is continuous in the
+    # inputs, an interval that straddles 0 means that a variance of exactly 0
+    # is attainable, so the SD interval then starts at 0.
+    var_recomp <- if (n_hi >= 2) {
+      propagate_intervals(
+        fn = function(...) {
+          v <- ss_miss(list(...))
+          if (v[["n_miss"]] < 2) NA_real_ else v[["ss"]] / (v[["n_miss"]] - 1)
+        },
+        inputs = inputs_all,
+        na.rm = TRUE
+      )
+    } else {
+      c(lower = NA_real_, upper = NA_real_)
+    }
+    var_feasible <- isTRUE(var_recomp[["upper"]] >= 0)
+    recomp_sd <- if (var_feasible) {
+      c(
+        lower = sqrt(max(var_recomp[["lower"]], 0)),
+        upper = sqrt(var_recomp[["upper"]])
+      )
+    } else if (n_hi >= 2) {
+      # negative everywhere: no real group of 2 or more has this variance
+      c(lower = NaN, upper = NaN)
+    } else {
+      c(lower = NA_real_, upper = NA_real_)
+    }
+
+    # A missing group of exactly one participant has no SD, but the identity
+    # still constrains it: its sum of squares is 0, so the leftover sum of
+    # squares must be able to equal 0 somewhere in the rounding box.
+    single_feasible <- FALSE
+    if (n_lo <= 1 && n_hi >= 1) {
+      ss_recomp <- propagate_intervals(
+        fn = function(...) {
+          v <- ss_miss(list(...))
+          if (v[["n_miss"]] != 1) NA_real_ else v[["ss"]]
+        },
+        inputs = inputs_all,
+        na.rm = TRUE
+      )
+      tol <- 1e-9 * max(1, abs(unlist(ss_recomp)), na.rm = TRUE)
+      single_feasible <- isTRUE(
+        ss_recomp[["lower"]] <= tol && ss_recomp[["upper"]] >= -tol
+      )
+    }
+
     out <- dplyr::bind_rows(
       out,
       recalc_result(
@@ -372,12 +427,14 @@ recalc_missing_subgroup <- function(
     )
 
     # SD_miss feasibility:
-    #   - NaN -> FALSE (variance negative at some corner)
+    #   - variance negative everywhere (NaN bounds) -> FALSE, unless a missing
+    #     group of one participant is possible
     #   - scale supplied -> additionally check against max Bhatia-Davis bound
     sd_lo <- recomp_sd[["lower"]]
-    sd_hi <- recomp_sd[["upper"]]
-    if (is.nan(sd_lo) || is.nan(sd_hi)) {
-      out$consistent[3] <- FALSE
+    if (!var_feasible) {
+      out$consistent[3] <- single_feasible
+    } else if (single_feasible) {
+      out$consistent[3] <- TRUE
     } else if (has_scale) {
       # Max Bhatia-Davis bound over the rounding box. Corners where the
       # implied missing group is itself infeasible (n_miss < 2 or m_miss

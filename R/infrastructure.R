@@ -72,8 +72,11 @@ interval_from_digits <- function(
 #' intervals. Exact when `fn` is monotone in each input over the interval
 #' (which holds for every identity in this package over typical reporting
 #' ranges).
+#' @param fn Function of the named inputs, returning a single number.
+#' @param inputs Named list of `c(lower, upper)` intervals.
+#' @param na.rm Logical. Leave out corners where `fn` returns `NA`.
 #' @keywords internal
-propagate_intervals <- function(fn, inputs) {
+propagate_intervals <- function(fn, inputs, na.rm = FALSE) {
   # An input with a degenerate interval (e.g. an exact count, digits = Inf)
   # contributes one corner, not two. Duplicate corners cannot change the min
   # or max, and dropping them halves the grid for every such input.
@@ -85,6 +88,14 @@ propagate_intervals <- function(fn, inputs) {
   # Iterate over the grid's columns rather than indexing its rows, which is
   # far slower for the large grids produced by many inputs.
   vals <- vapply(.mapply(fn, grid, NULL), as.numeric, numeric(1))
+  # With na.rm = TRUE, corners where fn returns NA (e.g. where the quantity is
+  # undefined) are left out; if every corner is NA, both bounds are NA.
+  if (na.rm) {
+    vals <- vals[!is.na(vals)]
+    if (length(vals) == 0) {
+      return(c(lower = NA_real_, upper = NA_real_))
+    }
+  }
   c(lower = min(vals), upper = max(vals))
 }
 
