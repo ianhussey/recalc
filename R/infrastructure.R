@@ -74,15 +74,17 @@ interval_from_digits <- function(
 #' ranges).
 #' @keywords internal
 propagate_intervals <- function(fn, inputs) {
+  # An input with a degenerate interval (e.g. an exact count, digits = Inf)
+  # contributes one corner, not two. Duplicate corners cannot change the min
+  # or max, and dropping them halves the grid for every such input.
+  inputs <- lapply(inputs, unique)
   grid <- do.call(
     expand.grid,
     c(inputs, list(KEEP.OUT.ATTRS = FALSE, stringsAsFactors = FALSE))
   )
-  vals <- vapply(
-    seq_len(nrow(grid)),
-    function(i) do.call(fn, as.list(grid[i, , drop = FALSE])),
-    numeric(1)
-  )
+  # Iterate over the grid's columns rather than indexing its rows, which is
+  # far slower for the large grids produced by many inputs.
+  vals <- vapply(.mapply(fn, grid, NULL), as.numeric, numeric(1))
   c(lower = min(vals), upper = max(vals))
 }
 

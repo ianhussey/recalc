@@ -1,3 +1,24 @@
+# recalc 0.6.2
+
+## Improvements
+
+* `propagate_intervals()`, which every rounding-aware check uses, drops
+  duplicate corners (an input with a zero-width interval contributes one
+  corner, not two) and no longer indexes the corner grid row by row. The
+  results are unchanged; checks with many inputs are much faster (e.g. six
+  subgroups with SDs in `recalc_total_from_subgroups()`: ~17 s to ~0.2 s).
+
+## Documentation
+
+* The subgroup checks (`recalc_total_from_subgroups()`,
+  `recalc_missing_subgroup()`, `recalc_sd_concentration()`) now recommend
+  `n_digits = Inf`, treating sample sizes as the exact counts they are.
+  `n_digits = 0` gives each n a +/-0.5 interval, which lets a reported N that
+  differs from the sum of the subgroup ns by up to (k + 1)/2 pass as
+  consistent (e.g. 16 + 16 against a reported N of 33). The examples, the
+  subgroup vignette, and the whole-vs-subgroup Shiny app (which gains an
+  "N values are exact counts" option, on by default) use exact counts.
+
 # recalc 0.6.1
 
 ## New features

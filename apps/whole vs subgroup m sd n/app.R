@@ -167,12 +167,20 @@ ui <- fluidPage(
 
           hr(),
           h4("Reporting precision"),
-          numericInput(
-            "t1_n_digits",
-            "Digits for N",
-            value = 0,
-            min = 0,
-            step = 1
+          checkboxInput(
+            "t1_n_exact",
+            "N values are exact counts (recommended)",
+            value = TRUE
+          ),
+          conditionalPanel(
+            condition = "input.t1_n_exact == false",
+            numericInput(
+              "t1_n_digits",
+              "Digits for N",
+              value = 0,
+              min = 0,
+              step = 1
+            )
           ),
           numericInput(
             "t1_mean_digits",
@@ -268,12 +276,20 @@ ui <- fluidPage(
 
           hr(),
           h4("Reporting precision"),
-          numericInput(
-            "t2_n_digits",
-            "Digits for N",
-            value = 0,
-            min = 0,
-            step = 1
+          checkboxInput(
+            "t2_n_exact",
+            "N values are exact counts (recommended)",
+            value = TRUE
+          ),
+          conditionalPanel(
+            condition = "input.t2_n_exact == false",
+            numericInput(
+              "t2_n_digits",
+              "Digits for N",
+              value = 0,
+              min = 0,
+              step = 1
+            )
           ),
           numericInput(
             "t2_mean_digits",
@@ -536,6 +552,17 @@ ui <- fluidPage(
 # ---------------------------------------------------------------------------
 
 server <- function(input, output, session) {
+  # Sample sizes are counts, so by default they are passed to recalc as exact
+  # (n_digits = Inf, a zero-width interval). n_digits = 0 would treat each n
+  # as rounded to +/-0.5, letting N mismatches of up to (k + 1)/2 pass.
+  n_digits_for <- function(tab) {
+    if (isTRUE(input[[paste0(tab, "_n_exact")]])) {
+      Inf
+    } else {
+      input[[paste0(tab, "_n_digits")]]
+    }
+  }
+
   # --- Subgroup-input UIs ---------------------------------------------------
   output$t1_subgroup_ui <- renderUI({
     do.call(tagList, subgroup_inputs("t1", input$t1_k, input$t1_compare_sds))
@@ -578,7 +605,7 @@ server <- function(input, output, session) {
       overall_n = input$t1_overall_n,
       overall_mean = input$t1_overall_mean,
       overall_sd = if (input$t1_compare_sds) input$t1_overall_sd else NULL,
-      n_digits = input$t1_n_digits,
+      n_digits = n_digits_for("t1"),
       mean_digits = input$t1_mean_digits,
       sd_digits = if (input$t1_compare_sds) input$t1_sd_digits else NULL,
       rounding = input$t1_rounding
@@ -588,7 +615,7 @@ server <- function(input, output, session) {
 
   t1_display_digits <- reactive({
     max(
-      input$t1_n_digits,
+      if (isTRUE(input$t1_n_exact)) 0 else input$t1_n_digits,
       input$t1_mean_digits,
       if (input$t1_compare_sds) input$t1_sd_digits else 0
     )
@@ -703,7 +730,7 @@ server <- function(input, output, session) {
       overall_sd = if (input$t2_compare_sds) input$t2_overall_sd else NULL,
       scale_min = if (has_scale) input$t2_scale_min else NULL,
       scale_max = if (has_scale) input$t2_scale_max else NULL,
-      n_digits = input$t2_n_digits,
+      n_digits = n_digits_for("t2"),
       mean_digits = input$t2_mean_digits,
       sd_digits = if (input$t2_compare_sds) input$t2_sd_digits else NULL,
       rounding = input$t2_rounding
@@ -719,7 +746,7 @@ server <- function(input, output, session) {
 
   t2_display_digits <- reactive({
     max(
-      input$t2_n_digits,
+      if (isTRUE(input$t2_n_exact)) 0 else input$t2_n_digits,
       input$t2_mean_digits,
       if (input$t2_compare_sds) input$t2_sd_digits else 0
     )
@@ -799,14 +826,14 @@ server <- function(input, output, session) {
     stats_common <- c("Digits N", "Digits Mean", "Digits SD", "Rounding")
     vals_common <- if (tab == "t1") {
       c(
-        input$t1_n_digits,
+        if (isTRUE(input$t1_n_exact)) "exact" else input$t1_n_digits,
         input$t1_mean_digits,
         input$t1_sd_digits,
         input$t1_rounding
       )
     } else {
       c(
-        input$t2_n_digits,
+        if (isTRUE(input$t2_n_exact)) "exact" else input$t2_n_digits,
         input$t2_mean_digits,
         input$t2_sd_digits,
         input$t2_rounding
@@ -908,9 +935,17 @@ server <- function(input, output, session) {
         }
         if (parse == "numeric") as.numeric(v) else as.character(v)
       }
-      n_d <- get_setting("Digits N")
-      if (!is.null(n_d)) {
-        updateNumericInput(session, paste0(tab, "_n_digits"), value = n_d)
+      n_d <- get_setting("Digits N", "character")
+      if (!is.null(n_d) && !is.na(n_d)) {
+        n_exact <- n_d %in% c("exact", "Inf")
+        updateCheckboxInput(session, paste0(tab, "_n_exact"), value = n_exact)
+        if (!n_exact) {
+          updateNumericInput(
+            session,
+            paste0(tab, "_n_digits"),
+            value = as.numeric(n_d)
+          )
+        }
       }
       m_d <- get_setting("Digits Mean")
       if (!is.null(m_d)) {

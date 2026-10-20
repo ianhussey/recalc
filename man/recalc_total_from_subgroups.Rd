@@ -30,7 +30,12 @@ the SD row is omitted).}
 \item{n_digits, mean_digits, sd_digits}{Integer. Number of decimal places each
 value was reported to. No defaults: the caller must specify the precision
 of every value they supply. \code{sd_digits} is required only when
-\code{subgroup_sds} is provided.}
+\code{subgroup_sds} is provided.
+Sample sizes are exact counts, so pass \code{n_digits = Inf} (a zero-width
+interval). \code{n_digits = 0} treats each n as rounded to the nearest
+integer (+/-0.5), which lets a reported N that differs from the sum of
+the subgroup ns by up to (k + 1)/2 pass as consistent, and doubles the
+number of rounding corners per n.}
 
 \item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
@@ -61,6 +66,6 @@ recalc_total_from_subgroups(
   subgroup_means = c(4.50, 4.90),
   subgroup_sds   = c(2.30, 2.50),
   overall_n = 32, overall_mean = 4.70, overall_sd = 2.42,
-  n_digits = 0, mean_digits = 2, sd_digits = 2
+  n_digits = Inf, mean_digits = 2, sd_digits = 2
 )
 }

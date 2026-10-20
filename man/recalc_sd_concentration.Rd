@@ -20,7 +20,11 @@ recalc_sd_concentration(
 
 \item{n_digits, sd_digits}{Integer. Number of decimal places each value was
 reported to. No defaults: the caller must specify the precision of every
-value they supply.}
+value they supply.
+Sample sizes are exact counts, so pass \code{n_digits = Inf} (a zero-width
+interval). \code{n_digits = 0} treats each n as rounded to the nearest
+integer (+/-0.5), which needlessly widens the interval and doubles the
+number of rounding corners per n.}
 
 \item{rounding}{See \code{\link{recalc_rounding}} for the accepted values.}
 }
@@ -81,5 +85,5 @@ resolved by simulation.
 \examples{
 recalc_sd_concentration(subgroup_ns  = c(40, 40, 40, 40),
                         subgroup_sds = c(2.40, 2.40, 2.40, 2.40),
-                        n_digits = 0, sd_digits = 2)
+                        n_digits = Inf, sd_digits = 2)
 }

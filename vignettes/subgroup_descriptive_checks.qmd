@@ -66,9 +66,11 @@ recalc_total_from_subgroups(
   overall_n      = 80,
   overall_mean   = 4.96,
   overall_sd     = 2.18,
-  n_digits = 0, mean_digits = 2, sd_digits = 2
+  n_digits = Inf, mean_digits = 2, sd_digits = 2
 )
 ```
+
+Sample sizes are counts, not rounded values, so they are passed with `n_digits = Inf`, which gives each $n_g$ and $N$ a rounding interval of width zero. `n_digits = 0` would instead treat each of them as rounded to the nearest whole number ($\pm 0.5$). Summed over $k$ subgroups, that tolerance is $\pm k/2$, and a reported $N$ that differs from $\sum_g n_g$ by up to $(k + 1)/2$ participants would pass: with two subgroups of 16, a reported $N$ of 33 would be judged consistent. Exact counts also keep the computation fast, because an input with a zero-width interval adds no corners to the rounding box.
 
 If the paper reports only $N$ and means by subgroup, omit `subgroup_sds` (and `overall_sd`); the function returns the $N$ and $M$ rows only.
 
@@ -82,7 +84,7 @@ recalc_total_from_subgroups(
   overall_n      = 80,
   overall_mean   = 4.96,
   overall_sd     = 5.00,
-  n_digits = 0, mean_digits = 2, sd_digits = 2
+  n_digits = Inf, mean_digits = 2, sd_digits = 2
 )
 ```
 
@@ -106,11 +108,11 @@ recalc_missing_subgroup(
   overall_n      = 80,
   overall_mean   = 4.96,
   overall_sd     = 2.18,
-  n_digits = 0, mean_digits = 2, sd_digits = 2
+  n_digits = Inf, mean_digits = 2, sd_digits = 2
 )
 ```
 
-The output says: an unreported second subgroup of about 40 people, with mean around 5.2 and SD around 2.3, would reconcile the reported totals with the reported first group. If the paper later reveals a missing group with statistics far outside these intervals, the table is inconsistent.
+The output says: an unreported second subgroup of exactly 40 people, with mean around 5.2 and SD around 2.3, would reconcile the reported totals with the reported first group. If the paper later reveals a missing group with statistics far outside these intervals, the table is inconsistent.
 
 ## Feasibility on the `consistent` column
 
@@ -132,7 +134,7 @@ recalc_missing_subgroup(
   overall_n      = 80,
   overall_mean   = 4.96,
   overall_sd     = 0.10,
-  n_digits = 0, mean_digits = 2, sd_digits = 2
+  n_digits = Inf, mean_digits = 2, sd_digits = 2
 )
 ```
 
@@ -154,7 +156,7 @@ recalc_missing_subgroup(
   reported_sds   = 0.50,
   overall_n      = 100, overall_mean = 4.00, overall_sd = 1.50,
   scale_min = 3, scale_max = 5,
-  n_digits = 0, mean_digits = 2, sd_digits = 2
+  n_digits = Inf, mean_digits = 2, sd_digits = 2
 )
 ```
 
@@ -171,7 +173,7 @@ recalc_missing_subgroup(
   reported_sds   = 1.40,
   overall_n      = 100, overall_mean = 6.00, overall_sd = 1.50,
   scale_min = 1, scale_max = 7,
-  n_digits = 0, mean_digits = 2, sd_digits = 2
+  n_digits = Inf, mean_digits = 2, sd_digits = 2
 )
 ```
 
@@ -200,7 +202,7 @@ sds_real <- replicate(4, sd(rnorm(40, sd = 2.4)))
 recalc_sd_concentration(
   subgroup_ns  = rep(40, 4),
   subgroup_sds = round(sds_real, 2),
-  n_digits = 0, sd_digits = 2
+  n_digits = Inf, sd_digits = 2
 )
 ```
 
@@ -210,7 +212,7 @@ Four subgroups with *identical* reported SDs are improbably uniform:
 recalc_sd_concentration(
   subgroup_ns  = c(40, 40, 40, 40),
   subgroup_sds = c(2.40, 2.40, 2.40, 2.40),
-  n_digits = 0, sd_digits = 2
+  n_digits = Inf, sd_digits = 2
 )
 ```
 
@@ -222,7 +224,7 @@ Strongly *heterogeneous* SDs sit at the other end of the distribution and produc
 recalc_sd_concentration(
   subgroup_ns  = c(40, 40, 40, 40),
   subgroup_sds = c(1.00, 2.00, 3.00, 4.00),
-  n_digits = 0, sd_digits = 2
+  n_digits = Inf, sd_digits = 2
 )
 ```
 
@@ -239,11 +241,11 @@ dplyr::bind_rows(
   recalc_total_from_subgroups(
     subgroup_ns = ns, subgroup_means = means, subgroup_sds = sds,
     overall_n = 160, overall_mean = 4.58, overall_sd = 2.38,
-    n_digits = 0, mean_digits = 2, sd_digits = 2
+    n_digits = Inf, mean_digits = 2, sd_digits = 2
   ),
   recalc_sd_concentration(
     subgroup_ns = ns, subgroup_sds = sds,
-    n_digits = 0, sd_digits = 2
+    n_digits = Inf, sd_digits = 2
   )
 )
 ```

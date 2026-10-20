@@ -25,6 +25,11 @@
 #'   value was reported to. No defaults: the caller must specify the precision
 #'   of every value they supply. `sd_digits` is required only when
 #'   `subgroup_sds` is provided.
+#'   Sample sizes are exact counts, so pass `n_digits = Inf` (a zero-width
+#'   interval). `n_digits = 0` treats each n as rounded to the nearest
+#'   integer (+/-0.5), which lets a reported N that differs from the sum of
+#'   the subgroup ns by up to (k + 1)/2 pass as consistent, and doubles the
+#'   number of rounding corners per n.
 #' @return Tibble with one row per checked quantity.
 #' @examples
 #' recalc_total_from_subgroups(
@@ -32,7 +37,7 @@
 #'   subgroup_means = c(4.50, 4.90),
 #'   subgroup_sds   = c(2.30, 2.50),
 #'   overall_n = 32, overall_mean = 4.70, overall_sd = 2.42,
-#'   n_digits = 0, mean_digits = 2, sd_digits = 2
+#'   n_digits = Inf, mean_digits = 2, sd_digits = 2
 #' )
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
@@ -195,6 +200,11 @@ recalc_total_from_subgroups <- function(
 #'   value was reported to. No defaults: the caller must specify the precision
 #'   of every value they supply. `sd_digits` is required only when
 #'   `reported_sds` and `overall_sd` are provided.
+#'   Sample sizes are exact counts, so pass `n_digits = Inf` (a zero-width
+#'   interval). `n_digits = 0` treats each n as rounded to the nearest
+#'   integer (+/-0.5), which lets a reported N that differs from the sum of
+#'   the subgroup ns by up to (k + 1)/2 pass as consistent, and doubles the
+#'   number of rounding corners per n.
 #' @return Tibble with one row per derived quantity. The `consistent` column
 #'   reports the feasibility verdicts described in Details; `reported`
 #'   columns remain `NA` (there is no reported missing-group value).
@@ -209,7 +219,7 @@ recalc_total_from_subgroups <- function(
 #'   reported_sds   = 1.40,
 #'   overall_n = 100, overall_mean = 4.50, overall_sd = 1.50,
 #'   scale_min = 1, scale_max = 7,
-#'   n_digits = 0, mean_digits = 2, sd_digits = 2
+#'   n_digits = Inf, mean_digits = 2, sd_digits = 2
 #' )
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
@@ -459,13 +469,17 @@ recalc_missing_subgroup <- function(
 #' @param n_digits,sd_digits Integer. Number of decimal places each value was
 #'   reported to. No defaults: the caller must specify the precision of every
 #'   value they supply.
+#'   Sample sizes are exact counts, so pass `n_digits = Inf` (a zero-width
+#'   interval). `n_digits = 0` treats each n as rounded to the nearest
+#'   integer (+/-0.5), which needlessly widens the interval and doubles the
+#'   number of rounding corners per n.
 #' @return One-row tibble. `recalculated_lower` / `recalculated_upper` bracket the
 #'   lower-tail p-value over the rounding box. Small values (e.g. < 0.05) are
 #'   the forensic flag - subject to the caveats in "Limitations".
 #' @examples
 #' recalc_sd_concentration(subgroup_ns  = c(40, 40, 40, 40),
 #'                         subgroup_sds = c(2.40, 2.40, 2.40, 2.40),
-#'                         n_digits = 0, sd_digits = 2)
+#'                         n_digits = Inf, sd_digits = 2)
 #' @export
 #' @param rounding See \code{\link{recalc_rounding}} for the accepted values.
 recalc_sd_concentration <- function(
