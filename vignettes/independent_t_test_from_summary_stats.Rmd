@@ -107,7 +107,7 @@ res <- recalc_independent_t(
 
 ## Reproduced summary
 
-The `reproduced` data frame is a one-row summary containing both the unrounded and rounded multiverse bounds for both *p* and *d*, along with the `inbounds` flags that say whether the reported values are consistent with what the multiverse can produce.
+The `reproduced` data frame is a one-row summary containing both the unrounded and rounded multiverse bounds for both *p* and *d*, along with the `inbounds` flags that say whether the reported values are consistent with what the multiverse can produce. For the reported CI, `ci_lower_inbounds` and `ci_upper_inbounds` say whether each bound can be produced by some combination of the analytic choices, and `ci_inbounds` whether a single combination produces both, which is the stricter and more meaningful check. The ranges and verdicts for each combination are in `res$ci_method_intervals`.
 
 ```{r}
 res$reproduced |>

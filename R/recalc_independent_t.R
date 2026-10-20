@@ -284,6 +284,17 @@ recalc_independent_t_p <- function(
 #'   denominator formula, Hedges correction, direction, and SD interpretation
 #'   (the CI-only choices do not move the point estimate).
 #'
+#'   If a CI is reported, \code{reproduced} also has \code{ci_lower_inbounds}
+#'   and \code{ci_upper_inbounds} (each bound lies within the rounded range of
+#'   that bound for at least one combination of all the choices, including the
+#'   CI method and SE formula) and \code{ci_inbounds} (a single combination
+#'   contains both bounds; \code{NA} unless both are reported), plus the hull
+#'   of each bound (\code{min_ci_lower} to \code{max_ci_upper}). The
+#'   per-combination ranges and verdicts are in \code{ci_method_intervals}.
+#'   Each bound's range is taken separately within a combination, so the joint
+#'   check allows the two bounds to be matched at different roundings of the
+#'   inputs.
+#'
 #' @importFrom stats pt qt qnorm uniroot
 #' @importFrom dplyr summarise mutate case_when between bind_cols select rename
 #' @importFrom tibble tibble
@@ -407,10 +418,19 @@ recalc_independent_t_d <- function(
     value_prefix = "d"
   )
 
+  ci_out <- .reproduced_ci_summary(
+    d_results,
+    d_ci_lower_num,
+    d_ci_upper_num,
+    d_digits = d_digits,
+    rounding = rounding
+  )
+
   list(
-    reproduced = applied$reproduced,
+    reproduced = dplyr::bind_cols(applied$reproduced, ci_out$summary),
     d_results = d_results,
-    method_intervals = applied$method_intervals
+    method_intervals = applied$method_intervals,
+    ci_method_intervals = ci_out$method_intervals
   )
 }
 
@@ -428,8 +448,10 @@ recalc_independent_t_d <- function(
 #' @return A list with elements \code{reproduced} (one row, combining the d and
 #'   p summaries, where \code{d_inbounds} / \code{p_inbounds} are the default
 #'   union decisions and \code{d_inbounds_hull} / \code{p_inbounds_hull} the
-#'   convex-hull fallbacks), \code{d_results}, \code{p_results},
-#'   \code{d_method_intervals}, and \code{p_method_intervals}.
+#'   convex-hull fallbacks, and \code{ci_inbounds} the CI decision described
+#'   in \code{\link{recalc_independent_t_d}}), \code{d_results},
+#'   \code{p_results}, \code{d_method_intervals}, \code{p_method_intervals},
+#'   and \code{ci_method_intervals}.
 #'
 #' @export
 recalc_independent_t <- function(
@@ -514,7 +536,16 @@ recalc_independent_t <- function(
         min_d_rounded,
         max_d_rounded,
         d_inbounds,
-        d_inbounds_hull
+        d_inbounds_hull,
+        d_ci_lower,
+        d_ci_upper,
+        min_ci_lower,
+        max_ci_lower,
+        min_ci_upper,
+        max_ci_upper,
+        ci_lower_inbounds,
+        ci_upper_inbounds,
+        ci_inbounds
       ),
     res_p$reproduced |>
       dplyr::select(
@@ -539,7 +570,8 @@ recalc_independent_t <- function(
     d_results = res_d$d_results,
     p_results = res_p$p_results,
     d_method_intervals = res_d$method_intervals,
-    p_method_intervals = res_p$method_intervals
+    p_method_intervals = res_p$method_intervals,
+    ci_method_intervals = res_d$ci_method_intervals
   )
 }
 
@@ -1453,6 +1485,118 @@ plot_multiverse_p <- function(res) {
       "max_p_rounded",
       "p_inbounds"
     )
+}
+
+#' Consistency of a reported CI for d with the multiverse
+#'
+#' A CI "method" is a combination of every discrete choice, since the CI-only
+#' choices (CI method, SE formula) move the bounds as well as those that move
+#' d. For each method, the range of each bound across the input-rounding
+#' corners is rounded to `d_digits`. A reported bound is consistent if it lies
+#' in that range for at least one method, and the reported CI is consistent if
+#' a single method contains both of its bounds. Each bound's range is taken
+#' separately within a method, so the joint check allows the two bounds to be
+#' matched at different roundings of the inputs.
+#' @keywords internal
+.reproduced_ci_summary <- function(
+  d_results,
+  d_ci_lower_num,
+  d_ci_upper_num,
+  d_digits,
+  rounding
+) {
+  na_summary <- tibble::tibble(
+    d_ci_lower = d_ci_lower_num,
+    d_ci_upper = d_ci_upper_num,
+    min_ci_lower = NA_real_,
+    max_ci_lower = NA_real_,
+    min_ci_upper = NA_real_,
+    max_ci_upper = NA_real_,
+    ci_lower_inbounds = NA,
+    ci_upper_inbounds = NA,
+    ci_inbounds = NA
+  )
+  if (
+    is.null(d_results) ||
+      nrow(d_results) == 0 ||
+      !all(c("ci_lower_unrounded", "ci_upper_unrounded") %in% names(d_results))
+  ) {
+    return(list(summary = na_summary, method_intervals = NULL))
+  }
+  # the noncentral-t CI uses no SE formula; label it so it is not dropped as NA
+  d_results$se_formula[is.na(d_results$se_formula)] <- "none"
+  cols <- c(
+    "d_formula",
+    "hedges_correction",
+    "direction",
+    "sd_interpretation",
+    "ci_method",
+    "se_formula"
+  )
+  lower <- .method_intervals(
+    d_results,
+    "ci_lower_unrounded",
+    cols,
+    d_digits,
+    rounding
+  )
+  upper <- .method_intervals(
+    d_results,
+    "ci_upper_unrounded",
+    cols,
+    d_digits,
+    rounding
+  )
+  if (is.null(lower) || is.null(upper)) {
+    return(list(summary = na_summary, method_intervals = NULL))
+  }
+  names(lower)[-1] <- sub("^v_", "ci_lower_", names(lower)[-1])
+  names(upper)[-1] <- sub("^v_", "ci_upper_", names(upper)[-1])
+  intervals <- merge(lower, upper, by = "method")
+
+  tol <- 10^(-d_digits) * 1e-6
+  within <- function(v, lo, hi) v >= lo - tol & v <= hi + tol
+  lower_ok <- if (is.na(d_ci_lower_num)) {
+    rep(NA, nrow(intervals))
+  } else {
+    within(
+      d_ci_lower_num,
+      intervals$ci_lower_min_rounded,
+      intervals$ci_lower_max_rounded
+    )
+  }
+  upper_ok <- if (is.na(d_ci_upper_num)) {
+    rep(NA, nrow(intervals))
+  } else {
+    within(
+      d_ci_upper_num,
+      intervals$ci_upper_min_rounded,
+      intervals$ci_upper_max_rounded
+    )
+  }
+  intervals$ci_lower_inbounds <- lower_ok
+  intervals$ci_upper_inbounds <- upper_ok
+  intervals$ci_inbounds <- lower_ok & upper_ok
+
+  summary <- tibble::tibble(
+    d_ci_lower = d_ci_lower_num,
+    d_ci_upper = d_ci_upper_num,
+    min_ci_lower = min(intervals$ci_lower_min),
+    max_ci_lower = max(intervals$ci_lower_max),
+    min_ci_upper = min(intervals$ci_upper_min),
+    max_ci_upper = max(intervals$ci_upper_max),
+    ci_lower_inbounds = if (is.na(d_ci_lower_num)) NA else any(lower_ok),
+    ci_upper_inbounds = if (is.na(d_ci_upper_num)) NA else any(upper_ok),
+    ci_inbounds = if (is.na(d_ci_lower_num) || is.na(d_ci_upper_num)) {
+      NA
+    } else {
+      any(lower_ok & upper_ok)
+    }
+  )
+  list(
+    summary = summary,
+    method_intervals = intervals[order(intervals$method), , drop = FALSE]
+  )
 }
 
 #' @keywords internal

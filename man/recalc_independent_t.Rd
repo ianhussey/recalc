@@ -103,8 +103,10 @@ by the Wald CI methods.}
 A list with elements \code{reproduced} (one row, combining the d and
 p summaries, where \code{d_inbounds} / \code{p_inbounds} are the default
 union decisions and \code{d_inbounds_hull} / \code{p_inbounds_hull} the
-convex-hull fallbacks), \code{d_results}, \code{p_results},
-\code{d_method_intervals}, and \code{p_method_intervals}.
+convex-hull fallbacks, and \code{ci_inbounds} the CI decision described
+in \code{\link{recalc_independent_t_d}}), \code{d_results},
+\code{p_results}, \code{d_method_intervals}, \code{p_method_intervals},
+and \code{ci_method_intervals}.
 }
 \description{
 Convenience wrapper that calls both \code{\link{recalc_independent_t_p}}

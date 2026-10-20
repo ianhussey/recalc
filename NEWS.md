@@ -1,3 +1,17 @@
+# recalc 0.6.4
+
+## New features
+
+* `recalc_independent_t_d()` and `recalc_independent_t()` now check a reported
+  CI for d. They accepted `d_ci_lower` and `d_ci_upper` before but did not use
+  them. A CI depends on every analytic choice, including the CI method and the
+  SE formula, so for each combination of choices the range of each bound
+  across input rounding is rounded to `d_digits`. `ci_lower_inbounds` and
+  `ci_upper_inbounds` say whether each bound lies in that range for at least
+  one combination, and `ci_inbounds` whether a single combination contains
+  both. The per-combination ranges and verdicts are returned as
+  `ci_method_intervals`. The t-test Shiny app shows the CI verdict.
+
 # recalc 0.6.3
 
 ## Bug fixes

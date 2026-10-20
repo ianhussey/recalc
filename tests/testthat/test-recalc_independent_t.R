@@ -626,3 +626,38 @@ test_that("hedges_correction accepts logical (back-compat)", {
   )
   expect_true(all(res_F$d_results$hedges_correction == "none"))
 })
+
+test_that("a reported CI for d is checked against the multiverse", {
+  ci <- function(lower, upper) {
+    recalc_independent_t(
+      m1 = 11.2, m2 = 25.1, sd1 = 4.9, sd2 = 4.1, n1 = 64, n2 = 64,
+      m_digits = 1, sd_digits = 1,
+      d = -3.06, d_ci_lower = lower, d_ci_upper = upper, d_digits = 2
+    )
+  }
+  # metafor::escalc(measure = "SMD") gives -3.06 [-3.57, -2.55]
+  ok <- ci(-3.57, -2.55)
+  expect_true(ok$reproduced$ci_lower_inbounds)
+  expect_true(ok$reproduced$ci_upper_inbounds)
+  expect_true(ok$reproduced$ci_inbounds)
+  expect_true(any(ok$ci_method_intervals$ci_inbounds))
+
+  expect_false(ci(-3.80, -2.30)$reproduced$ci_inbounds)
+
+  # each bound is attainable under some combination of choices, but no single
+  # combination produces both
+  split <- ci(-3.40, -2.62)$reproduced
+  expect_true(split$ci_lower_inbounds)
+  expect_true(split$ci_upper_inbounds)
+  expect_false(split$ci_inbounds)
+
+  # no reported CI: no verdict, but the recalculated range is still given
+  none <- recalc_independent_t_d(
+    m1 = 11.2, m2 = 25.1, sd1 = 4.9, sd2 = 4.1, n1 = 64, n2 = 64,
+    m_digits = 1, sd_digits = 1
+  )
+  expect_true(is.na(none$reproduced$ci_inbounds))
+  expect_true(is.finite(none$reproduced$min_ci_lower))
+  # the noncentral-t CI, which uses no SE formula, is kept
+  expect_true(any(grepl("\\|nct\\|", none$ci_method_intervals$method)))
+})

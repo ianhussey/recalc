@@ -65,6 +65,17 @@ plus \code{n_method_intervals}, \code{covered_width}, \code{hull_width},
 and \code{covered_fraction}. A "method" here is a combination of the
 denominator formula, Hedges correction, direction, and SD interpretation
 (the CI-only choices do not move the point estimate).
+
+If a CI is reported, \code{reproduced} also has \code{ci_lower_inbounds}
+and \code{ci_upper_inbounds} (each bound lies within the rounded range of
+that bound for at least one combination of all the choices, including the
+CI method and SE formula) and \code{ci_inbounds} (a single combination
+contains both bounds; \code{NA} unless both are reported), plus the hull
+of each bound (\code{min_ci_lower} to \code{max_ci_upper}). The
+per-combination ranges and verdicts are in \code{ci_method_intervals}.
+Each bound's range is taken separately within a combination, so the joint
+check allows the two bounds to be matched at different roundings of the
+inputs.
 }
 \description{
 Explores the multiverse of standardised-mean-difference effect sizes and

@@ -295,7 +295,10 @@ server <- function(input, output, session) {
           d_reported = d,
           d_min = min_d,
           d_max = max_d,
-          d_in_bounds = d_inbounds
+          d_in_bounds = d_inbounds,
+          ci_lower_reported = d_ci_lower,
+          ci_upper_reported = d_ci_upper,
+          ci_in_bounds = ci_inbounds
         )
     },
     digits = function(df) {
