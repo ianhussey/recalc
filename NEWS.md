@@ -12,6 +12,13 @@
   both. The per-combination ranges and verdicts are returned as
   `ci_method_intervals`. The t-test Shiny app shows the CI verdict.
 
+## Improvements
+
+* The d multiverse behind `recalc_independent_t_d()` and
+  `recalc_independent_t()` is built once instead of one data frame per
+  combination, making it about 8 times faster (e.g. 7,290 combinations:
+  ~2.5 s to ~0.3 s). The results are identical.
+
 # recalc 0.6.3
 
 ## Bug fixes

@@ -1303,7 +1303,7 @@ plot_multiverse_p <- function(res) {
                 )
                 t_for_nct <- stat_s_for_nct$t * sign_factor
                 ci <- .ci_nct(t_for_nct, df_pooled, n1, n2, alpha, J = J)
-                rows[[length(rows) + 1L]] <- data.frame(
+                rows[[length(rows) + 1L]] <- list(
                   source = "summary",
                   direction = dir_mode,
                   d_formula = d_formula,
@@ -1316,8 +1316,7 @@ plot_multiverse_p <- function(res) {
                   df_used = df_pooled,
                   d_unrounded = es,
                   ci_lower_unrounded = unname(ci["lower"]),
-                  ci_upper_unrounded = unname(ci["upper"]),
-                  stringsAsFactors = FALSE
+                  ci_upper_unrounded = unname(ci["upper"])
                 )
               } else {
                 # Wald methods: pick df + critical-distribution combo, and
@@ -1353,7 +1352,7 @@ plot_multiverse_p <- function(res) {
                     crit_method = crit_method,
                     alpha = alpha
                   )
-                  rows[[length(rows) + 1L]] <- data.frame(
+                  rows[[length(rows) + 1L]] <- list(
                     source = "summary",
                     direction = dir_mode,
                     d_formula = d_formula,
@@ -1366,8 +1365,7 @@ plot_multiverse_p <- function(res) {
                     df_used = df_use,
                     d_unrounded = es,
                     ci_lower_unrounded = unname(ci["lower"]),
-                    ci_upper_unrounded = unname(ci["upper"]),
-                    stringsAsFactors = FALSE
+                    ci_upper_unrounded = unname(ci["upper"])
                   )
                 }
               }
@@ -1397,7 +1395,16 @@ plot_multiverse_p <- function(res) {
     ))
   }
 
-  out <- do.call(rbind, rows)
+  # Each row is collected as a list and the data frame is built once, column by
+  # column: building and binding one data frame per row dominated the run time.
+  cols <- names(rows[[1L]])
+  out <- as.data.frame(
+    stats::setNames(
+      lapply(cols, function(col) unlist(lapply(rows, `[[`, col))),
+      cols
+    ),
+    stringsAsFactors = FALSE
+  )
   out[order(out$d_unrounded), ]
 }
 
